@@ -359,7 +359,167 @@ ApplicationWindow {
     Component {
         id: toolSelectComponent
 
-        SelectViewDropdown {
+        ToolIndicatorPage {
+            id:         toolSelectDialog
+            //title:      qsTr("Select Tool")
+
+            property real _toolButtonHeight:    ScreenTools.defaultFontPixelHeight * 3
+            property real _margins:             ScreenTools.defaultFontPixelWidth
+
+            contentComponent: Component {
+                ColumnLayout {
+                    spacing: ScreenTools.defaultFontPixelWidth
+
+                    SubMenuButton {
+                        height:             toolSelectDialog._toolButtonHeight
+                        Layout.fillWidth:   true
+                        text:               qsTr("Plan Flight")
+                        imageResource:      "/qmlimages/Plan.svg"
+                        onClicked: {
+                            if (mainWindow.allowViewSwitch()) {
+                                mainWindow.closeIndicatorDrawer()
+                                mainWindow.showPlanView()
+                            }
+                        }
+                    }
+
+                    SubMenuButton {
+                        id:                 analyzeButton
+                        height:             toolSelectDialog._toolButtonHeight
+                        Layout.fillWidth:   true
+                        text:               qsTr("Analyze Tools")
+                        imageResource:      "/qmlimages/Analyze.svg"
+                        visible:            QGroundControl.corePlugin.showAdvancedUI
+                        onClicked: {
+                            if (mainWindow.allowViewSwitch()) {
+                                mainWindow.closeIndicatorDrawer()
+                                mainWindow.showAnalyzeTool()
+                            }
+                        }
+                    }
+
+                    SubMenuButton {
+                        id:                 setupButton
+                        height:             toolSelectDialog._toolButtonHeight
+                        Layout.fillWidth:   true
+                        text:               qsTr("Vehicle Configuration")
+                        imageResource:      "/qmlimages/Gears.svg"
+                        onClicked: {
+                            if (mainWindow.allowViewSwitch()) {
+                                mainWindow.closeIndicatorDrawer()
+                                mainWindow.showVehicleConfig()
+                            }
+                        }
+                    }
+
+                    // Dynamic plugin tool menu items
+                    Repeater {
+                        model: QGroundControl.corePlugin.toolMenuItems
+
+                        SubMenuButton {
+                            height:             toolSelectDialog._toolButtonHeight
+                            Layout.fillWidth:   true
+                            text:               modelData.title
+                            imageResource:      modelData.icon
+                            visible:            modelData.visible !== undefined ? modelData.visible : true
+                            onClicked: {
+                                if (mainWindow.allowViewSwitch()) {
+                                    mainWindow.closeIndicatorDrawer()
+                                    mainWindow.showTool(modelData.title, modelData.source, modelData.icon)
+                                }
+                            }
+                        }
+                    }
+
+                    SubMenuButton {
+                        id:                 settingsButton
+                        height:             toolSelectDialog._toolButtonHeight
+                        Layout.fillWidth:   true
+                        text:               qsTr("Application Settings")
+                        imageResource:      "/res/QGCLogoFull.svg"
+                        imageColor:         "transparent"
+                        visible:            !QGroundControl.corePlugin.options.combineSettingsAndSetup
+                        onClicked: {
+                            if (mainWindow.allowViewSwitch()) {
+                                drawer.close()
+                                mainWindow.showSettingsTool()
+                            }
+                        }
+                    }
+
+                    SubMenuButton {
+                        id:                 closeButton
+                        height:             toolSelectDialog._toolButtonHeight
+                        Layout.fillWidth:   true
+                        text:               qsTr("Close %1").arg(QGroundControl.appName)
+                        imageResource:      "/res/cancel.svg"
+                        visible:            mainWindow.visibility === Window.FullScreen
+                        onClicked: {
+                            if (mainWindow.allowViewSwitch()) {
+                                mainWindow.finishCloseProcess()
+                            }
+                        }
+                    }
+
+                    ColumnLayout {
+                        id:                     versionColumnLayout
+                        Layout.preferredWidth:  parent.width
+                        spacing:                0
+                        Layout.alignment:       Qt.AlignHCenter
+
+                        QGCLabel {
+                            id:                     versionLabel
+                            text:                   qsTr("%1 Version").arg(QGroundControl.appName)
+                            font.pointSize:         ScreenTools.smallFontPointSize
+                            wrapMode:               QGCLabel.WordWrap
+                            Layout.maximumWidth:    parent.width
+                            Layout.alignment:       Qt.AlignHCenter
+                        }
+
+                        QGCLabel {
+                            text:                   QGroundControl.qgcVersion
+                            font.pointSize:         ScreenTools.smallFontPointSize
+                            wrapMode:               QGCLabel.WrapAnywhere
+                            Layout.maximumWidth:    parent.width
+                            Layout.alignment:       Qt.AlignHCenter
+                        }
+
+                        QGCLabel {
+                            text:                   QGroundControl.qgcAppDate
+                            font.pointSize:         ScreenTools.smallFontPointSize
+                            wrapMode:               QGCLabel.WrapAnywhere
+                            Layout.maximumWidth:    parent.width
+                            Layout.alignment:       Qt.AlignHCenter
+                            visible:                QGroundControl.qgcDailyBuild
+
+                            QGCMouseArea {
+                                anchors.topMargin:  -(parent.y - versionLabel.y)
+                                anchors.fill:       parent
+
+                                onClicked: (mouse) => {
+                                    if (mouse.modifiers & Qt.ControlModifier) {
+                                        QGroundControl.corePlugin.showTouchAreas = !QGroundControl.corePlugin.showTouchAreas
+                                        showTouchAreasNotification.open()
+                                    } else if (ScreenTools.isMobile || mouse.modifiers & Qt.ShiftModifier) {
+                                        mainWindow.closeIndicatorDrawer()
+                                        if(!QGroundControl.corePlugin.showAdvancedUI) {
+                                            advancedModeOnConfirmation.open()
+                                        } else {
+                                            advancedModeOffConfirmation.open()
+                                        }
+                                    }
+                                }
+
+                                // This allows you to change this on mobile
+                                onPressAndHold: {
+                                    QGroundControl.corePlugin.showTouchAreas = !QGroundControl.corePlugin.showTouchAreas
+                                    showTouchAreasNotification.open()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

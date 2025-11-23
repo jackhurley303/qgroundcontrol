@@ -37,6 +37,7 @@ class QGCCorePlugin : public QObject
     Q_PROPERTY(QString showAdvancedUIMessage            READ showAdvancedUIMessage                                          CONSTANT)
     Q_PROPERTY(QVariantList analyzePages                READ analyzePages                                                   CONSTANT)
     Q_PROPERTY(QVariantList toolBarIndicators           READ toolBarIndicators                                              CONSTANT)
+    Q_PROPERTY(QVariantList toolMenuItems               READ toolMenuItems                                                  NOTIFY toolMenuItemsChanged)
 
 public:
     explicit QGCCorePlugin(QObject *parent = nullptr);
@@ -50,6 +51,15 @@ public:
     /// The list of pages/buttons under the Analyze Menu
     /// @return A list of QmlPageInfo
     virtual const QVariantList &analyzePages();
+
+    /// The list of plugin-provided tool menu items
+    /// Each item is a QVariantMap with keys: title, icon, qmlSource
+    /// @return A list of tool menu items
+    virtual const QVariantList &toolMenuItems();
+    
+    /// Add a tool menu item from a loaded plugin
+    /// @param item QVariantMap with keys: title, icon, source, visible
+    void addToolMenuItem(const QVariantMap& item);
 
     /// The default settings panel to show
     /// @return The settings index
@@ -193,10 +203,12 @@ public:
 signals:
     void showTouchAreasChanged(bool showTouchAreas);
     void showAdvancedUIChanged(bool showAdvancedUI);
+    void toolMenuItemsChanged();
 
 protected:
     bool _showTouchAreas = false;
     bool _showAdvancedUI = true;
+    QVariantList _toolMenuItems;  // List of tool menu items (from plugins)
 
 private:
     void _setShowTouchAreas(bool show);

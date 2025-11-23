@@ -31,6 +31,7 @@
 #include "PositionManager.h"
 #include "QGCCommandLineParser.h"
 #include "QGCCorePlugin.h"
+#include "QGCPluginLoader.h"
 #include "QGCFileDownload.h"
 #include "ColoredSvgImageProvider.h"
 #include "QGCImageProvider.h"
@@ -303,6 +304,7 @@ void QGCApplication::_initForNormalAppBoot()
 
     QQuickStyle::setStyle("Basic");
     QGCCorePlugin::instance()->init();
+    _loadPlugins();
     MAVLinkProtocol::instance()->init();
     MultiVehicleManager::instance()->init();
     _qmlAppEngine = QGCCorePlugin::instance()->createQmlApplicationEngine(this);
@@ -755,4 +757,29 @@ void QGCApplication::shutdown()
 
     // This is bad, but currently qobject inheritances are incorrect and cause crashes on exit without
     delete _qmlAppEngine;
+}
+
+void QGCApplication::_loadPlugins()
+{
+    if (_runningUnitTests) {
+        // Skip plugin loading during unit tests
+        return;
+    }
+
+    qCDebug(QGCApplicationLog) << "Loading plugins";
+
+    QGCPluginLoader loader(this);
+
+    // Get default plugin search paths
+    QStringList pluginPaths = QGCPluginLoader::defaultPluginPaths();
+
+    qCDebug(QGCApplicationLog) << "Plugin search paths:" << pluginPaths;
+
+    // Load plugins from all search paths
+    loader.loadPlugins(pluginPaths);
+
+    // Store loaded plugins
+    _plugins = loader.loadedPlugins();
+
+    qCDebug(QGCApplicationLog) << "Plugin loading complete." << _plugins.size() << "plugins loaded";
 }
