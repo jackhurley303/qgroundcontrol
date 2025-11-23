@@ -9,7 +9,19 @@ QGC_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Detect platform
 if [[ "$OSTYPE" == "darwin"* ]]; then
     PLATFORM="macOS"
-    BUILD_DIR="$QGC_ROOT/build/Qt_6_10_0_for_macOS-Debug"
+    # Find actual build directory (search for Qt-prefixed dirs or use default)
+    if [ -d "$QGC_ROOT/build" ]; then
+        # Check if there's a Qt-specific build directory
+        QT_BUILD_DIR=$(find "$QGC_ROOT/build" -maxdepth 1 -type d -name "Qt_*_for_macOS-Debug" | head -n 1)
+        if [ -n "$QT_BUILD_DIR" ]; then
+            BUILD_DIR="$QT_BUILD_DIR"
+        else
+            BUILD_DIR="$QGC_ROOT/build"
+        fi
+    else
+        echo "Error: Could not find build directory"
+        exit 1
+    fi
     PLUGIN_DEST="$HOME/Library/Application Support/QGroundControl/QGroundControl Daily/plugins"
     PLUGIN_EXT=".dylib"
     CPU_COUNT=$(sysctl -n hw.ncpu)

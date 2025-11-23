@@ -10,10 +10,10 @@ From the QGC root directory:
 
 ```bash
 # Build QGC (includes plugins)
-cmake --build build/Qt_6_10_0_for_macOS-Debug --config Debug
+cmake --build build --config Debug
 
 # Or build just the plugin
-cmake --build build/Qt_6_10_0_for_macOS-Debug --config Debug --target ExamplePlugin
+cmake --build build --config Debug --target ExamplePlugin
 ```
 
 ### Quick rebuild script
@@ -42,7 +42,7 @@ The build script automatically deploys to:
 - **Windows**: `%LOCALAPPDATA%\QGroundControl\QGroundControl Daily\plugins\`
 
 Or manually copy from:
-- `build/Qt_6_10_0_for_macOS-Debug/Debug/plugins/libExamplePlugin.dylib` (macOS)
+- `build/Debug/plugins/libExamplePlugin.dylib` (macOS)
 - `build/Debug/plugins/libExamplePlugin.so` (Linux)
 - `build\Debug\plugins\ExamplePlugin.dll` (Windows)
 

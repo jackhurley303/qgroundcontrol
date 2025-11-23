@@ -726,7 +726,7 @@ void QGCApplication::_loadPlugins()
         return;
     }
 
-    qCDebug(QGCApplicationLog) << "Loading plugins";
+    qCDebug(QGCApplicationLog) << "=== Plugin Loading Start ===";
 
     QGCPluginLoader loader(this);
 
@@ -741,22 +741,22 @@ void QGCApplication::_loadPlugins()
     // Store loaded plugins
     _plugins = loader.loadedPlugins();
 
-    qCDebug(QGCApplicationLog) << "Found" << _plugins.size() << "plugins";
+    qCDebug(QGCApplicationLog) << "Loaded" << _plugins.size() << "plugin(s)";
 
     // Initialize each plugin and merge their tool menu items into the core plugin
     QGCCorePlugin* corePlugin = QGCCorePlugin::instance();
     for (QGCCorePlugin* plugin : _plugins) {
-        qCDebug(QGCApplicationLog) << "Initializing plugin";
+        qCDebug(QGCApplicationLog) << "Initializing plugin:" << plugin->metaObject()->className();
         plugin->init();
         
         // Get plugin's tool menu items and add them to the core plugin
         const QVariantList& pluginMenuItems = plugin->toolMenuItems();
-        qCDebug(QGCApplicationLog) << "Plugin provides" << pluginMenuItems.size() << "menu items";
+        qCDebug(QGCApplicationLog) << "  - Provides" << pluginMenuItems.size() << "menu item(s)";
         
         for (const QVariant& item : pluginMenuItems) {
             corePlugin->addToolMenuItem(item.toMap());
         }
     }
 
-    qCDebug(QGCApplicationLog) << "Plugin loading complete." << _plugins.size() << "plugins loaded";
+    qCDebug(QGCApplicationLog) << "=== Plugin Loading Complete: " << _plugins.size() << "plugin(s) active ===";
 }
