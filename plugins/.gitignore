@@ -1,0 +1,25 @@
+# Plugin build artifacts
+build/
+*.dylib
+*.so
+*.dll
+*.user
+.DS_Store
+
+# Qt
+*.autosave
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary
+*.bak
+*.tmp

@@ -15,6 +15,10 @@ class QGCCorePlugin;
 
 /// @brief Interface for QGC plugins
 /// Plugins must implement this interface to be loadable by QGCPluginLoader
+///
+/// @note Interface Version 1 - Current stable version
+/// When making breaking changes, increment the version number and update
+/// all plugins accordingly. The loader validates version compatibility.
 class QGCCorePluginInterface
 {
 public:
@@ -22,6 +26,7 @@ public:
 
     /// @brief Returns the plugin interface version
     /// Must return 1 for this version of the interface
+    /// @note If you change the interface, increment this version and update the IID
     virtual int pluginInterfaceVersion() const = 0;
 
     /// @brief Creates an instance of the plugin

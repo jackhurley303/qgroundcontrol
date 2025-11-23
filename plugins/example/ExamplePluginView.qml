@@ -2,6 +2,8 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
+import QGroundControl.Controls
+
 /// Example plugin view demonstrating custom tool UI
 Rectangle {
     color: "#2c2c2c"
@@ -11,7 +13,7 @@ Rectangle {
         anchors.margins:        20
         spacing:                10
 
-        Label {
+        QGCLabel {
             text:               "Example Plugin"
             font.pointSize:     24
             font.bold:          true
@@ -19,7 +21,7 @@ Rectangle {
             Layout.alignment:   Qt.AlignHCenter
         }
 
-        Label {
+        QGCLabel {
             text:               "This is an example plugin demonstrating the QGC plugin architecture."
             wrapMode:           Text.WordWrap
             color:              "#ffffff"
@@ -34,31 +36,31 @@ Rectangle {
             color:                  "#555555"
         }
 
-        Label {
+        QGCLabel {
             text:               "Plugin Information"
             font.bold:          true
             color:              "#ffffff"
         }
 
-        Label {
+        QGCLabel {
             text:               "• Plugin loaded successfully"
             color:              "#ffffff"
             Layout.leftMargin:  40
         }
 
-        Label {
+        QGCLabel {
             text:               "• Plugin interface version: 1"
             color:              "#ffffff"
             Layout.leftMargin:  40
         }
 
-        Label {
+        QGCLabel {
             text:               "• Custom tool menu item added"
             color:              "#ffffff"
             Layout.leftMargin:  40
         }
 
-        Label {
+        QGCLabel {
             text:               "• Resources initialized and loaded"
             color:              "#ffffff"
             Layout.leftMargin:  40
