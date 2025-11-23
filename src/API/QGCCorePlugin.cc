@@ -318,6 +318,18 @@ const QVariantList &QGCCorePlugin::toolBarIndicators()
     return toolBarIndicatorList;
 }
 
+const QVariantList &QGCCorePlugin::toolMenuItems()
+{
+    // Returns the list of tool menu items (includes items from loaded plugins)
+    return _toolMenuItems;
+}
+
+void QGCCorePlugin::addToolMenuItem(const QVariantMap& item)
+{
+    _toolMenuItems.append(item);
+    emit toolMenuItemsChanged();
+}
+
 QVariantList QGCCorePlugin::firstRunPromptsToShow()
 {
     QList<int> rgIdsToShow;

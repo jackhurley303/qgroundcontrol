@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/qml">
+        <file alias="ExamplePluginView.qml">ExamplePluginView.qml</file>
+    </qresource>
+</RCC>

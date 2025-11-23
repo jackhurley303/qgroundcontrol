@@ -38,6 +38,7 @@
 #include "PositionManager.h"
 #include "QGCCommandLineParser.h"
 #include "QGCCorePlugin.h"
+#include "QGCPluginLoader.h"
 #include "QGCFileDownload.h"
 #include "QGCImageProvider.h"
 #include "QGCLoggingCategory.h"
@@ -255,6 +256,7 @@ void QGCApplication::_initForNormalAppBoot()
 
     QQuickStyle::setStyle("Basic");
     QGCCorePlugin::instance()->init();
+    _loadPlugins();
     MAVLinkProtocol::instance()->init();
     MultiVehicleManager::instance()->init();
     _qmlAppEngine = QGCCorePlugin::instance()->createQmlApplicationEngine(this);
@@ -715,4 +717,46 @@ QString QGCApplication::bigSizeMBToString(quint64 size_MB)
         result = kLocale.toString(static_cast<double>(size_MB) / pow(1024, 2), 'f', 2) + " TB";
     }
     return result;
+}
+
+void QGCApplication::_loadPlugins()
+{
+    if (_runningUnitTests) {
+        // Skip plugin loading during unit tests
+        return;
+    }
+
+    qCDebug(QGCApplicationLog) << "Loading plugins";
+
+    QGCPluginLoader loader(this);
+
+    // Get default plugin search paths
+    QStringList pluginPaths = QGCPluginLoader::defaultPluginPaths();
+    
+    qCDebug(QGCApplicationLog) << "Plugin search paths:" << pluginPaths;
+
+    // Load plugins from all search paths
+    loader.loadPlugins(pluginPaths);
+
+    // Store loaded plugins
+    _plugins = loader.loadedPlugins();
+
+    qCDebug(QGCApplicationLog) << "Found" << _plugins.size() << "plugins";
+
+    // Initialize each plugin and merge their tool menu items into the core plugin
+    QGCCorePlugin* corePlugin = QGCCorePlugin::instance();
+    for (QGCCorePlugin* plugin : _plugins) {
+        qCDebug(QGCApplicationLog) << "Initializing plugin";
+        plugin->init();
+        
+        // Get plugin's tool menu items and add them to the core plugin
+        const QVariantList& pluginMenuItems = plugin->toolMenuItems();
+        qCDebug(QGCApplicationLog) << "Plugin provides" << pluginMenuItems.size() << "menu items";
+        
+        for (const QVariant& item : pluginMenuItems) {
+            corePlugin->addToolMenuItem(item.toMap());
+        }
+    }
+
+    qCDebug(QGCApplicationLog) << "Plugin loading complete." << _plugins.size() << "plugins loaded";
 }

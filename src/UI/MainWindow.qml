@@ -368,6 +368,25 @@ ApplicationWindow {
                         }
                     }
 
+                    // Dynamic plugin tool menu items
+                    Repeater {
+                        model: QGroundControl.corePlugin.toolMenuItems
+
+                        SubMenuButton {
+                            height:             toolSelectDialog._toolButtonHeight
+                            Layout.fillWidth:   true
+                            text:               modelData.title
+                            imageResource:      modelData.icon
+                            visible:            modelData.visible !== undefined ? modelData.visible : true
+                            onClicked: {
+                                if (mainWindow.allowViewSwitch()) {
+                                    mainWindow.closeIndicatorDrawer()
+                                    mainWindow.showTool(modelData.title, modelData.source, modelData.icon)
+                                }
+                            }
+                        }
+                    }
+
                     SubMenuButton {
                         id:                 settingsButton
                         height:             toolSelectDialog._toolButtonHeight

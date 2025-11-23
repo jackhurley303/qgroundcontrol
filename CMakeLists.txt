@@ -249,6 +249,15 @@ qt_add_executable(${CMAKE_PROJECT_NAME}
     ${QGC_RESOURCES}
 )
 
+# Export symbols from executable for runtime plugin loading
+if(APPLE OR LINUX)
+    target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
+        -Wl,-export_dynamic  # Export all symbols for plugins
+    )
+elseif(WIN32)
+    # Windows doesn't need this - DLLs export symbols by default
+endif()
+
 # ----------------------------------------------------------------------------
 # Platform-Specific Configuration
 # ----------------------------------------------------------------------------
@@ -280,6 +289,14 @@ qt_add_qml_module(${CMAKE_PROJECT_NAME}
 # Source & Test Subdirectories
 # ----------------------------------------------------------------------------
 add_subdirectory(src)
+
+# ----------------------------------------------------------------------------
+# Plugin Subdirectory (Optional Runtime Plugins)
+# ----------------------------------------------------------------------------
+if(IS_DIRECTORY "${CMAKE_SOURCE_DIR}/plugins" AND EXISTS "${CMAKE_SOURCE_DIR}/plugins/CMakeLists.txt")
+    message(STATUS "QGC: Building plugins from plugins/ directory")
+    add_subdirectory(plugins)
+endif()
 
 if(QGC_BUILD_TESTING)
     add_subdirectory(test)
