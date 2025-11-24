@@ -73,4 +73,22 @@ elseif(WIN32)
     message(STATUS "ExamplePlugin: Windows plugin loading may require additional configuration")
 endif()
 
+# Auto-deploy plugin to runtime location after build (for development)
+if(APPLE)
+    set(PLUGIN_DEPLOY_DIR "$ENV{HOME}/Library/Application Support/QGroundControl/QGroundControl Daily/plugins")
+elseif(UNIX)
+    set(PLUGIN_DEPLOY_DIR "$ENV{HOME}/.local/share/QGroundControl/QGroundControl Daily/plugins")
+elseif(WIN32)
+    set(PLUGIN_DEPLOY_DIR "$ENV{APPDATA}/QGroundControl/QGroundControl Daily/plugins")
+endif()
+
+add_custom_command(TARGET ExamplePlugin POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${PLUGIN_DEPLOY_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:ExamplePlugin>
+        "${PLUGIN_DEPLOY_DIR}/"
+    COMMENT "Deploying ExamplePlugin to ${PLUGIN_DEPLOY_DIR}"
+)
+
 message(STATUS "ExamplePlugin: Configured to build as QGC plugin")
+message(STATUS "ExamplePlugin: Will auto-deploy to ${PLUGIN_DEPLOY_DIR}")
