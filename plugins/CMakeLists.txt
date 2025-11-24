@@ -5,7 +5,8 @@
 message(STATUS "QGC: Configuring plugins")
 
 # Automatically discover and build all plugin subdirectories
-file(GLOB PLUGIN_DIRS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/*")
+# CONFIGURE_DEPENDS ensures CMake reconfigures when plugin directories are added/removed
+file(GLOB PLUGIN_DIRS CONFIGURE_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/*")
 
 foreach(PLUGIN_DIR ${PLUGIN_DIRS})
     if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${PLUGIN_DIR}")
