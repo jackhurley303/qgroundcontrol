@@ -1,0 +1,3 @@
+[submodule "plugins/qdrive"]
+	path = plugins/qdrive
+	url = https://github.com/jackhurley303/qgc-qdrive-plugin.git
