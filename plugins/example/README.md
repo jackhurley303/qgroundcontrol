@@ -52,6 +52,40 @@ Or manually copy from:
 - Shows a simple info page when clicked
 - Demonstrates plugin interface implementation
 - Shows how to use Qt resources in plugins
+- **Demonstrates custom toolbar support for plugin pages**
+
+## Custom Toolbar Feature
+
+This plugin demonstrates the custom toolbar capability for plugins. Plugins can provide their own toolbar UI by specifying a `toolbarSource` in their `toolMenuItems`:
+
+```cpp
+// In ExampleCorePlugin constructor
+QVariantMap item;
+item["title"] = "Example Plugin";
+item["icon"] = "/res/QGCLogoFull.svg";
+item["source"] = "qrc:/qml/ExamplePluginView.qml";
+item["toolbarSource"] = "qrc:/qml/ExampleToolBar.qml";  // Custom toolbar
+item["visible"] = true;
+```
+
+### Custom Toolbar Requirements
+
+Your custom toolbar QML must:
+1. Have a `property string toolTitle` to receive the tool name from MainWindow
+2. Have a `signal exitRequested()` that will be called when the user wants to exit
+
+Example toolbar structure:
+```qml
+Rectangle {
+    property string toolTitle: ""
+    signal exitRequested()
+    
+    // Your custom toolbar UI here
+    // Call exitRequested() when user clicks back/exit button
+}
+```
+
+See `ExampleToolBar.qml` for a complete example with custom buttons and layout.
 
 ## Architecture
 
