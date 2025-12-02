@@ -33,6 +33,7 @@ ExampleCorePlugin::ExampleCorePlugin(QObject* parent)
     item["title"] = "Example Plugin";
     item["icon"] = "/res/QGCLogoFull.svg";
     item["source"] = "qrc:/qml/ExamplePluginView.qml";
+    item["toolbarSource"] = "qrc:/qml/ExampleToolBar.qml";  // Custom toolbar
     item["visible"] = true;
 
     _toolMenuItems.append(item);

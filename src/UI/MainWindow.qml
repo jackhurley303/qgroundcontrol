@@ -137,11 +137,12 @@ ApplicationWindow {
         toolDrawer.visible = false
     }
 
-    function showTool(toolTitle, toolSource, toolIcon) {
+    function showTool(toolTitle, toolSource, toolIcon, toolbarSource) {
         toolDrawer.backIcon     = flyView.visible ? "/qmlimages/PaperPlane.svg" : "/qmlimages/Plan.svg"
         toolDrawer.toolTitle    = toolTitle
         toolDrawer.toolSource   = toolSource
         toolDrawer.toolIcon     = toolIcon
+        toolDrawer.toolbarSource = toolbarSource !== undefined ? toolbarSource : ""
         toolDrawer.visible      = true
     }
 
@@ -425,7 +426,8 @@ ApplicationWindow {
                             onClicked: {
                                 if (mainWindow.allowViewSwitch()) {
                                     mainWindow.closeIndicatorDrawer()
-                                    mainWindow.showTool(modelData.title, modelData.source, modelData.icon)
+                                    var toolbarSrc = modelData.toolbarSource !== undefined ? modelData.toolbarSource : ""
+                                    mainWindow.showTool(modelData.title, modelData.source, modelData.icon, toolbarSrc)
                                 }
                             }
                         }
@@ -533,10 +535,12 @@ ApplicationWindow {
         property string toolTitle
         property alias toolSource:  toolDrawerLoader.source
         property var toolIcon
+        property string toolbarSource: ""  // Optional custom toolbar QML source
 
         onVisibleChanged: {
             if (!toolDrawer.visible) {
                 toolDrawerLoader.source = ""
+                toolbarSource = ""  // Clear the property, not the loader source directly
             }
         }
 
@@ -545,6 +549,37 @@ ApplicationWindow {
             anchors.fill: parent
         }
 
+        // Custom toolbar loader (if plugin provides one)
+        Loader {
+            id:             toolDrawerToolbarLoader
+            anchors.left:   parent.left
+            anchors.right:  parent.right
+            anchors.top:    parent.top
+            height:         active ? ScreenTools.toolbarHeight : 0
+            active:         toolDrawer.toolbarSource !== ""
+            source:         toolDrawer.toolbarSource
+
+            // Pass properties to custom toolbar
+            Binding {
+                target:     toolDrawerToolbarLoader.item
+                property:   "toolTitle"
+                value:      toolDrawer.toolTitle
+                when:       toolDrawerToolbarLoader.item
+            }
+
+            // Connect exitRequested signal to close the drawer
+            Connections {
+                target:                 toolDrawerToolbarLoader.item
+                ignoreUnknownSignals:   true
+                function onExitRequested() {
+                    if (mainWindow.allowViewSwitch()) {
+                        toolDrawer.visible = false
+                    }
+                }
+            }
+        }
+
+        // Default toolbar (when no custom toolbar is provided)
         Rectangle {
             id:             toolDrawerToolbar
             anchors.left:   parent.left
@@ -552,6 +587,7 @@ ApplicationWindow {
             anchors.top:    parent.top
             height:         ScreenTools.toolbarHeight
             color:          qgcPal.toolbarBackground
+            visible:        toolDrawer.toolbarSource === ""
 
             RowLayout {
                 id:                 toolDrawerToolbarLayout
@@ -581,7 +617,7 @@ ApplicationWindow {
             id:             toolDrawerLoader
             anchors.left:   parent.left
             anchors.right:  parent.right
-            anchors.top:    toolDrawerToolbar.bottom
+            anchors.top:    toolDrawer.toolbarSource !== "" ? toolDrawerToolbarLoader.bottom : toolDrawerToolbar.bottom
             anchors.bottom: parent.bottom
 
             Connections {
