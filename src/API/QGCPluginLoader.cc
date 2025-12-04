@@ -8,7 +8,7 @@
  ****************************************************************************/
 
 #include "QGCPluginLoader.h"
-#include "QGCCorePlugin.h"
+#include "QGCPlugin.h"
 #include "QGCCorePluginInterface.h"
 #include "QGCApplication.h"
 #include "QGCLoggingCategory.h"
@@ -65,7 +65,7 @@ void QGCPluginLoader::loadPlugins(const QStringList& pluginDirs)
             const QString filePath = fileInfo.absoluteFilePath();
             qCDebug(QGCPluginLoaderLog) << "Attempting to load plugin:" << filePath;
 
-            QGCCorePlugin* plugin = _loadPlugin(filePath);
+            QGCPlugin* plugin = _loadPlugin(filePath);
             if (plugin) {
                 _loadedPlugins.append(plugin);
                 emit pluginLoaded(fileInfo.fileName());
@@ -77,7 +77,7 @@ void QGCPluginLoader::loadPlugins(const QStringList& pluginDirs)
     qCDebug(QGCPluginLoaderLog) << "Plugin loading complete." << _loadedPlugins.size() << "plugins loaded";
 }
 
-QGCCorePlugin* QGCPluginLoader::_loadPlugin(const QString& filePath)
+QGCPlugin* QGCPluginLoader::_loadPlugin(const QString& filePath)
 {
     QPluginLoader loader(filePath);
     QObject* pluginObject = loader.instance();
@@ -90,10 +90,10 @@ QGCCorePlugin* QGCPluginLoader::_loadPlugin(const QString& filePath)
     }
 
     // Check if plugin implements our interface
-    auto* pluginInterface = qobject_cast<QGCCorePluginInterface*>(pluginObject);
+    auto* pluginInterface = qobject_cast<QGCPluginInterface*>(pluginObject);
     if (!pluginInterface) {
-        qCWarning(QGCPluginLoaderLog) << "Plugin does not implement QGCCorePluginInterface:" << filePath;
-        emit pluginLoadFailed(filePath, "Plugin does not implement QGCCorePluginInterface");
+        qCWarning(QGCPluginLoaderLog) << "Plugin does not implement QGCPluginInterface:" << filePath;
+        emit pluginLoadFailed(filePath, "Plugin does not implement QGCPluginInterface");
         loader.unload();
         return nullptr;
     }
@@ -108,7 +108,9 @@ QGCCorePlugin* QGCPluginLoader::_loadPlugin(const QString& filePath)
     }
 
     // Create plugin instance
-    QGCCorePlugin* plugin = pluginInterface->createPlugin(this);
+    // Note: We pass nullptr as parent because plugins are owned by QGCApplication
+    // If we pass 'this' as parent, the plugins would be deleted when the loader is destroyed
+    QGCPlugin* plugin = pluginInterface->createPlugin(nullptr);
     if (!plugin) {
         qCWarning(QGCPluginLoaderLog) << "Plugin failed to create instance:" << filePath;
         emit pluginLoadFailed(filePath, "Failed to create plugin instance");
@@ -128,7 +130,7 @@ QGCCorePlugin* QGCPluginLoader::_loadPlugin(const QString& filePath)
     return plugin;
 }
 
-bool QGCPluginLoader::_validatePlugin(QGCCorePlugin* plugin)
+bool QGCPluginLoader::_validatePlugin(QGCPlugin* plugin)
 {
     if (!plugin) {
         return false;

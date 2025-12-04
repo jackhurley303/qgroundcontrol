@@ -97,6 +97,7 @@ qt_add_qml_module(AppSettingsModule
         OfflineMapEditor.qml
         OfflineMapInfo.qml
         OfflineMapSettings.qml
+        PluginSettings.qml
         PX4LogControl.qml
         PX4LogFileManager.qml
         PX4LogUploadSettings.qml

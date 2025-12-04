@@ -108,28 +108,50 @@ QGC searches for plugins in:
 All plugins must implement:
 
 ```cpp
-class MyPlugin : public QObject, public QGCCorePluginInterface {
+class MyPlugin : public QObject, public QGCPluginInterface {
     Q_OBJECT
-    Q_PLUGIN_METADATA(IID "org.mavlink.qgroundcontrol.QGCCorePluginInterface")
-    Q_INTERFACES(QGCCorePluginInterface)
+    Q_PLUGIN_METADATA(IID "org.mavlink.qgroundcontrol.QGCPluginInterface")
+    Q_INTERFACES(QGCPluginInterface)
     
 public:
     int pluginInterfaceVersion() const override { return 1; }
-    QGCCorePlugin* createPlugin(QObject* parent) override;
+    QGCPlugin* createPlugin(QObject* parent) override;
+};
+
+class MyRuntimePlugin : public QGCPlugin {
+    Q_OBJECT
+    
+public:
+    QString name() const override { return "MyPlugin"; }
+    QVariantMap toolMenuItem() const override;
 };
 ```
 
-## Extension Points
+**Note**: Current interface version is 1.
 
-Plugins can override virtual methods to extend QGC:
+## Plugin Settings
 
-- `toolMenuItems()` - Add custom tools menu
-- `analyzePages()` - Add analyze view pages
-- `customMapItems()` - Add flight map overlays
-- `mavlinkMessage()` - Intercept MAVLink messages
-- `paletteOverride()` - Customize theme colors
-- `createVideoReceiver()` - Custom video handling
-- ~20 more extension points (see `QGCCorePlugin.h`)
+Plugins are automatically registered with the `PluginSettings` system, which provides:
+
+- **Enable/Disable Control**: Users can toggle plugins on/off in Application Settings → Plugins
+- **Persistent State**: Settings are stored as Facts (type-safe, validated)
+- **Dynamic Visibility**: Changes take effect immediately without restart
+- **Default State**: Example plugin is disabled by default; all others enabled
+
+Plugins simply provide their menu items - visibility is controlled automatically:
+
+```cpp
+MyRuntimePlugin::MyRuntimePlugin(QObject* parent)
+    : QGCPlugin(parent)
+{
+    _toolMenuItem["title"] = "My Plugin";
+    _toolMenuItem["icon"] = "/res/icon.svg";
+    _toolMenuItem["source"] = "qrc:/qml/MyPluginView.qml";
+    // Visibility is automatically controlled by PluginSettings
+}
+```
+
+**No manual settings code needed** - the plugin system handles it automatically.
 
 ## Example Plugin
 
@@ -198,6 +220,11 @@ See `example/` directory for a minimal working plugin that:
 - Verify interface version is `1`
 - Ensure plugin file has correct extension (.dylib/.so/.dll)
 - Check plugin is in search paths
+
+**Plugin menu item not visible:**
+- Go to Application Settings → Plugins
+- Check if plugin is enabled (toggle to enable)
+- Changes take effect immediately - no restart needed
 
 **Build errors:**
 - Verify CMakeLists.txt includes all source files

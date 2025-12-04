@@ -1,4 +1,7 @@
 #include "QGCCorePlugin.h"
+#include "QGCPlugin.h"
+#include "QGCPluginLoader.h"
+#include "QGCLogging.h"
 #include "AppSettings.h"
 #include "MavlinkSettings.h"
 #include "FactMetaData.h"
@@ -18,6 +21,7 @@
 #include "QtMultimediaReceiver.h"
 #endif
 #include "SettingsManager.h"
+#include "PluginSettings.h"
 #include "VideoReceiver.h"
 #include "SurveyPlanCreator.h"
 #include "CorridorScanPlanCreator.h"
@@ -56,6 +60,24 @@ QGCCorePlugin::QGCCorePlugin(QObject *parent)
 QGCCorePlugin::~QGCCorePlugin()
 {
     qCDebug(QGCCorePluginLog) << this;
+    cleanup();
+}
+
+void QGCCorePlugin::init()
+{
+    _loadPlugins();
+}
+
+void QGCCorePlugin::cleanup()
+{
+    // Clean up plugins
+    for (QGCPlugin* plugin : _loadedPlugins) {
+        if (plugin) {
+            plugin->cleanup();
+            delete plugin;
+        }
+    }
+    _loadedPlugins.clear();
 }
 
 QGCCorePlugin *QGCCorePlugin::instance()
@@ -336,10 +358,28 @@ const QVariantList &QGCCorePlugin::toolMenuItems()
     return _toolMenuItems;
 }
 
+QVariantList QGCCorePlugin::loadedPlugins() const
+{
+    QVariantList pluginList;
+    for (const QGCPlugin* plugin : _loadedPlugins) {
+        if (plugin) {
+            QVariantMap pluginInfo;
+            pluginInfo["name"] = plugin->name();
+            pluginList.append(pluginInfo);
+        }
+    }
+    return pluginList;
+}
+
 void QGCCorePlugin::addToolMenuItem(const QVariantMap& item)
 {
     _toolMenuItems.append(item);
     emit toolMenuItemsChanged();
+}
+
+void QGCCorePlugin::setLoadedPlugins(const QList<QGCPlugin*>& plugins)
+{
+    _loadedPlugins = plugins;
 }
 
 QVariantList QGCCorePlugin::firstRunPromptsToShow()
@@ -403,7 +443,6 @@ QVariantList QGCCorePlugin::complexMissionItemNames(Vehicle *vehicle)
     if (vehicle->multiRotor() || vehicle->vtol()) {
         items.append(makeEntry(StructureScanComplexItem::canonicalName, StructureScanComplexItem::tr(StructureScanComplexItem::canonicalName)));
     }
-    // Note: Landing pattern items are not added here — they have their own dedicated button
     return items;
 }
 
@@ -415,4 +454,31 @@ QList<PlanCreator*> QGCCorePlugin::planCreators(PlanMasterController *planMaster
         new StructureScanPlanCreator(planMasterController),
         new BlankPlanCreator(planMasterController),
     };
+}
+
+void QGCCorePlugin::_loadPlugins()
+{
+    qCDebug(QGCCorePluginLog) << "Loading plugins";
+
+    QGCPluginLoader loader(this);
+    QStringList pluginPaths = QGCPluginLoader::defaultPluginPaths();
+    loader.loadPlugins(pluginPaths);
+    _loadedPlugins = loader.loadedPlugins();
+
+    qCDebug(QGCCorePluginLog) << "Loaded" << _loadedPlugins.size() << "plugin(s)";
+
+    PluginSettings* pluginSettings = SettingsManager::instance()->pluginSettings();
+
+    for (QGCPlugin* plugin : _loadedPlugins) {
+        pluginSettings->registerPlugin(plugin->name());
+        plugin->init();
+
+        QVariantMap menuItem = plugin->toolMenuItem();
+        if (!menuItem.isEmpty()) {
+            menuItem["pluginName"] = plugin->name();
+            addToolMenuItem(menuItem);
+        }
+    }
+
+    qCDebug(QGCCorePluginLog) << "Plugin loading complete:" << _loadedPlugins.size() << "plugin(s) active";
 }

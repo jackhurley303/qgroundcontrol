@@ -8,6 +8,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         QGCCorePlugin.cc
         QGCCorePlugin.h
         QGCCorePluginInterface.h
+        QGCPlugin.cc
+        QGCPlugin.h
         QGCPluginLoader.cc
         QGCPluginLoader.h
         QGCOptions.cc

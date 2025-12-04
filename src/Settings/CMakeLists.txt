@@ -35,6 +35,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         OfflineMapsSettings.h
         PlanViewSettings.cc
         PlanViewSettings.h
+        PluginSettings.cc
+        PluginSettings.h
         RemoteIDSettings.cc
         RemoteIDSettings.h
         RTKSettings.cc
