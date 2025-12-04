@@ -1,0 +1,42 @@
+/****************************************************************************
+ *
+ * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
+ *
+ * QGroundControl is licensed according to the terms in the file
+ * COPYING.md in the root of the source code directory.
+ *
+ ****************************************************************************/
+
+#pragma once
+
+#include <QtQmlIntegration/QtQmlIntegration>
+#include <QtCore/QMap>
+
+#include "SettingsGroup.h"
+
+class QGCPlugin;
+
+/// Plugin Settings - Manages enabled/disabled state for plugins
+class PluginSettings : public SettingsGroup
+{
+    Q_OBJECT
+    QML_ELEMENT
+    QML_UNCREATABLE("")
+
+public:
+    PluginSettings(QObject* parent = nullptr);
+
+    DEFINE_SETTING_NAME_GROUP()
+
+    /// Register a plugin and create its enabled Fact
+    Q_INVOKABLE void registerPlugin(const QString& name);
+
+    /// Get the enabled Fact for a plugin
+    Q_INVOKABLE Fact* pluginEnabledFact(const QString& name);
+
+    /// Check if a plugin is enabled
+    Q_INVOKABLE bool isPluginEnabled(const QString& name);
+
+private:
+    QMap<QString, SettingsFact*> _pluginFacts;  ///< Map of plugin name to enabled Fact
+};

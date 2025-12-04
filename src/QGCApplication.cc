@@ -209,7 +209,6 @@ void QGCApplication::setLanguage()
 
 QGCApplication::~QGCApplication()
 {
-
 }
 
 void QGCApplication::init()
@@ -256,7 +255,6 @@ void QGCApplication::_initForNormalAppBoot()
 
     QQuickStyle::setStyle("Basic");
     QGCCorePlugin::instance()->init();
-    _loadPlugins();
     MAVLinkProtocol::instance()->init();
     MultiVehicleManager::instance()->init();
     _qmlAppEngine = QGCCorePlugin::instance()->createQmlApplicationEngine(this);
@@ -717,46 +715,4 @@ QString QGCApplication::bigSizeMBToString(quint64 size_MB)
         result = kLocale.toString(static_cast<double>(size_MB) / pow(1024, 2), 'f', 2) + " TB";
     }
     return result;
-}
-
-void QGCApplication::_loadPlugins()
-{
-    if (_runningUnitTests) {
-        // Skip plugin loading during unit tests
-        return;
-    }
-
-    qCDebug(QGCApplicationLog) << "=== Plugin Loading Start ===";
-
-    QGCPluginLoader loader(this);
-
-    // Get default plugin search paths
-    QStringList pluginPaths = QGCPluginLoader::defaultPluginPaths();
-    
-    qCDebug(QGCApplicationLog) << "Plugin search paths:" << pluginPaths;
-
-    // Load plugins from all search paths
-    loader.loadPlugins(pluginPaths);
-
-    // Store loaded plugins
-    _plugins = loader.loadedPlugins();
-
-    qCDebug(QGCApplicationLog) << "Loaded" << _plugins.size() << "plugin(s)";
-
-    // Initialize each plugin and merge their tool menu items into the core plugin
-    QGCCorePlugin* corePlugin = QGCCorePlugin::instance();
-    for (QGCCorePlugin* plugin : _plugins) {
-        qCDebug(QGCApplicationLog) << "Initializing plugin:" << plugin->metaObject()->className();
-        plugin->init();
-        
-        // Get plugin's tool menu items and add them to the core plugin
-        const QVariantList& pluginMenuItems = plugin->toolMenuItems();
-        qCDebug(QGCApplicationLog) << "  - Provides" << pluginMenuItems.size() << "menu item(s)";
-        
-        for (const QVariant& item : pluginMenuItems) {
-            corePlugin->addToolMenuItem(item.toMap());
-        }
-    }
-
-    qCDebug(QGCApplicationLog) << "=== Plugin Loading Complete: " << _plugins.size() << "plugin(s) active ===";
 }

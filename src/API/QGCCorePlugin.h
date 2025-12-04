@@ -17,6 +17,7 @@
 #include "QGCPalette.h"
 
 class FactMetaData;
+class QGCPlugin;
 class LinkInterface;
 class PlanMasterController;
 class QFile;
@@ -52,6 +53,7 @@ class QGCCorePlugin : public QObject
     Q_PROPERTY(QVariantList analyzePages                READ analyzePages                                                   CONSTANT)
     Q_PROPERTY(QVariantList toolBarIndicators           READ toolBarIndicators                                              CONSTANT)
     Q_PROPERTY(QVariantList toolMenuItems               READ toolMenuItems                                                  NOTIFY toolMenuItemsChanged)
+    Q_PROPERTY(QVariantList loadedPlugins               READ loadedPlugins                                                  CONSTANT)
 
 public:
     explicit QGCCorePlugin(QObject *parent = nullptr);
@@ -59,8 +61,8 @@ public:
 
     static QGCCorePlugin *instance();
 
-    virtual void init() { }
-    virtual void cleanup() { }
+    virtual void init();
+    virtual void cleanup();
 
     /// The list of pages/buttons under the Analyze Menu
     /// @return A list of QmlPageInfo
@@ -71,9 +73,17 @@ public:
     /// @return A list of tool menu items
     virtual const QVariantList &toolMenuItems();
     
+    /// The list of loaded plugins (for QML)
+    /// @return A list of loaded plugin info as QVariantList
+    virtual QVariantList loadedPlugins() const;
+    
     /// Add a tool menu item from a loaded plugin
     /// @param item QVariantMap with keys: title, icon, source, visible
     void addToolMenuItem(const QVariantMap& item);
+    
+    /// Set the list of loaded plugins
+    /// @param plugins List of QGCPlugin pointers
+    void setLoadedPlugins(const QList<QGCPlugin*>& plugins);
 
     /// The default settings panel to show
     /// @return The settings index
@@ -217,10 +227,12 @@ protected:
     bool _showTouchAreas = false;
     bool _showAdvancedUI = true;
     QVariantList _toolMenuItems;  // List of tool menu items (from plugins)
+    QList<QGCPlugin*> _loadedPlugins;  // List of loaded plugins
 
 private:
     void _setShowTouchAreas(bool show);
     void _setShowAdvancedUI(bool show);
+    void _loadPlugins();
 
     QGCOptions *_defaultOptions = nullptr;
     QmlObjectListModel *_emptyCustomMapItems = nullptr;

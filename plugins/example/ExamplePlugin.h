@@ -1,6 +1,6 @@
 #pragma once
 
-#include "API/QGCCorePlugin.h"
+#include "API/QGCPlugin.h"
 #include "API/QGCCorePluginInterface.h"
 
 #include <QtCore/QObject>
@@ -12,37 +12,38 @@
  *
  * This is a minimal plugin that adds a custom tool menu item.
  */
-class ExamplePlugin : public QObject, public QGCCorePluginInterface
+class ExamplePlugin : public QObject, public QGCPluginInterface
 {
     Q_OBJECT
-    Q_PLUGIN_METADATA(IID "org.mavlink.qgroundcontrol.QGCCorePluginInterface")
-    Q_INTERFACES(QGCCorePluginInterface)
+    Q_PLUGIN_METADATA(IID "org.mavlink.qgroundcontrol.QGCPluginInterface")
+    Q_INTERFACES(QGCPluginInterface)
 
 public:
     explicit ExamplePlugin(QObject* parent = nullptr);
     ~ExamplePlugin() override = default;
 
-    // QGCCorePluginInterface interface
+    // QGCPluginInterface interface
     int pluginInterfaceVersion() const override { return 1; }
-    QGCCorePlugin* createPlugin(QObject* parent) override;
+    QGCPlugin* createPlugin(QObject* parent) override;
 };
 
 /**
- * @class ExampleCorePlugin
- * @brief Core plugin implementation for the example plugin
+ * @class ExampleRuntimePlugin
+ * @brief Runtime plugin implementation for the example plugin
  */
-class ExampleCorePlugin : public QGCCorePlugin
+class ExampleRuntimePlugin : public QGCPlugin
 {
     Q_OBJECT
     QML_ELEMENT
 
 public:
-    explicit ExampleCorePlugin(QObject* parent = nullptr);
-    ~ExampleCorePlugin() override = default;
+    explicit ExampleRuntimePlugin(QObject* parent = nullptr);
+    ~ExampleRuntimePlugin() override = default;
 
-    // Override to provide custom tool menu items
-    const QVariantList& toolMenuItems() override;
+    // QGCPlugin interface
+    QString name() const override { return "Example"; }
+    QVariantMap toolMenuItem() const override;
 
 private:
-    QVariantList _toolMenuItems;
+    QVariantMap _toolMenuItem;
 };

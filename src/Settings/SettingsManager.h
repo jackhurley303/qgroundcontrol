@@ -30,6 +30,7 @@ class GimbalControllerSettings;
 class MapsSettings;
 class OfflineMapsSettings;
 class PlanViewSettings;
+class PluginSettings;
 class RemoteIDSettings;
 class RTKSettings;
 class UnitsSettings;
@@ -64,6 +65,7 @@ class SettingsManager : public QObject
     Q_MOC_INCLUDE("MapsSettings.h")
     Q_MOC_INCLUDE("OfflineMapsSettings.h")
     Q_MOC_INCLUDE("PlanViewSettings.h")
+    Q_MOC_INCLUDE("PluginSettings.h")
     Q_MOC_INCLUDE("RemoteIDSettings.h")
     Q_MOC_INCLUDE("RTKSettings.h")
     Q_MOC_INCLUDE("UnitsSettings.h")
@@ -90,6 +92,7 @@ class SettingsManager : public QObject
     Q_PROPERTY(QObject *mapsSettings                    READ mapsSettings                   CONSTANT)
     Q_PROPERTY(QObject *offlineMapsSettings             READ offlineMapsSettings            CONSTANT)
     Q_PROPERTY(QObject *planViewSettings                READ planViewSettings               CONSTANT)
+    Q_PROPERTY(QObject *pluginSettings                  READ pluginSettings                 CONSTANT)
     Q_PROPERTY(QObject *remoteIDSettings                READ remoteIDSettings               CONSTANT)
     Q_PROPERTY(QObject *rtkSettings                     READ rtkSettings                    CONSTANT)
     Q_PROPERTY(QObject *unitsSettings                   READ unitsSettings                  CONSTANT)
@@ -131,6 +134,7 @@ public:
     MapsSettings *mapsSettings() const;
     OfflineMapsSettings *offlineMapsSettings() const;
     PlanViewSettings *planViewSettings() const;
+    PluginSettings *pluginSettings() const;
     RemoteIDSettings *remoteIDSettings() const;
     RTKSettings *rtkSettings() const;
     UnitsSettings *unitsSettings() const;
@@ -161,6 +165,7 @@ private:
     MapsSettings *_mapsSettings = nullptr;
     OfflineMapsSettings *_offlineMapsSettings = nullptr;
     PlanViewSettings *_planViewSettings = nullptr;
+    PluginSettings *_pluginSettings = nullptr;
     RemoteIDSettings *_remoteIDSettings = nullptr;
     RTKSettings *_rtkSettings = nullptr;
     UnitsSettings *_unitsSettings = nullptr;

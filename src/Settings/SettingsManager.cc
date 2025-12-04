@@ -26,6 +26,7 @@
 #include "MapsSettings.h"
 #include "OfflineMapsSettings.h"
 #include "PlanViewSettings.h"
+#include "PluginSettings.h"
 #include "RemoteIDSettings.h"
 #include "RTKSettings.h"
 #include "UnitsSettings.h"
@@ -88,6 +89,7 @@ void SettingsManager::init()
     _mapsSettings = new MapsSettings(this);
     _offlineMapsSettings = new OfflineMapsSettings(this);
     _planViewSettings = new PlanViewSettings(this);
+    _pluginSettings = new PluginSettings(this);
     _remoteIDSettings = new RemoteIDSettings(this);
     _rtkSettings = new RTKSettings(this);
     _ntripSettings = new NTRIPSettings(this);
@@ -119,6 +121,7 @@ GimbalControllerSettings *SettingsManager::gimbalControllerSettings() const { re
 MapsSettings *SettingsManager::mapsSettings() const { return _mapsSettings; }
 OfflineMapsSettings *SettingsManager::offlineMapsSettings() const { return _offlineMapsSettings; }
 PlanViewSettings *SettingsManager::planViewSettings() const { return _planViewSettings; }
+PluginSettings *SettingsManager::pluginSettings() const { return _pluginSettings; }
 RemoteIDSettings *SettingsManager::remoteIDSettings() const { return _remoteIDSettings; }
 RTKSettings *SettingsManager::rtkSettings() const { return _rtkSettings; }
 UnitsSettings *SettingsManager::unitsSettings() const { return _unitsSettings; }

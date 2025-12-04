@@ -14,7 +14,7 @@
 #include <QtCore/QList>
 #include <QtCore/QString>
 
-class QGCCorePlugin;
+class QGCPlugin;
 
 Q_DECLARE_LOGGING_CATEGORY(QGCPluginLoaderLog)
 
@@ -37,8 +37,8 @@ public:
     void loadPlugins(const QStringList& pluginDirs);
 
     /// @brief Get list of successfully loaded plugins
-    /// @return List of QGCCorePlugin instances
-    QList<QGCCorePlugin*> loadedPlugins() const { return _loadedPlugins; }
+    /// @return List of QGCPlugin instances
+    QList<QGCPlugin*> loadedPlugins() const { return _loadedPlugins; }
 
     /// @brief Get default plugin search paths for the current platform
     /// @return List of directories where plugins should be searched
@@ -58,12 +58,12 @@ private:
     /// @brief Attempt to load a single plugin file
     /// @param filePath Absolute path to plugin library file
     /// @return Loaded plugin instance or nullptr on failure
-    QGCCorePlugin* _loadPlugin(const QString& filePath);
+    QGCPlugin* _loadPlugin(const QString& filePath);
 
     /// @brief Validate plugin metadata
     /// @param plugin Plugin instance to validate
     /// @return true if plugin is valid and compatible
-    bool _validatePlugin(QGCCorePlugin* plugin);
+    bool _validatePlugin(QGCPlugin* plugin);
 
-    QList<QGCCorePlugin*> _loadedPlugins;
+    QList<QGCPlugin*> _loadedPlugins;
 };

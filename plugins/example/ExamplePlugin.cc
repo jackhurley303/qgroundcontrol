@@ -16,31 +16,27 @@ ExamplePlugin::ExamplePlugin(QObject* parent)
     qDebug() << "ExamplePlugin factory created";
 }
 
-QGCCorePlugin* ExamplePlugin::createPlugin(QObject* parent)
+QGCPlugin* ExamplePlugin::createPlugin(QObject* parent)
 {
     qDebug() << "ExamplePlugin: Creating plugin instance";
-    return new ExampleCorePlugin(parent);
+    return new ExampleRuntimePlugin(parent);
 }
 
-// Core plugin implementation
-ExampleCorePlugin::ExampleCorePlugin(QObject* parent)
-    : QGCCorePlugin(parent)
+// Runtime plugin implementation
+ExampleRuntimePlugin::ExampleRuntimePlugin(QObject* parent)
+    : QGCPlugin(parent)
 {
-    qDebug() << "ExampleCorePlugin instance created";
+    qDebug() << "ExampleRuntimePlugin instance created";
 
-    // Build tool menu items
-    QVariantMap item;
-    item["title"] = "Example Plugin";
-    item["icon"] = "/res/QGCLogoFull.svg";
-    item["source"] = "qrc:/qml/ExamplePluginView.qml";
-    item["toolbarSource"] = "qrc:/qml/ExampleToolBar.qml";  // Custom toolbar
-    item["visible"] = true;
-
-    _toolMenuItems.append(item);
+    // Build tool menu item - enabled/disabled state is handled by PluginSettings
+    _toolMenuItem["title"] = "Example Plugin";
+    _toolMenuItem["icon"] = "/res/QGCLogoFull.svg";
+    _toolMenuItem["source"] = "qrc:/qml/ExamplePluginView.qml";
+    _toolMenuItem["toolbarSource"] = "qrc:/qml/ExampleToolBar.qml";  // Custom toolbar
+    _toolMenuItem["visible"] = true;
 }
 
-const QVariantList& ExampleCorePlugin::toolMenuItems()
+QVariantMap ExampleRuntimePlugin::toolMenuItem() const
 {
-    qDebug() << "ExampleCorePlugin: Providing" << _toolMenuItems.size() << "tool menu items";
-    return _toolMenuItems;
+    return _toolMenuItem;
 }

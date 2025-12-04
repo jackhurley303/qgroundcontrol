@@ -11,18 +11,18 @@
 
 #include <QtCore/QtPlugin>
 
-class QGCCorePlugin;
+class QGCPlugin;
 
 /// @brief Interface for QGC plugins
 /// Plugins must implement this interface to be loadable by QGCPluginLoader
 ///
-/// @note Interface Version 1 - Current stable version
+/// @note Interface Version 1
 /// When making breaking changes, increment the version number and update
 /// all plugins accordingly. The loader validates version compatibility.
-class QGCCorePluginInterface
+class QGCPluginInterface
 {
 public:
-    virtual ~QGCCorePluginInterface() = default;
+    virtual ~QGCPluginInterface() = default;
 
     /// @brief Returns the plugin interface version
     /// Must return 1 for this version of the interface
@@ -31,10 +31,10 @@ public:
 
     /// @brief Creates an instance of the plugin
     /// @param parent Parent QObject for the plugin
-    /// @return A new QGCCorePlugin instance
-    virtual QGCCorePlugin* createPlugin(QObject* parent) = 0;
+    /// @return A new QGCPlugin instance
+    virtual QGCPlugin* createPlugin(QObject* parent) = 0;
 };
 
-#define QGCCorePluginInterface_iid "org.qgroundcontrol.QGCCorePluginInterface/1.0"
+#define QGCPluginInterface_iid "org.qgroundcontrol.QGCPluginInterface/1.0"
 
-Q_DECLARE_INTERFACE(QGCCorePluginInterface, QGCCorePluginInterface_iid)
+Q_DECLARE_INTERFACE(QGCPluginInterface, QGCPluginInterface_iid)

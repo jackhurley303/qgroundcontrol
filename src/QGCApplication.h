@@ -136,7 +136,6 @@ private:
     bool compressEvent(QEvent *event, QObject *receiver, QPostEventList *postedEvents) final;
 
     void _initVideo();
-    void _loadPlugins();
 
     /// Initialize the application for normal application boot. Or in other words we are not going to run unit tests.
     void _initForNormalAppBoot();
@@ -167,8 +166,6 @@ private:
     bool _showErrorsInToolbar = false;
     QElapsedTimer _msecsElapsedTime;
     bool _videoManagerInitialized = false;
-
-    QList<QGCCorePlugin*> _plugins;
 
     QList<QPair<QString /* title */, QString /* message */>> _delayedAppMessages;
 
