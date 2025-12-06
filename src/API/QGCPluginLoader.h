@@ -18,6 +18,12 @@ class QGCPlugin;
 
 Q_DECLARE_LOGGING_CATEGORY(QGCPluginLoaderLog)
 
+/// @brief Information about a loaded plugin
+struct PluginLoadInfo {
+    QGCPlugin* plugin;  ///< Plugin instance
+    QString filePath;   ///< Absolute path to plugin file
+};
+
 /// @brief Discovers and loads QGC plugins at runtime
 /// Scans specified directories for plugin libraries and loads them dynamically
 class QGCPluginLoader : public QObject
@@ -36,9 +42,18 @@ public:
     /// @param pluginDirs List of absolute paths to directories containing plugins
     void loadPlugins(const QStringList& pluginDirs);
 
+    /// @brief Load a single plugin from a specific file path
+    /// @param filePath Absolute path to plugin library file
+    /// @return PluginLoadInfo with plugin instance and path, or nullptr plugin on failure
+    PluginLoadInfo loadPlugin(const QString& filePath);
+
     /// @brief Get list of successfully loaded plugins
     /// @return List of QGCPlugin instances
-    QList<QGCPlugin*> loadedPlugins() const { return _loadedPlugins; }
+    QList<QGCPlugin*> loadedPlugins() const;
+
+    /// @brief Get list of loaded plugins with their file paths
+    /// @return List of PluginLoadInfo structs
+    QList<PluginLoadInfo> loadedPluginInfos() const { return _loadedPluginInfos; }
 
     /// @brief Get default plugin search paths for the current platform
     /// @return List of directories where plugins should be searched
@@ -57,13 +72,13 @@ signals:
 private:
     /// @brief Attempt to load a single plugin file
     /// @param filePath Absolute path to plugin library file
-    /// @return Loaded plugin instance or nullptr on failure
-    QGCPlugin* _loadPlugin(const QString& filePath);
+    /// @return PluginLoadInfo with plugin instance and path, or nullptr plugin on failure
+    PluginLoadInfo _loadPlugin(const QString& filePath);
 
     /// @brief Validate plugin metadata
     /// @param plugin Plugin instance to validate
     /// @return true if plugin is valid and compatible
     bool _validatePlugin(QGCPlugin* plugin);
 
-    QList<QGCPlugin*> _loadedPlugins;
+    QList<PluginLoadInfo> _loadedPluginInfos;  ///< List of loaded plugins with paths
 };

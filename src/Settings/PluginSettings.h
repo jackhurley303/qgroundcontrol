@@ -22,6 +22,7 @@ class PluginSettings : public SettingsGroup
     Q_OBJECT
     QML_ELEMENT
     QML_UNCREATABLE("")
+    Q_PROPERTY(QStringList registeredPluginNames READ registeredPluginNames NOTIFY registeredPluginsChanged)
 
 public:
     PluginSettings(QObject* parent = nullptr);
@@ -36,6 +37,12 @@ public:
 
     /// Check if a plugin is enabled
     Q_INVOKABLE bool isPluginEnabled(const QString& name);
+
+    /// Get list of all registered plugin names
+    QStringList registeredPluginNames() const;
+
+signals:
+    void registeredPluginsChanged();
 
 private:
     QMap<QString, SettingsFact*> _pluginFacts;  ///< Map of plugin name to enabled Fact

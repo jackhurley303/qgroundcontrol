@@ -40,6 +40,8 @@ void PluginSettings::registerPlugin(const QString& name)
     // Create the SettingsFact
     SettingsFact* fact = _createSettingsFact(name);
     _pluginFacts[name] = fact;
+    
+    emit registeredPluginsChanged();
 }
 
 Fact* PluginSettings::pluginEnabledFact(const QString& name)
@@ -57,4 +59,9 @@ bool PluginSettings::isPluginEnabled(const QString& name)
         return fact->rawValue().toBool();
     }
     return true;  // Default to enabled if not found
+}
+
+QStringList PluginSettings::registeredPluginNames() const
+{
+    return _pluginFacts.keys();
 }

@@ -85,10 +85,17 @@ QGroundControl uses a clear separation between the **Core Plugin** (singleton ma
        └── Aggregates items to QGCPluginManager::_toolMenuItems
 
 3. Runtime
-   └── Tool menu items visibility:
-       ├── Bound to PluginSettings Facts
-       ├── Changes take effect immediately
-       └── No restart required
+   └── Dynamic Load/Unload (Desktop Platforms):
+       ├── User toggles plugin in settings
+       ├── QGCPluginManager::unloadPlugin() - removes from memory
+       ├── QGCPluginManager::reloadPlugin() - loads from disk
+       ├── Tool menu items update automatically
+       └── Note: Plugin code changes still require rebuilding the app
+
+   └── Static Load (Android):
+       ├── Plugin enabled state saved to settings
+       ├── Changes require APK rebuild (plugins compiled into APK)
+       └── Initial load respects enabled state
 
 4. Application Shutdown
    ├── QGCCorePlugin::cleanup()
@@ -199,7 +206,7 @@ Each plugin provides a single tool menu item as a QVariantMap with the following
 
 ## Settings Integration
 
-Plugins are automatically integrated with the `PluginSettings` system by `QGCPluginManager`:
+Plugins are automatically integrated with the `PluginSettings` system by `QGCPluginManager`, which provides:
 
 **Automatic Registration:**
 - Each plugin is registered using its `name()` as the identifier
@@ -208,8 +215,9 @@ Plugins are automatically integrated with the `PluginSettings` system by `QGCPlu
 
 **User Control:**
 - Users enable/disable plugins in Application Settings → Plugins
-- Changes take effect immediately (no restart required)
-- Menu items automatically show/hide based on enabled state
+- **Desktop Platforms**: Changes take effect immediately (runtime unload/reload from memory)
+- **Android**: Toggle controls which plugins load at startup; plugin binaries remain in APK. To add/remove plugins from the APK, rebuild is required.
+- **Important**: Plugin code changes require rebuilding the entire application
 
 **Implementation:**
 ```cpp
@@ -253,6 +261,31 @@ Plugins can:
 - `QGCCorePlugin`: Core app settings, custom builds, analyze pages
 - `QGCPluginManager`: Load, initialize, and manage runtime plugins
 - `QGCPlugin`: Individual plugin logic and tool menu items
+
+## Runtime Plugin Management
+
+Plugins can be enabled/disabled at runtime through Application Settings → Plugins:
+
+**Desktop Platforms (macOS/Linux/Windows):**
+- Toggle plugins on/off to load/unload from memory
+- Changes take effect immediately (no restart required)
+- Reduces memory footprint by unloading unused plugins
+- **Note**: Plugin code changes still require rebuilding the entire application
+
+**Android:**
+- Plugins are compiled into the APK at build time as `.so` files
+- Toggle controls which plugins load at startup (saves memory by not loading)
+- Plugin `.so` files remain in the APK even when disabled
+- To actually add/remove plugins from the APK, you must rebuild it
+- Cannot load plugins from external files due to Android security model
+
+**Use Cases:**
+- Users can disable plugins they don't need to save memory (desktop: disk + memory; Android: memory only)
+- Developers can test plugin enable/disable behavior
+- System integrators can provide plugin-specific builds
+
+**Important Limitation:**
+Plugin code changes (C++ or QML) require rebuilding the entire application. The enable/disable feature manages which plugins are loaded in memory, not development hot-reload.
 
 ## Examples
 

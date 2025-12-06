@@ -30,6 +30,15 @@ QGCPluginLoader::~QGCPluginLoader()
     // Plugins are owned by QGCApplication, don't delete here
 }
 
+QList<QGCPlugin*> QGCPluginLoader::loadedPlugins() const
+{
+    QList<QGCPlugin*> plugins;
+    for (const PluginLoadInfo& info : _loadedPluginInfos) {
+        plugins.append(info.plugin);
+    }
+    return plugins;
+}
+
 void QGCPluginLoader::loadPlugins(const QString& pluginDir)
 {
     loadPlugins(QStringList() << pluginDir);
@@ -65,20 +74,38 @@ void QGCPluginLoader::loadPlugins(const QStringList& pluginDirs)
             const QString filePath = fileInfo.absoluteFilePath();
             qCDebug(QGCPluginLoaderLog) << "Attempting to load plugin:" << filePath;
 
-            QGCPlugin* plugin = _loadPlugin(filePath);
-            if (plugin) {
-                _loadedPlugins.append(plugin);
+            PluginLoadInfo info = _loadPlugin(filePath);
+            if (info.plugin) {
+                _loadedPluginInfos.append(info);
                 emit pluginLoaded(fileInfo.fileName());
                 qCDebug(QGCPluginLoaderLog) << "Successfully loaded plugin:" << filePath;
             }
         }
     }
 
-    qCDebug(QGCPluginLoaderLog) << "Plugin loading complete." << _loadedPlugins.size() << "plugins loaded";
+    qCDebug(QGCPluginLoaderLog) << "Plugin loading complete." << _loadedPluginInfos.size() << "plugins loaded";
 }
 
-QGCPlugin* QGCPluginLoader::_loadPlugin(const QString& filePath)
+PluginLoadInfo QGCPluginLoader::loadPlugin(const QString& filePath)
 {
+    qCDebug(QGCPluginLoaderLog) << "Loading plugin from:" << filePath;
+    
+    PluginLoadInfo info = _loadPlugin(filePath);
+    if (info.plugin) {
+        _loadedPluginInfos.append(info);
+        emit pluginLoaded(QFileInfo(filePath).fileName());
+        qCDebug(QGCPluginLoaderLog) << "Successfully loaded plugin:" << filePath;
+    }
+    
+    return info;
+}
+
+PluginLoadInfo QGCPluginLoader::_loadPlugin(const QString& filePath)
+{
+    PluginLoadInfo info;
+    info.plugin = nullptr;
+    info.filePath = filePath;
+    
     QPluginLoader loader(filePath);
     QObject* pluginObject = loader.instance();
 
@@ -86,7 +113,7 @@ QGCPlugin* QGCPluginLoader::_loadPlugin(const QString& filePath)
         const QString errorString = loader.errorString();
         qCWarning(QGCPluginLoaderLog) << "Failed to load plugin:" << filePath << "-" << errorString;
         emit pluginLoadFailed(filePath, errorString);
-        return nullptr;
+        return info;
     }
 
     // Check if plugin implements our interface
@@ -95,7 +122,7 @@ QGCPlugin* QGCPluginLoader::_loadPlugin(const QString& filePath)
         qCWarning(QGCPluginLoaderLog) << "Plugin does not implement QGCPluginInterface:" << filePath;
         emit pluginLoadFailed(filePath, "Plugin does not implement QGCPluginInterface");
         loader.unload();
-        return nullptr;
+        return info;
     }
 
     // Check interface version
@@ -104,7 +131,7 @@ QGCPlugin* QGCPluginLoader::_loadPlugin(const QString& filePath)
                                       << "- Expected 1, got" << pluginInterface->pluginInterfaceVersion();
         emit pluginLoadFailed(filePath, QString("Incompatible interface version: %1").arg(pluginInterface->pluginInterfaceVersion()));
         loader.unload();
-        return nullptr;
+        return info;
     }
 
     // Create plugin instance
@@ -115,7 +142,7 @@ QGCPlugin* QGCPluginLoader::_loadPlugin(const QString& filePath)
         qCWarning(QGCPluginLoaderLog) << "Plugin failed to create instance:" << filePath;
         emit pluginLoadFailed(filePath, "Failed to create plugin instance");
         loader.unload();
-        return nullptr;
+        return info;
     }
 
     // Validate plugin
@@ -124,10 +151,11 @@ QGCPlugin* QGCPluginLoader::_loadPlugin(const QString& filePath)
         emit pluginLoadFailed(filePath, "Plugin validation failed");
         delete plugin;
         loader.unload();
-        return nullptr;
+        return info;
     }
 
-    return plugin;
+    info.plugin = plugin;
+    return info;
 }
 
 bool QGCPluginLoader::_validatePlugin(QGCPlugin* plugin)

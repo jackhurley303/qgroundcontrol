@@ -135,8 +135,11 @@ Plugins are automatically registered with the `PluginSettings` system by `QGCPlu
 
 - **Enable/Disable Control**: Users can toggle plugins on/off in Application Settings → Plugins
 - **Persistent State**: Settings are stored as Facts (type-safe, validated)
-- **Dynamic Visibility**: Changes take effect immediately without restart
+- **Runtime Unload/Reload** (macOS/Linux/Windows): Plugins unload/reload from memory immediately, reducing memory footprint
+- **Android Behavior**: Plugins are compiled into APK; toggle controls which plugins load at startup (plugin binaries remain in APK). To change which plugins are included, rebuild the APK.
 - **Default State**: Example plugin is disabled by default; all others enabled
+
+**Important**: Plugin code changes (C++ or QML) require rebuilding the entire application. The enable/disable feature is for managing which plugins are loaded in memory, not for development hot-reload.
 
 Plugins simply provide their menu items - visibility is controlled automatically:
 
@@ -197,16 +200,18 @@ See `example/` directory for a minimal working plugin that:
 
 ### For In-Tree Plugins
 
+**Standard Development Workflow:**
 1. **Make changes** directly in `plugins/yourplugin/`
-2. **Build** with CMake target
-3. **Deploy** to user plugin directory (or use build scripts)
-4. **Restart QGC** to load changes
-5. **Iterate** - build scripts automate rebuild/deploy
+2. **Rebuild QGC**: `cmake --build build`
+3. **Run** the updated application
+4. **Test** your plugin changes
+
+**Note**: Plugin code changes require rebuilding the entire application. The plugin enable/disable feature is for managing memory usage, not for development iteration.
 
 ## Tips
 
 - **Submodules**: Use separate repos for vendor plugins (independence + compatibility)
-- **Build scripts**: Use `build.sh`/`build.bat` for rapid iteration during development
+- **Memory management**: Disable unused plugins to reduce memory footprint
 - **Full API access**: Plugins have complete access to QGC internals
 - **Debugging**: Set `QGC_LOG_VERBOSE=1` to see plugin loading messages
 - **Interface versioning**: Keep interface version stable, breaking changes affect all plugins
@@ -224,8 +229,7 @@ See `example/` directory for a minimal working plugin that:
 **Plugin menu item not visible:**
 - Go to Application Settings → Plugins
 - Check if plugin is enabled (toggle to enable)
-- Changes take effect immediately - no restart needed
-
+- Toggling unloads/reloads the plugin from memory immediately
 **Build errors:**
 - Verify CMakeLists.txt includes all source files
 - Check include paths point to `${CMAKE_SOURCE_DIR}/src/API`
