@@ -12,6 +12,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         QGCPlugin.h
         QGCPluginLoader.cc
         QGCPluginLoader.h
+        QGCPluginManager.cc
+        QGCPluginManager.h
         QGCOptions.cc
         QGCOptions.h
         QmlComponentInfo.cc

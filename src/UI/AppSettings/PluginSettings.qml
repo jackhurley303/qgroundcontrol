@@ -29,7 +29,7 @@ SettingsPage {
         }
 
         Repeater {
-            model: QGroundControl.corePlugin.loadedPlugins
+            model: QGroundControl.pluginManager.loadedPlugins
 
             FactCheckBoxSlider {
                 Layout.fillWidth:   true
@@ -41,7 +41,7 @@ SettingsPage {
 
         QGCLabel {
             Layout.fillWidth:   true
-            visible:            QGroundControl.corePlugin.loadedPlugins.length === 0
+            visible:            QGroundControl.pluginManager.loadedPlugins.length === 0
             text:               qsTr("No plugins are currently loaded.")
             wrapMode:           Text.WordWrap
             font.italic:        true

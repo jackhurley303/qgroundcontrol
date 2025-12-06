@@ -1,19 +1,19 @@
 # QGroundControl Plugins
 
-This directory contains QGC plugins that extend core functionality.
+This directory contains QGC runtime plugins that extend core functionality.
 
 ## Plugin Architecture
 
-QGC uses a dynamic plugin system that allows loading custom functionality at runtime:
+QGC uses a dynamic plugin system managed by `QGCPluginManager` that loads custom functionality at runtime:
 
 - **Plugins are built in-tree** with QGC (access to full API)
 - **Maintained as separate repos** (vendor independence)
 - **Integrated via git submodules** (guaranteed compatibility)
-- **Loaded at runtime** via Qt's plugin system
-- **Extend core via virtual methods** (tool menus, analyze pages, etc.)
+- **Loaded at runtime** by `QGCPluginManager` via Qt's plugin system
+- **Extend functionality** via tool menus and plugin interface
 - **Cross-platform** support (macOS, Linux, Windows)
 
-See [plugin architecture documentation](../AGENTS.md) for details.
+See [plugin architecture documentation](../src/API/README.md) for detailed API reference.
 
 ## Creating a New Plugin
 
@@ -131,7 +131,7 @@ public:
 
 ## Plugin Settings
 
-Plugins are automatically registered with the `PluginSettings` system, which provides:
+Plugins are automatically registered with the `PluginSettings` system by `QGCPluginManager`, which provides:
 
 - **Enable/Disable Control**: Users can toggle plugins on/off in Application Settings → Plugins
 - **Persistent State**: Settings are stored as Facts (type-safe, validated)

@@ -8,8 +8,6 @@
  ****************************************************************************/
 
 #include "QGCCorePlugin.h"
-#include "QGCPlugin.h"
-#include "QGCPluginLoader.h"
 #include "QGCLogging.h"
 #include "AppSettings.h"
 #include "MavlinkSettings.h"
@@ -29,7 +27,6 @@
 #include "QtMultimediaReceiver.h"
 #endif
 #include "SettingsManager.h"
-#include "PluginSettings.h"
 #include "VideoReceiver.h"
 
 #ifdef QGC_CUSTOM_BUILD
@@ -60,24 +57,14 @@ QGCCorePlugin::QGCCorePlugin(QObject *parent)
 QGCCorePlugin::~QGCCorePlugin()
 {
     qCDebug(QGCCorePluginLog) << this;
-    cleanup();
 }
 
 void QGCCorePlugin::init()
 {
-    _loadPlugins();
 }
 
 void QGCCorePlugin::cleanup()
 {
-    // Clean up plugins
-    for (QGCPlugin* plugin : _loadedPlugins) {
-        if (plugin) {
-            plugin->cleanup();
-            delete plugin;
-        }
-    }
-    _loadedPlugins.clear();
 }
 
 QGCCorePlugin *QGCCorePlugin::instance()
@@ -339,36 +326,6 @@ const QVariantList &QGCCorePlugin::toolBarIndicators()
     return toolBarIndicatorList;
 }
 
-const QVariantList &QGCCorePlugin::toolMenuItems()
-{
-    // Returns the list of tool menu items (includes items from loaded plugins)
-    return _toolMenuItems;
-}
-
-QVariantList QGCCorePlugin::loadedPlugins() const
-{
-    QVariantList pluginList;
-    for (const QGCPlugin* plugin : _loadedPlugins) {
-        if (plugin) {
-            QVariantMap pluginInfo;
-            pluginInfo["name"] = plugin->name();
-            pluginList.append(pluginInfo);
-        }
-    }
-    return pluginList;
-}
-
-void QGCCorePlugin::addToolMenuItem(const QVariantMap& item)
-{
-    _toolMenuItems.append(item);
-    emit toolMenuItemsChanged();
-}
-
-void QGCCorePlugin::setLoadedPlugins(const QList<QGCPlugin*>& plugins)
-{
-    _loadedPlugins = plugins;
-}
-
 QVariantList QGCCorePlugin::firstRunPromptsToShow()
 {
     QList<int> rgIdsToShow;
@@ -415,53 +372,4 @@ void QGCCorePlugin::_setShowAdvancedUI(bool show)
         _showAdvancedUI = show;
         emit showAdvancedUIChanged(show);
     }
-}
-
-void QGCCorePlugin::_loadPlugins()
-{
-    qCDebug(QGCCorePluginLog) << "=== Plugin Loading Start ===";
-
-    QGCPluginLoader loader(this);
-
-    // Get default plugin search paths
-    QStringList pluginPaths = QGCPluginLoader::defaultPluginPaths();
-    
-    qCDebug(QGCCorePluginLog) << "Plugin search paths:" << pluginPaths;
-
-    // Load plugins from all search paths
-    loader.loadPlugins(pluginPaths);
-
-    // Store loaded plugins
-    _loadedPlugins = loader.loadedPlugins();
-
-    qCDebug(QGCCorePluginLog) << "Loaded" << _loadedPlugins.size() << "plugin(s)";
-
-    // Get plugin settings to register plugins
-    PluginSettings* pluginSettings = SettingsManager::instance()->pluginSettings();
-
-    // Initialize all plugins and add their tool menu items
-    for (QGCPlugin* plugin : _loadedPlugins) {
-        qCDebug(QGCCorePluginLog) << "Initializing plugin:" << plugin->name();
-        
-        // Register plugin with settings system using name as identifier
-        pluginSettings->registerPlugin(plugin->name());
-        
-        // Always initialize the plugin
-        plugin->init();
-        
-        // Get plugin's tool menu item and add it with visibility controlled by enabled Fact
-        QVariantMap menuItem = plugin->toolMenuItem();
-        if (!menuItem.isEmpty()) {
-            qCDebug(QGCCorePluginLog) << "  - Provides menu item:" << menuItem["title"];
-            
-            // Store the plugin name with the menu item so we can check enabled state dynamically
-            menuItem["pluginName"] = plugin->name();
-            
-            addToolMenuItem(menuItem);
-        } else {
-            qCDebug(QGCCorePluginLog) << "  - No menu item provided";
-        }
-    }
-
-    qCDebug(QGCCorePluginLog) << "=== Plugin Loading Complete:" << _loadedPlugins.size() << "plugin(s) active ===";
 }

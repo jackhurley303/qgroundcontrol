@@ -38,6 +38,7 @@
 #include "PositionManager.h"
 #include "QGCCommandLineParser.h"
 #include "QGCCorePlugin.h"
+#include "QGCPluginManager.h"
 #include "QGCPluginLoader.h"
 #include "QGCFileDownload.h"
 #include "QGCImageProvider.h"
@@ -255,6 +256,7 @@ void QGCApplication::_initForNormalAppBoot()
 
     QQuickStyle::setStyle("Basic");
     QGCCorePlugin::instance()->init();
+    QGCPluginManager::instance()->init();  // Initialize runtime plugin manager
     MAVLinkProtocol::instance()->init();
     MultiVehicleManager::instance()->init();
     _qmlAppEngine = QGCCorePlugin::instance()->createQmlApplicationEngine(this);
@@ -674,6 +676,7 @@ void QGCApplication::shutdown()
         VideoManager::instance()->cleanup();
     }
 
+    QGCPluginManager::instance()->cleanup();  // Cleanup runtime plugins
     QGCCorePlugin::instance()->cleanup();
 
     // This is bad, but currently qobject inheritances are incorrect and cause crashes on exit without
