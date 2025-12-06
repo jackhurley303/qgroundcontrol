@@ -15,6 +15,7 @@
 #include <QtQmlIntegration/QtQmlIntegration>
 
 class QGCPlugin;
+struct PluginLoadInfo;
 
 Q_DECLARE_LOGGING_CATEGORY(QGCPluginManagerLog)
 
@@ -31,7 +32,7 @@ class QGCPluginManager : public QObject
 {
     Q_OBJECT
     QML_UNCREATABLE("")
-    Q_PROPERTY(QVariantList loadedPlugins READ loadedPlugins CONSTANT)
+    Q_PROPERTY(QVariantList loadedPlugins READ loadedPlugins NOTIFY loadedPluginsChanged)
     Q_PROPERTY(QVariantList toolMenuItems READ toolMenuItems NOTIFY toolMenuItemsChanged)
 
 public:
@@ -59,13 +60,32 @@ public:
     /// @param item QVariantMap with keys: title, icon, source, visible
     void addToolMenuItem(const QVariantMap& item);
 
+    /// Unload a specific plugin by name
+    /// @param pluginName The name of the plugin to unload
+    Q_INVOKABLE void unloadPlugin(const QString& pluginName);
+
+    /// Reload a specific plugin by name
+    /// @param pluginName The name of the plugin to reload
+    Q_INVOKABLE void reloadPlugin(const QString& pluginName);
+
 signals:
     /// Emitted when the tool menu items list changes
     void toolMenuItemsChanged();
 
+    /// Emitted when the loaded plugins list changes
+    void loadedPluginsChanged();
+
 private:
     void _loadPlugins();
+    void _removeToolMenuItemsForPlugin(const QString& pluginName);
+    void _addLoadedPlugin(const PluginLoadInfo& loadInfo);
 
-    QVariantList _toolMenuItems;      // List of tool menu items (from plugins)
-    QList<QGCPlugin*> _loadedPlugins; // List of loaded plugins
+    struct PluginInfo {
+        QGCPlugin* plugin;
+        QString path;
+        QString name;
+    };
+
+    QVariantList _toolMenuItems;           // List of tool menu items (from plugins)
+    QList<PluginInfo> _loadedPluginInfos; // List of loaded plugins with their info
 };

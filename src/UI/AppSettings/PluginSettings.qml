@@ -17,6 +17,12 @@ import QGroundControl.FactControls
 
 SettingsPage {
     property var _pluginSettings: QGroundControl.settingsManager.pluginSettings
+    
+    // Runtime plugin unload/reload supported on desktop platforms
+    // Note: Plugin code changes still require rebuilding the app
+    readonly property bool _supportsRuntimeReload: Qt.platform.os === "osx" || 
+                                                     Qt.platform.os === "linux" ||
+                                                     Qt.platform.os === "windows"
 
     SettingsGroupLayout {
         Layout.fillWidth:   true
@@ -24,18 +30,35 @@ SettingsPage {
 
         QGCLabel {
             Layout.fillWidth:   true
-            text:               qsTr("Control which plugins are visible in the Tools Menu.")
+            text:               _supportsRuntimeReload ? 
+                                qsTr("Enable or disable plugins. Disabling a plugin will unload it from memory. Plugin code changes require rebuilding the application.") :
+                                qsTr("Enable or disable plugins. Toggle settings to control which plugins load at startup, but changing which plugins are included requires rebuilding the APK.")
             wrapMode:           Text.WordWrap
         }
 
         Repeater {
-            model: QGroundControl.pluginManager.loadedPlugins
+            model: _pluginSettings.registeredPluginNames
 
             FactCheckBoxSlider {
                 Layout.fillWidth:   true
-                text:               modelData.name + qsTr(" Plugin")
-                fact:               _pluginSettings.pluginEnabledFact(modelData.name)
+                text:               modelData + qsTr(" Plugin")
+                fact:               _pluginSettings.pluginEnabledFact(modelData)
                 visible:            fact !== null
+                
+                Connections {
+                    target: fact
+                    enabled: _supportsRuntimeReload  // Only hook up reload on supported platforms
+                    
+                    function onValueChanged() {
+                        if (fact.value) {
+                            // Plugin was enabled - reload it
+                            QGroundControl.pluginManager.reloadPlugin(modelData)
+                        } else {
+                            // Plugin was disabled - unload it
+                            QGroundControl.pluginManager.unloadPlugin(modelData)
+                        }
+                    }
+                }
             }
         }
 

@@ -17,7 +17,7 @@
 #include <QtCore/QApplicationStatic>
 #include <QtQml/qqml.h>
 
-QGC_LOGGING_CATEGORY(QGCPluginManagerLog, "API.QGCPluginManager");
+QGC_LOGGING_CATEGORY(QGCPluginManagerLog, "qgc.api.pluginmanager");
 
 Q_APPLICATION_STATIC(QGCPluginManager, _qgcPluginManagerInstance);
 
@@ -51,23 +51,25 @@ void QGCPluginManager::init()
 void QGCPluginManager::cleanup()
 {
     // Clean up plugins
-    for (QGCPlugin* plugin : _loadedPlugins) {
-        if (plugin) {
-            plugin->cleanup();
-            delete plugin;
+    for (const PluginInfo& info : _loadedPluginInfos) {
+        if (info.plugin) {
+            info.plugin->cleanup();
+            delete info.plugin;
         }
     }
-    _loadedPlugins.clear();
+    _loadedPluginInfos.clear();
     _toolMenuItems.clear();
+    emit loadedPluginsChanged();
+    emit toolMenuItemsChanged();
 }
 
 QVariantList QGCPluginManager::loadedPlugins() const
 {
     QVariantList pluginList;
-    for (const QGCPlugin* plugin : _loadedPlugins) {
-        if (plugin) {
+    for (const PluginInfo& info : _loadedPluginInfos) {
+        if (info.plugin) {
             QVariantMap pluginInfo;
-            pluginInfo["name"] = plugin->name();
+            pluginInfo["name"] = info.name;
             pluginList.append(pluginInfo);
         }
     }
@@ -94,37 +96,205 @@ void QGCPluginManager::_loadPlugins()
     // Load plugins from all search paths
     loader.loadPlugins(pluginPaths);
 
-    // Store loaded plugins
-    _loadedPlugins = loader.loadedPlugins();
-
-    qCDebug(QGCPluginManagerLog) << "Loaded" << _loadedPlugins.size() << "plugin(s)";
+    // Store loaded plugins with their info
+    QList<PluginLoadInfo> pluginInfos = loader.loadedPluginInfos();
+    
+    qCDebug(QGCPluginManagerLog) << "Loaded" << pluginInfos.size() << "plugin(s)";
 
     // Get plugin settings to register plugins
     PluginSettings* pluginSettings = SettingsManager::instance()->pluginSettings();
 
     // Initialize all plugins and add their tool menu items
-    for (QGCPlugin* plugin : _loadedPlugins) {
-        qCDebug(QGCPluginManagerLog) << "Initializing plugin:" << plugin->name();
+    for (const PluginLoadInfo& loadInfo : pluginInfos) {
+        QGCPlugin* plugin = loadInfo.plugin;
+        QString pluginName = plugin->name();
+        qCDebug(QGCPluginManagerLog) << "Processing plugin:" << pluginName << "from" << loadInfo.filePath;
         
         // Register plugin with settings system using name as identifier
-        pluginSettings->registerPlugin(plugin->name());
+        pluginSettings->registerPlugin(pluginName);
         
-        // Always initialize the plugin
-        plugin->init();
+        // Check if plugin is enabled
+        bool isEnabled = pluginSettings->isPluginEnabled(pluginName);
+        qCDebug(QGCPluginManagerLog) << "  - Enabled:" << isEnabled;
         
-        // Get plugin's tool menu item and add it with visibility controlled by enabled Fact
-        QVariantMap menuItem = plugin->toolMenuItem();
-        if (!menuItem.isEmpty()) {
-            qCDebug(QGCPluginManagerLog) << "  - Provides menu item:" << menuItem["title"];
+        if (isEnabled) {
+            // Create plugin info structure
+            PluginInfo info;
+            info.plugin = plugin;
+            info.name = pluginName;
+            info.path = loadInfo.filePath;  // Store the actual file path
             
-            // Store the plugin name with the menu item so we can check enabled state dynamically
-            menuItem["pluginName"] = plugin->name();
+            _loadedPluginInfos.append(info);
             
-            addToolMenuItem(menuItem);
+            // Initialize the plugin
+            plugin->init();
+            
+            // Get plugin's tool menu item and add it
+            QVariantMap menuItem = plugin->toolMenuItem();
+            if (!menuItem.isEmpty()) {
+                qCDebug(QGCPluginManagerLog) << "  - Provides menu item:" << menuItem["title"];
+                
+                // Store the plugin name with the menu item so we can check enabled state dynamically
+                menuItem["pluginName"] = pluginName;
+                
+                addToolMenuItem(menuItem);
+            } else {
+                qCDebug(QGCPluginManagerLog) << "  - No menu item provided";
+            }
         } else {
-            qCDebug(QGCPluginManagerLog) << "  - No menu item provided";
+            // Plugin is disabled, don't load it
+            qCDebug(QGCPluginManagerLog) << "  - Skipping disabled plugin";
+            delete plugin; // Clean up since we're not loading it
         }
     }
 
-    qCDebug(QGCPluginManagerLog) << "=== Plugin Loading Complete:" << _loadedPlugins.size() << "plugin(s) active ===";
+    emit loadedPluginsChanged();
+    qCDebug(QGCPluginManagerLog) << "=== Plugin Loading Complete:" << _loadedPluginInfos.size() << "plugin(s) active ===";
+}
+
+void QGCPluginManager::_removeToolMenuItemsForPlugin(const QString& pluginName)
+{
+    // Remove all tool menu items for this plugin
+    for (int i = _toolMenuItems.size() - 1; i >= 0; --i) {
+        QVariantMap item = _toolMenuItems[i].toMap();
+        if (item["pluginName"].toString() == pluginName) {
+            _toolMenuItems.removeAt(i);
+        }
+    }
+    emit toolMenuItemsChanged();
+}
+
+void QGCPluginManager::unloadPlugin(const QString& pluginName)
+{
+    qCDebug(QGCPluginManagerLog) << "Unloading plugin:" << pluginName;
+    
+    // Find and remove the plugin
+    for (int i = 0; i < _loadedPluginInfos.size(); ++i) {
+        if (_loadedPluginInfos[i].name == pluginName) {
+            PluginInfo info = _loadedPluginInfos[i];
+            
+            // Cleanup and delete the plugin
+            if (info.plugin) {
+                info.plugin->cleanup();
+                delete info.plugin;
+            }
+            
+            // Remove from list
+            _loadedPluginInfos.removeAt(i);
+            
+            // Remove associated menu items
+            _removeToolMenuItemsForPlugin(pluginName);
+            
+            emit loadedPluginsChanged();
+            qCDebug(QGCPluginManagerLog) << "Plugin unloaded:" << pluginName;
+            return;
+        }
+    }
+    
+    qCWarning(QGCPluginManagerLog) << "Plugin not found for unload:" << pluginName;
+}
+
+void QGCPluginManager::reloadPlugin(const QString& pluginName)
+{
+    qCDebug(QGCPluginManagerLog) << "Reloading plugin:" << pluginName;
+    
+    // Find the plugin if currently loaded (to get its path)
+    QString pluginPath;
+    for (const PluginInfo& info : _loadedPluginInfos) {
+        if (info.name == pluginName) {
+            pluginPath = info.path;
+            qCDebug(QGCPluginManagerLog) << "Found plugin path:" << pluginPath;
+            // Unload it now
+            unloadPlugin(pluginName);
+            break;
+        }
+    }
+    
+    // If we have a specific path, load directly from it
+    // Otherwise fall back to scanning all directories (for newly added plugins)
+    QGCPluginLoader loader(this);
+    
+    if (!pluginPath.isEmpty()) {
+        qCDebug(QGCPluginManagerLog) << "Loading plugin from stored path:" << pluginPath;
+        PluginLoadInfo loadInfo = loader.loadPlugin(pluginPath);
+        
+        if (loadInfo.plugin && loadInfo.plugin->name() == pluginName) {
+            _addLoadedPlugin(loadInfo);
+            qCDebug(QGCPluginManagerLog) << "Plugin reloaded successfully from path:" << pluginName;
+            return;
+        } else {
+            qCWarning(QGCPluginManagerLog) << "Failed to reload plugin from stored path:" << pluginPath;
+        }
+    }
+    
+    // Fall back to scanning all directories
+    qCDebug(QGCPluginManagerLog) << "Scanning all plugin directories for:" << pluginName;
+    QStringList pluginPaths = QGCPluginLoader::defaultPluginPaths();
+    loader.loadPlugins(pluginPaths);
+    
+    QList<PluginLoadInfo> pluginInfos = loader.loadedPluginInfos();
+    
+    // Find the plugin we want to reload
+    for (const PluginLoadInfo& loadInfo : pluginInfos) {
+        if (loadInfo.plugin->name() == pluginName) {
+            qCDebug(QGCPluginManagerLog) << "Found plugin in scan:" << pluginName;
+            _addLoadedPlugin(loadInfo);
+            
+            // Cleanup other plugins we don't want
+            for (const PluginLoadInfo& otherInfo : pluginInfos) {
+                if (otherInfo.plugin != loadInfo.plugin) {
+                    otherInfo.plugin->cleanup();
+                    delete otherInfo.plugin;
+                }
+            }
+            
+            qCDebug(QGCPluginManagerLog) << "Plugin reloaded successfully from scan:" << pluginName;
+            return;
+        }
+    }
+    
+    // Cleanup all plugins since we didn't find what we wanted
+    for (const PluginLoadInfo& info : pluginInfos) {
+        info.plugin->cleanup();
+        delete info.plugin;
+    }
+    
+    qCWarning(QGCPluginManagerLog) << "Failed to reload plugin - not found in scan:" << pluginName;
+}
+
+void QGCPluginManager::_addLoadedPlugin(const PluginLoadInfo& loadInfo)
+{
+    QGCPlugin* plugin = loadInfo.plugin;
+    QString pluginName = plugin->name();
+    
+    // Check if already loaded (defensive)
+    for (const PluginInfo& info : _loadedPluginInfos) {
+        if (info.name == pluginName) {
+            qCWarning(QGCPluginManagerLog) << "Plugin already loaded:" << pluginName;
+            return;
+        }
+    }
+    
+    PluginSettings* pluginSettings = SettingsManager::instance()->pluginSettings();
+    
+    // Create plugin info structure
+    PluginInfo info;
+    info.plugin = plugin;
+    info.name = pluginName;
+    info.path = loadInfo.filePath;
+    
+    _loadedPluginInfos.append(info);
+    
+    // Initialize the plugin
+    plugin->init();
+    
+    // Add tool menu item
+    QVariantMap menuItem = plugin->toolMenuItem();
+    if (!menuItem.isEmpty()) {
+        menuItem["pluginName"] = pluginName;
+        addToolMenuItem(menuItem);
+        qCDebug(QGCPluginManagerLog) << "Added menu item for plugin:" << menuItem["title"];
+    }
+    
+    emit loadedPluginsChanged();
 }

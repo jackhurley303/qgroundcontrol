@@ -422,15 +422,6 @@ ApplicationWindow {
                             Layout.fillWidth:   true
                             text:               modelData.title
                             imageResource:      modelData.icon
-                            visible: {
-                                if (modelData.pluginName !== undefined) {
-                                    // For plugin menu items, visibility is controlled by the plugin's enabled Fact
-                                    var fact = QGroundControl.settingsManager.pluginSettings.pluginEnabledFact(modelData.pluginName)
-                                    return fact ? fact.rawValue : false
-                                }
-                                // For non-plugin items, use the visible property if provided
-                                return modelData.visible !== undefined ? modelData.visible : true
-                            }
                             onClicked: {
                                 if (mainWindow.allowViewSwitch()) {
                                     mainWindow.closeIndicatorDrawer()
