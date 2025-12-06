@@ -1,6 +1,4 @@
 #include "QGCCorePlugin.h"
-#include "QGCPlugin.h"
-#include "QGCPluginLoader.h"
 #include "QGCLogging.h"
 #include "AppSettings.h"
 #include "MavlinkSettings.h"
@@ -21,7 +19,6 @@
 #include "QtMultimediaReceiver.h"
 #endif
 #include "SettingsManager.h"
-#include "PluginSettings.h"
 #include "VideoReceiver.h"
 #include "SurveyPlanCreator.h"
 #include "CorridorScanPlanCreator.h"
@@ -60,24 +57,14 @@ QGCCorePlugin::QGCCorePlugin(QObject *parent)
 QGCCorePlugin::~QGCCorePlugin()
 {
     qCDebug(QGCCorePluginLog) << this;
-    cleanup();
 }
 
 void QGCCorePlugin::init()
 {
-    _loadPlugins();
 }
 
 void QGCCorePlugin::cleanup()
 {
-    // Clean up plugins
-    for (QGCPlugin* plugin : _loadedPlugins) {
-        if (plugin) {
-            plugin->cleanup();
-            delete plugin;
-        }
-    }
-    _loadedPlugins.clear();
 }
 
 QGCCorePlugin *QGCCorePlugin::instance()
@@ -352,36 +339,6 @@ const QVariantList &QGCCorePlugin::toolBarIndicators()
     return toolBarIndicatorList;
 }
 
-const QVariantList &QGCCorePlugin::toolMenuItems()
-{
-    // Returns the list of tool menu items (includes items from loaded plugins)
-    return _toolMenuItems;
-}
-
-QVariantList QGCCorePlugin::loadedPlugins() const
-{
-    QVariantList pluginList;
-    for (const QGCPlugin* plugin : _loadedPlugins) {
-        if (plugin) {
-            QVariantMap pluginInfo;
-            pluginInfo["name"] = plugin->name();
-            pluginList.append(pluginInfo);
-        }
-    }
-    return pluginList;
-}
-
-void QGCCorePlugin::addToolMenuItem(const QVariantMap& item)
-{
-    _toolMenuItems.append(item);
-    emit toolMenuItemsChanged();
-}
-
-void QGCCorePlugin::setLoadedPlugins(const QList<QGCPlugin*>& plugins)
-{
-    _loadedPlugins = plugins;
-}
-
 QVariantList QGCCorePlugin::firstRunPromptsToShow()
 {
     QList<int> rgIdsToShow;
@@ -426,59 +383,4 @@ void QGCCorePlugin::_setShowAdvancedUI(bool show)
         _showAdvancedUI = show;
         emit showAdvancedUIChanged(show);
     }
-}
-
-QVariantList QGCCorePlugin::complexMissionItemNames(Vehicle *vehicle)
-{
-    auto makeEntry = [](const char* canonical, const QString& translated) {
-        QVariantMap entry;
-        entry[QStringLiteral("canonicalName")]  = QString(canonical);
-        entry[QStringLiteral("translatedName")] = translated;
-        return entry;
-    };
-
-    QVariantList items;
-    items.append(makeEntry(SurveyComplexItem::canonicalName,       SurveyComplexItem::tr(SurveyComplexItem::canonicalName)));
-    items.append(makeEntry(CorridorScanComplexItem::canonicalName, CorridorScanComplexItem::tr(CorridorScanComplexItem::canonicalName)));
-    if (vehicle->multiRotor() || vehicle->vtol()) {
-        items.append(makeEntry(StructureScanComplexItem::canonicalName, StructureScanComplexItem::tr(StructureScanComplexItem::canonicalName)));
-    }
-    return items;
-}
-
-QList<PlanCreator*> QGCCorePlugin::planCreators(PlanMasterController *planMasterController)
-{
-    return {
-        new SurveyPlanCreator(planMasterController),
-        new CorridorScanPlanCreator(planMasterController),
-        new StructureScanPlanCreator(planMasterController),
-        new BlankPlanCreator(planMasterController),
-    };
-}
-
-void QGCCorePlugin::_loadPlugins()
-{
-    qCDebug(QGCCorePluginLog) << "Loading plugins";
-
-    QGCPluginLoader loader(this);
-    QStringList pluginPaths = QGCPluginLoader::defaultPluginPaths();
-    loader.loadPlugins(pluginPaths);
-    _loadedPlugins = loader.loadedPlugins();
-
-    qCDebug(QGCCorePluginLog) << "Loaded" << _loadedPlugins.size() << "plugin(s)";
-
-    PluginSettings* pluginSettings = SettingsManager::instance()->pluginSettings();
-
-    for (QGCPlugin* plugin : _loadedPlugins) {
-        pluginSettings->registerPlugin(plugin->name());
-        plugin->init();
-
-        QVariantMap menuItem = plugin->toolMenuItem();
-        if (!menuItem.isEmpty()) {
-            menuItem["pluginName"] = plugin->name();
-            addToolMenuItem(menuItem);
-        }
-    }
-
-    qCDebug(QGCCorePluginLog) << "Plugin loading complete:" << _loadedPlugins.size() << "plugin(s) active";
 }

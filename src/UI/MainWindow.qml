@@ -415,7 +415,7 @@ ApplicationWindow {
 
                     // Dynamic plugin tool menu items
                     Repeater {
-                        model: QGroundControl.corePlugin.toolMenuItems
+                        model: QGroundControl.pluginManager.toolMenuItems
 
                         SubMenuButton {
                             height:             toolSelectDialog._toolButtonHeight

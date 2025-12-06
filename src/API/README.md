@@ -4,23 +4,35 @@ This directory contains the core plugin system architecture for QGroundControl.
 
 ## Architecture Overview
 
-QGroundControl uses a clear separation between the **Core Plugin** (singleton managing the application) and **Runtime Plugins** (dynamically loaded extensions).
+QGroundControl uses a clear separation between the **Core Plugin** (singleton managing core app behavior) and **Runtime Plugins** (dynamically loaded extensions managed by the Plugin Manager).
 
 ### Core Components
 
 #### `QGCCorePlugin` - Core Application Manager (Singleton)
-- **Purpose**: Singleton that manages core QGC functionality and aggregates runtime plugin contributions
+- **Purpose**: Singleton that manages core QGC functionality
 - **Responsibilities**:
   - Manages application-wide settings and options
-  - Aggregates tool menu items from all loaded plugins
   - Provides default analyze pages and toolbar indicators
   - Handles MAVLink message routing
   - Manages custom map items and video receivers
 - **Key Properties**:
-  - `toolMenuItems` - Aggregated list of all tool menu items (from core + plugins)
-  - `loadedPlugins` - List of currently loaded runtime plugins
   - `analyzePages` - Application analyze pages
   - `options` - Global QGC options
+  - `toolbarIndicators` - Custom toolbar indicator components
+
+#### `QGCPluginManager` - Runtime Plugin Manager (Singleton)
+- **Purpose**: Manages the lifecycle of runtime plugins
+- **Responsibilities**:
+  - Load runtime plugins from disk
+  - Initialize and cleanup plugins
+  - Aggregate tool menu items from all plugins
+  - Register plugins with PluginSettings
+- **Key Properties**:
+  - `toolMenuItems` - Aggregated list of all plugin tool menu items
+  - `loadedPlugins` - List of currently loaded runtime plugins
+- **Key Methods**:
+  - `init()` - Load and initialize all plugins
+  - `cleanup()` - Cleanup and delete all plugins
 
 #### `QGCPlugin` - Runtime Plugin Base Class
 - **Purpose**: Base class for dynamically loaded runtime plugins
@@ -56,20 +68,21 @@ QGroundControl uses a clear separation between the **Core Plugin** (singleton ma
 
 ```
 1. Application Startup
-   └── QGCCorePlugin::init()
-       └── QGCCorePlugin::_loadPlugins()
+   ├── QGCCorePlugin::init()
+   └── QGCPluginManager::init()
+       └── QGCPluginManager::_loadPlugins()
            ├── QGCPluginLoader scans plugin directories
            ├── Loads .so/.dylib/.dll files
            ├── Validates QGCPluginInterface version 1
            └── Creates QGCPlugin instances
 
 2. Plugin Initialization
-   └── QGCCorePlugin::_loadPlugins() (continued)
+   └── QGCPluginManager::_loadPlugins() (continued)
        ├── Registers each plugin with PluginSettings
        ├── Calls plugin->init() on all plugins (always, regardless of enabled state)
        ├── Collects plugin->toolMenuItem()
        ├── Adds pluginName property to menu item
-       └── Aggregates items to QGCCorePlugin::_toolMenuItems
+       └── Aggregates items to QGCPluginManager::_toolMenuItems
 
 3. Runtime
    └── Tool menu items visibility:
@@ -78,7 +91,8 @@ QGroundControl uses a clear separation between the **Core Plugin** (singleton ma
        └── No restart required
 
 4. Application Shutdown
-   └── QGCCorePlugin::cleanup()
+   ├── QGCCorePlugin::cleanup()
+   └── QGCPluginManager::cleanup()
        ├── Calls plugin->cleanup() on each plugin
        └── Deletes plugin instances
 ```
@@ -185,7 +199,7 @@ Each plugin provides a single tool menu item as a QVariantMap with the following
 
 ## Settings Integration
 
-Plugins are automatically integrated with the `PluginSettings` system:
+Plugins are automatically integrated with the `PluginSettings` system by `QGCPluginManager`:
 
 **Automatic Registration:**
 - Each plugin is registered using its `name()` as the identifier
@@ -229,10 +243,16 @@ Plugins can:
 ## Architecture
 
 **Current Design** (Version 1):
-- Core Plugin: `QGCCorePlugin` (singleton, manages core + aggregates plugins)
+- Core Plugin: `QGCCorePlugin` (singleton, manages core application behavior)
+- Plugin Manager: `QGCPluginManager` (singleton, manages runtime plugins)
 - Runtime Plugins: `QGCPlugin` (individual loaded plugins)
 - Interface: `QGCPluginInterface` (returns `QGCPlugin*`)
-- Clear separation: one core, many runtime plugins
+- Clear separation: core app behavior vs runtime plugin management
+
+**Key Responsibilities:**
+- `QGCCorePlugin`: Core app settings, custom builds, analyze pages
+- `QGCPluginManager`: Load, initialize, and manage runtime plugins
+- `QGCPlugin`: Individual plugin logic and tool menu items
 
 ## Examples
 

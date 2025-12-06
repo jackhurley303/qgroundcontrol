@@ -89,9 +89,11 @@ See `ExampleToolBar.qml` for a complete example with custom buttons and layout.
 
 ## Architecture
 
-- `ExamplePlugin.h` - Plugin factory implementing `QGCCorePluginInterface`
+- `ExamplePlugin.h` - Plugin factory implementing `QGCPluginInterface`
 - `ExamplePlugin.cc` - Factory implementation that creates plugin instance
 - `ExamplePluginView.qml` - Plugin UI (loaded from Qt resources)
 - `ExamplePlugin.qrc` - Qt resource file bundling QML
 - `CMakeLists.txt` - Build configuration with platform-specific linker flags
 - `build.sh` / `build.bat` - Cross-platform build scripts
+
+The plugin is automatically discovered and managed by `QGCPluginManager`, which handles loading, initialization, menu aggregation, and cleanup.

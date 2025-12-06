@@ -1,6 +1,7 @@
 #include "QGroundControlQmlGlobal.h"
 
 #include "QGCCorePlugin.h"
+#include "QGCPluginManager.h"
 #include "LinkManager.h"
 #include "MAVLinkProtocol.h"
 #include "FirmwarePluginManager.h"
@@ -50,6 +51,7 @@ QGroundControlQmlGlobal::QGroundControlQmlGlobal(QObject *parent)
     , _multiVehicleManager(MultiVehicleManager::instance())
     , _settingsManager(SettingsManager::instance())
     , _corePlugin(QGCCorePlugin::instance())
+    , _pluginManager(QGCPluginManager::instance())
     , _globalPalette(new QGCPalette(this))
 #ifndef QGC_NO_SERIAL_LINK
     , _gpsRtkFactGroup(GPSManager::instance()->gpsRtk()->gpsRtkFactGroup())

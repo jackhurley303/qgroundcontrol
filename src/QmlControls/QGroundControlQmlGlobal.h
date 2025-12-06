@@ -16,6 +16,7 @@ class MAVLinkSigningKeys;
 class MissionCommandTree;
 class MultiVehicleManager;
 class QGCCorePlugin;
+class QGCPluginManager;
 class QGCMapEngineManager;
 class NTRIPManager;
 class QGCPalette;
@@ -32,6 +33,7 @@ Q_MOC_INCLUDE("MAVLinkSigningKeys.h")
 Q_MOC_INCLUDE("MissionCommandTree.h")
 Q_MOC_INCLUDE("MultiVehicleManager.h")
 Q_MOC_INCLUDE("QGCCorePlugin.h")
+Q_MOC_INCLUDE("QGCPluginManager.h")
 Q_MOC_INCLUDE("QGCMapEngineManager.h")
 Q_MOC_INCLUDE("QGCPalette.h")
 Q_MOC_INCLUDE("PositionManager.h")
@@ -70,6 +72,7 @@ public:
     Q_PROPERTY(ADSBVehicleManager*  adsbVehicleManager      READ    adsbVehicleManager      CONSTANT)
     Q_PROPERTY(NTRIPManager*        ntripManager            READ    ntripManager            CONSTANT)
     Q_PROPERTY(QGCCorePlugin*       corePlugin              READ    corePlugin              CONSTANT)
+    Q_PROPERTY(QGCPluginManager*    pluginManager           READ    pluginManager           CONSTANT)
     Q_PROPERTY(MissionCommandTree*  missionCommandTree      READ    missionCommandTree      CONSTANT)
     Q_PROPERTY(MAVLinkSigningKeys*   mavlinkSigningKeys      READ    mavlinkSigningKeys      CONSTANT)
 #ifndef QGC_NO_SERIAL_LINK
@@ -162,6 +165,7 @@ public:
     MAVLinkSigningKeys*     mavlinkSigningKeys  ()  { return _mavlinkSigningKeys; }
     VideoManager*           videoManager        ()  { return _videoManager; }
     QGCCorePlugin*          corePlugin          ()  { return _corePlugin; }
+    QGCPluginManager*       pluginManager       ()  { return _pluginManager; }
     SettingsManager*        settingsManager     ()  { return _settingsManager; }
 #ifndef QGC_NO_SERIAL_LINK
     FactGroup*              gpsRtkFactGroup     ()  { return _gpsRtkFactGroup; }
@@ -227,6 +231,7 @@ private:
     MultiVehicleManager*    _multiVehicleManager    = nullptr;
     SettingsManager*        _settingsManager        = nullptr;
     QGCCorePlugin*          _corePlugin             = nullptr;
+    QGCPluginManager*       _pluginManager          = nullptr;
     QGCPalette*             _globalPalette          = nullptr;
 #ifndef QGC_NO_SERIAL_LINK
     FactGroup*              _gpsRtkFactGroup        = nullptr;
