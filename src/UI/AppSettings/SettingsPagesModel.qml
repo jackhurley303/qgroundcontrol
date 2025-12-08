@@ -106,7 +106,7 @@ ListModel {
     ListElement {
         name: qsTr("Plugins")
         url: "qrc:/qml/QGroundControl/AppSettings/PluginSettings.qml"
-        iconUrl: ""
+        iconUrl: "qrc:/InstrumentValueIcons/plugins.svg"
         pageVisible: function() { return true }
     }
 

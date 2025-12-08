@@ -300,5 +300,6 @@
 		<file alias="view-tile.svg">view-tile.svg</file>
 		<file alias="gimbal-1.svg">gimbal-1.svg</file>
 		<file alias="gimbal-2.svg">gimbal-2.svg</file>
+		<file alias="plugins.svg">plugins.svg</file>
 	</qresource>
 </RCC>
