@@ -1,7 +1,7 @@
 #pragma once
 
 #include "API/QGCPlugin.h"
-#include "API/QGCCorePluginInterface.h"
+#include "API/QGCPluginInterface.h"
 
 #include <QtCore/QObject>
 #include <QtCore/QtPlugin>
