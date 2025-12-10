@@ -17,7 +17,7 @@
 #include <QtCore/QApplicationStatic>
 #include <QtQml/qqml.h>
 
-QGC_LOGGING_CATEGORY(QGCPluginManagerLog, "qgc.api.pluginmanager");
+QGC_LOGGING_CATEGORY(QGCPluginManagerLog, "PluginSystem.QGCPluginManager");
 
 Q_APPLICATION_STATIC(QGCPluginManager, _qgcPluginManagerInstance);
 

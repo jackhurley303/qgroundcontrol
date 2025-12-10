@@ -1,10 +1,13 @@
 #pragma once
 
-#include "API/QGCPlugin.h"
-#include "API/QGCPluginInterface.h"
+#include "PluginSystem/QGCPlugin.h"
+#include "PluginSystem/QGCPluginInterface.h"
 
+#include <QtCore/QLoggingCategory>
 #include <QtCore/QObject>
 #include <QtCore/QtPlugin>
+
+Q_DECLARE_LOGGING_CATEGORY(ExamplePluginLog)
 
 /**
  * @class ExamplePlugin

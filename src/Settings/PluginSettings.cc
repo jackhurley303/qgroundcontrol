@@ -10,8 +10,11 @@
 #include "PluginSettings.h"
 #include "FactMetaData.h"
 #include "SettingsFact.h"
+#include "QGCLoggingCategory.h"
 
 #include <QtCore/QSettings>
+
+QGC_LOGGING_CATEGORY(PluginSettingsLog, "PluginSystem.PluginSettings")
 
 DECLARE_SETTINGGROUP(Plugin, "Plugins")
 {
@@ -20,7 +23,7 @@ DECLARE_SETTINGGROUP(Plugin, "Plugins")
 
 void PluginSettings::registerPlugin(const QString& name)
 {
-    qDebug() << "Registering plugin:" << name;
+    qCDebug(PluginSettingsLog) << "Registering plugin:" << name;
     if (_pluginFacts.contains(name)) {
         return;  // Already registered
     }

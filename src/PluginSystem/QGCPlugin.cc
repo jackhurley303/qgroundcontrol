@@ -10,7 +10,7 @@
 #include "QGCPlugin.h"
 #include "QGCLoggingCategory.h"
 
-QGC_LOGGING_CATEGORY(QGCPluginLog, "qgc.api.plugin")
+QGC_LOGGING_CATEGORY(QGCPluginLog, "PluginSystem.QGCPlugin")
 
 QGCPlugin::QGCPlugin(QObject *parent)
     : QObject(parent)

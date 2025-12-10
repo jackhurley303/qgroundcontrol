@@ -10,9 +10,12 @@
 #pragma once
 
 #include <QtQmlIntegration/QtQmlIntegration>
+#include <QtCore/QLoggingCategory>
 #include <QtCore/QMap>
 
 #include "SettingsGroup.h"
+
+Q_DECLARE_LOGGING_CATEGORY(PluginSettingsLog)
 
 class QGCPlugin;
 
