@@ -123,7 +123,9 @@ void QGCLoggingCategoryManager::setFilterRulesFromSettings(const QString &comman
                 }
             }
         } else {
-            qCWarning(QGCLoggingCategoryRegisterLog) << "Category not found for saved settings" << fullCategoryName;
+            // Category not registered yet (likely from a plugin that will load later)
+            // This is normal and expected, so use debug level instead of warning
+            qCDebug(QGCLoggingCategoryRegisterLog) << "Category not found for saved settings" << fullCategoryName;
         }
     }
 
