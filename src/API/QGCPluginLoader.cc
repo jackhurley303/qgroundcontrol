@@ -9,7 +9,7 @@
 
 #include "QGCPluginLoader.h"
 #include "QGCPlugin.h"
-#include "QGCCorePluginInterface.h"
+#include "QGCPluginInterface.h"
 #include "QGCApplication.h"
 #include "QGCLoggingCategory.h"
 

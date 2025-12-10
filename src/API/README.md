@@ -111,7 +111,7 @@ QGroundControl uses a clear separation between the **Core Plugin** (singleton ma
 ```cpp
 // MyPlugin.h
 #include "API/QGCPlugin.h"
-#include "API/QGCCorePluginInterface.h"
+#include "API/QGCPluginInterface.h"
 
 // Factory (implements Qt Plugin Interface)
 class MyPlugin : public QObject, public QGCPluginInterface
