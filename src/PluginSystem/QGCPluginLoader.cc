@@ -18,7 +18,7 @@
 #include <QtCore/QPluginLoader>
 #include <QtCore/QStandardPaths>
 
-QGC_LOGGING_CATEGORY(QGCPluginLoaderLog, "qgc.api.pluginloader")
+QGC_LOGGING_CATEGORY(QGCPluginLoaderLog, "PluginSystem.QGCPluginLoader")
 
 QGCPluginLoader::QGCPluginLoader(QObject* parent)
     : QObject(parent)
