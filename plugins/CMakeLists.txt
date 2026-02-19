@@ -4,6 +4,9 @@
 
 message(STATUS "QGC: Configuring plugins")
 
+# Include plugin helper functions
+include(${CMAKE_SOURCE_DIR}/cmake/modules/PluginHelpers.cmake)
+
 # Automatically discover and build all plugin subdirectories
 # CONFIGURE_DEPENDS ensures CMake reconfigures when plugin directories are added/removed
 file(GLOB PLUGIN_DIRS CONFIGURE_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/*")
