@@ -291,12 +291,78 @@ qt_add_qml_module(${CMAKE_PROJECT_NAME}
 add_subdirectory(src)
 
 # ----------------------------------------------------------------------------
-# Plugin Subdirectory (Optional Runtime Plugins)
+# Plugin Infrastructure Configuration
 # ----------------------------------------------------------------------------
+# Collect common compile definitions and include paths for plugins
+# These are made available after the main build so plugins can use them
 if(IS_DIRECTORY "${CMAKE_SOURCE_DIR}/plugins" AND EXISTS "${CMAKE_SOURCE_DIR}/plugins/CMakeLists.txt")
+    # Application metadata definitions that plugins may need
+    set(QGC_PLUGIN_COMPILE_DEFINITIONS
+        QGC_APP_NAME="${QGC_APP_NAME}"
+        QGC_ORG_NAME="${QGC_ORG_NAME}"
+        QGC_ORG_DOMAIN="${QGC_ORG_DOMAIN}"
+        QGC_APP_VERSION_STR="${QGC_APP_VERSION_STR}"
+        QGC_APP_DATE="${QGC_APP_DATE}"
+        QGC_APP_DESCRIPTION="${QGC_APP_DESCRIPTION}"
+        CACHE INTERNAL "Compile definitions for QGC plugins"
+    )
+    
+    # Common include paths that plugins need to access QGC APIs
+    set(QGC_PLUGIN_INCLUDE_DIRECTORIES
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/src/API
+        ${CMAKE_SOURCE_DIR}/src/UI
+        ${CMAKE_SOURCE_DIR}/src/QmlControls
+        ${CMAKE_SOURCE_DIR}/src/Settings
+        ${CMAKE_SOURCE_DIR}/src/Utilities
+        ${CMAKE_SOURCE_DIR}/src/Vehicle
+        ${CMAKE_SOURCE_DIR}/src/Vehicle/FactGroups
+        ${CMAKE_SOURCE_DIR}/src/FactSystem
+        ${CMAKE_SOURCE_DIR}/src/FirmwarePlugin
+        ${CMAKE_SOURCE_DIR}/src/MissionManager
+        ${CMAKE_SOURCE_DIR}/src/Gimbal
+        ${CMAKE_SOURCE_DIR}/src/Comms
+        ${CMAKE_SOURCE_DIR}/src/MAVLink
+        ${CMAKE_SOURCE_DIR}/src/MAVLink/LibEvents
+        ${CMAKE_BINARY_DIR}/src
+        CACHE INTERNAL "Include directories for QGC plugins"
+    )
+    
+    # Add MAVLink include paths if available
+    # MAVLink is added via CPM in src/MAVLink/CMakeLists.txt
+    # Check if the binary dir variable exists (it's in the cache after first configure)
+    if(DEFINED mavlink_BINARY_DIR AND EXISTS "${mavlink_BINARY_DIR}/include/mavlink")
+        list(APPEND QGC_PLUGIN_INCLUDE_DIRECTORIES
+            ${mavlink_BINARY_DIR}/include/mavlink
+            ${mavlink_BINARY_DIR}/include/mavlink/${QGC_MAVLINK_DIALECT}
+        )
+        message(STATUS "QGC: Added MAVLink paths to plugin includes")
+    else()
+        message(WARNING "QGC: MAVLink headers not found, plugins may fail to compile")
+    endif()
+    
+    # Add libevents include paths if available
+    if(DEFINED libevents_SOURCE_DIR AND EXISTS "${libevents_SOURCE_DIR}")
+        list(APPEND QGC_PLUGIN_INCLUDE_DIRECTORIES
+            ${libevents_SOURCE_DIR}
+        )
+        message(STATUS "QGC: Added libevents paths to plugin includes")
+    else()
+        message(WARNING "QGC: libevents headers not found, plugins may fail to compile")
+    endif()
+    
+    # Update cache variable with dependency paths
+    set(QGC_PLUGIN_INCLUDE_DIRECTORIES ${QGC_PLUGIN_INCLUDE_DIRECTORIES}
+        CACHE INTERNAL "Include directories for QGC plugins"
+    )
+    
     message(STATUS "QGC: Building plugins from plugins/ directory")
     add_subdirectory(plugins)
 endif()
+
+# ----------------------------------------------------------------------------
+# Plugin Subdirectory (Optional Runtime Plugins)
+# ----------------------------------------------------------------------------
 
 if(QGC_BUILD_TESTING)
     add_subdirectory(test)
