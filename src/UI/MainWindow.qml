@@ -122,6 +122,12 @@ ApplicationWindow {
         planView.visible = false
     }
 
+    function closeTool() {
+        toolDrawer.visible = false
+    }
+
+    readonly property var planMasterController: planView._planMasterController
+
     function showTool(toolTitle, toolSource, toolIcon, toolbarSource) {
         toolDrawer.backIcon     = flyView.visible ? "/qmlimages/PaperPlane.svg" : "/qmlimages/Plan.svg"
         toolDrawer.toolTitle    = toolTitle
