@@ -85,6 +85,25 @@ ToolIndicatorPage {
                 }
             }
 
+            // Dynamic plugin tool menu items
+            Repeater {
+                model: QGroundControl.pluginManager.toolMenuItems
+
+                SubMenuButton {
+                    implicitHeight:     root._toolButtonHeight
+                    Layout.fillWidth:   true
+                    text:               modelData.title
+                    imageResource:      modelData.icon
+                    onClicked: {
+                        if (mainWindow.allowViewSwitch()) {
+                            mainWindow.closeIndicatorDrawer()
+                            var toolbarSrc = modelData.toolbarSource !== undefined ? modelData.toolbarSource : ""
+                            mainWindow.showTool(modelData.title, modelData.source, modelData.icon, toolbarSrc)
+                        }
+                    }
+                }
+            }
+
             SubMenuButton {
                 id: closeButton
                 implicitHeight: root._toolButtonHeight

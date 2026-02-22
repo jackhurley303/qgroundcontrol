@@ -21,43 +21,43 @@ DECLARE_SETTINGGROUP(Plugin, "Plugins")
     // Settings are dynamically created per plugin
 }
 
-void PluginSettings::registerPlugin(const QString& name)
+void PluginSettings::registerPlugin(const QString& pluginName)
 {
-    qCDebug(PluginSettingsLog) << "Registering plugin:" << name;
-    if (_pluginFacts.contains(name)) {
+    qCDebug(PluginSettingsLog) << "Registering plugin:" << pluginName;
+    if (_pluginFacts.contains(pluginName)) {
         return;  // Already registered
     }
 
     // Create metadata for the plugin enabled setting
     FactMetaData* metaData = new FactMetaData(FactMetaData::valueTypeBool, this);
-    metaData->setName(name);
-    metaData->setShortDescription(QString("%1 Enabled").arg(name));
-    metaData->setLongDescription(QString("Enable or disable the %1 plugin. Changes take effect immediately.").arg(name));
-    
+    metaData->setName(pluginName);
+    metaData->setShortDescription(QString("%1 Enabled").arg(pluginName));
+    metaData->setLongDescription(QString("Enable or disable the %1 plugin. Changes take effect immediately.").arg(pluginName));
+
     // Example plugin is disabled by default, all others are enabled by default
-    bool defaultEnabled = (name != "Example");
+    bool defaultEnabled = (pluginName != "Example");
     metaData->setRawDefaultValue(defaultEnabled);
-    
-    _nameToMetaDataMap[name] = metaData;
+
+    _nameToMetaDataMap[pluginName] = metaData;
 
     // Create the SettingsFact
-    SettingsFact* fact = _createSettingsFact(name);
-    _pluginFacts[name] = fact;
-    
+    SettingsFact* fact = _createSettingsFact(pluginName);
+    _pluginFacts[pluginName] = fact;
+
     emit registeredPluginsChanged();
 }
 
-Fact* PluginSettings::pluginEnabledFact(const QString& name)
+Fact* PluginSettings::pluginEnabledFact(const QString& pluginName)
 {
-    if (_pluginFacts.contains(name)) {
-        return _pluginFacts[name];
+    if (_pluginFacts.contains(pluginName)) {
+        return _pluginFacts[pluginName];
     }
     return nullptr;
 }
 
-bool PluginSettings::isPluginEnabled(const QString& name)
+bool PluginSettings::isPluginEnabled(const QString& pluginName)
 {
-    Fact* fact = pluginEnabledFact(name);
+    Fact* fact = pluginEnabledFact(pluginName);
     if (fact) {
         return fact->rawValue().toBool();
     }

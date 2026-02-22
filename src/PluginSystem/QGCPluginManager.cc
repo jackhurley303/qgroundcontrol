@@ -278,8 +278,6 @@ void QGCPluginManager::_addLoadedPlugin(const PluginLoadInfo& loadInfo)
         }
     }
     
-    PluginSettings* pluginSettings = SettingsManager::instance()->pluginSettings();
-    
     // Create plugin info structure
     PluginInfo info;
     info.plugin = plugin;
