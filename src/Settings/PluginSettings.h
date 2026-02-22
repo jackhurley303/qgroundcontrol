@@ -33,13 +33,13 @@ public:
     DEFINE_SETTING_NAME_GROUP()
 
     /// Register a plugin and create its enabled Fact
-    Q_INVOKABLE void registerPlugin(const QString& name);
+    Q_INVOKABLE void registerPlugin(const QString& pluginName);
 
     /// Get the enabled Fact for a plugin
-    Q_INVOKABLE Fact* pluginEnabledFact(const QString& name);
+    Q_INVOKABLE Fact* pluginEnabledFact(const QString& pluginName);
 
     /// Check if a plugin is enabled
-    Q_INVOKABLE bool isPluginEnabled(const QString& name);
+    Q_INVOKABLE bool isPluginEnabled(const QString& pluginName);
 
     /// Get list of all registered plugin names
     QStringList registeredPluginNames() const;
