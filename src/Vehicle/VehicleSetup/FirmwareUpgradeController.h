@@ -1,13 +1,4 @@
-﻿/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
-#pragma once
+﻿#pragma once
 
 #include <QtCore/QObject>
 #include <QtCore/QTimer>
@@ -29,6 +20,9 @@ class FirmwareUpgradeController : public QObject
 {
     Q_OBJECT
     QML_ELEMENT
+#ifdef QGC_UNITTEST_BUILD
+    friend class FirmwareUpgradeControllerTest; // Unit test
+#endif
 public:
         typedef enum {
             AutoPilotStackPX4 = 0,
@@ -163,7 +157,7 @@ signals:
 
 private slots:
     void _firmwareDownloadProgress          (qint64 curr, qint64 total);
-    void _firmwareDownloadComplete          (QString remoteFile, QString localFile, QString errorMsg);
+    void _firmwareDownloadComplete          (bool success, const QString &localFile, const QString &errorMsg);
     void _foundBoard                        (bool firstAttempt, const QSerialPortInfo& portInfo, int boardType, QString boardName);
     void _noBoardFound                      (void);
     void _boardGone                         (void);
@@ -176,8 +170,8 @@ private slots:
     void _eraseStarted                      (void);
     void _eraseComplete                     (void);
     void _eraseProgressTick                 (void);
-    void _px4ReleasesGithubDownloadComplete (QString remoteFile, QString localFile, QString errorMsg);
-    void _ardupilotManifestDownloadComplete (QString remoteFile, QString localFile, QString errorMsg);
+    void _px4ReleasesGithubDownloadComplete (bool success, const QString &localFile, const QString &errorMsg);
+    void _ardupilotManifestDownloadComplete (bool success, const QString &localFile, const QString &errorMsg);
     void _buildAPMFirmwareNames             (void);
 
 private:

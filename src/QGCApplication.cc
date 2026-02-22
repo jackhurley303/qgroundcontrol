@@ -1,13 +1,5 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "QGCApplication.h"
+#include "qgc_version.h"
 
 #include <QtCore/QEvent>
 #include <QtCore/QFile>
@@ -16,7 +8,7 @@
 #include <QtCore/QRegularExpression>
 #include <QtGui/QFontDatabase>
 #include <QtGui/QIcon>
-#include <QtNetwork/QNetworkProxyFactory>
+#include "QGCNetworkHelper.h"
 #include <QtQml/QQmlApplicationEngine>
 #include <QtQml/QQmlContext>
 #include <QtQuick/QQuickImageProvider>
@@ -68,7 +60,7 @@ QGCApplication::QGCApplication(int &argc, char *argv[], const QGCCommandLinePars
     _msecsElapsedTime.start();
 
     // Setup for network proxy support
-    QNetworkProxyFactory::setUseSystemConfiguration(true);
+    QGCNetworkHelper::initializeProxySupport();
 
     bool fClearSettingsOptions = cli.clearSettingsOptions;  // Clear stored settings
     const bool fClearCache = cli.clearCache;                // Clear parameter/airframe caches
@@ -84,7 +76,12 @@ QGCApplication::QGCApplication(int &argc, char *argv[], const QGCCommandLinePars
     if (_runningUnitTests || _simpleBootTest) {
         // We don't want unit tests to use the same QSettings space as the normal app. So we tweak the app
         // name. Also we want to run unit tests with clean settings every time.
-        applicationName = QStringLiteral("%1_unittest").arg(QGC_APP_NAME);
+        // Include test name or PID to prevent settings file conflicts when tests run in parallel
+        if (!cli.unitTests.isEmpty()) {
+            applicationName = QStringLiteral("%1_unittest_%2").arg(QGC_APP_NAME, cli.unitTests.first());
+        } else {
+            applicationName = QStringLiteral("%1_unittest_%2").arg(QGC_APP_NAME).arg(QCoreApplication::applicationPid());
+        }
     } else {
 #ifdef QGC_DAILY_BUILD
         // This gives daily builds their own separate settings space. Allowing you to use daily and stable builds
@@ -484,16 +481,17 @@ void QGCApplication::_checkForNewVersion()
     const QString versionCheckFile = QGCCorePlugin::instance()->stableVersionCheckFileUrl();
     if (!versionCheckFile.isEmpty()) {
         QGCFileDownload *const download = new QGCFileDownload(this);
-        (void) connect(download, &QGCFileDownload::downloadComplete, this, &QGCApplication::_qgcCurrentStableVersionDownloadComplete);
-        download->download(versionCheckFile);
+        (void) connect(download, &QGCFileDownload::finished, this, &QGCApplication::_qgcCurrentStableVersionDownloadComplete);
+        if (!download->start(versionCheckFile)) {
+            qCDebug(QGCApplicationLog) << "Download QGC stable version failed to start" << download->errorString();
+            download->deleteLater();
+        }
     }
 }
 
-void QGCApplication::_qgcCurrentStableVersionDownloadComplete(const QString &remoteFile, const QString &localFile, const QString &errorMsg)
+void QGCApplication::_qgcCurrentStableVersionDownloadComplete(bool success, const QString &localFile, const QString &errorMsg)
 {
-    Q_UNUSED(remoteFile);
-
-    if (errorMsg.isEmpty()) {
+    if (success) {
         QFile versionFile(localFile);
         if (versionFile.open(QIODevice::ReadOnly)) {
             QTextStream textStream(&versionFile);
@@ -510,7 +508,7 @@ void QGCApplication::_qgcCurrentStableVersionDownloadComplete(const QString &rem
                 }
             }
         }
-    } else {
+    } else if (!errorMsg.isEmpty()) {
         qCDebug(QGCApplicationLog) << "Download QGC stable version failed" << errorMsg;
     }
 
@@ -602,6 +600,8 @@ void QGCApplication::removeCompressedSignal(const QMetaMethod &method)
     _compressedSignals.remove(method);
 }
 
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
 bool QGCApplication::compressEvent(QEvent *event, QObject *receiver, QPostEventList *postedEvents)
 {
     if (event->type() != QEvent::MetaCall) {
@@ -640,6 +640,7 @@ bool QGCApplication::compressEvent(QEvent *event, QObject *receiver, QPostEventL
 
     return false;
 }
+QT_WARNING_POP
 
 bool QGCApplication::event(QEvent *e)
 {

@@ -1,15 +1,6 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "LinkManager.h"
-#include "DeviceInfo.h"
 #include "LogReplayLink.h"
+#include "QGCNetworkHelper.h"
 #include "MAVLinkProtocol.h"
 #include "MultiVehicleManager.h"
 #include "QGCApplication.h"
@@ -21,9 +12,7 @@
 #include "TCPLink.h"
 #include "UDPLink.h"
 
-#ifdef QGC_ENABLE_BLUETOOTH
 #include "BluetoothLink.h"
-#endif
 
 #ifndef QGC_NO_SERIAL_LINK
 #include "SerialLink.h"
@@ -35,10 +24,6 @@
 
 #ifdef QT_DEBUG
 #include "MockLink.h"
-#endif
-
-#ifndef QGC_AIRLINK_DISABLED
-#include "AirLinkLink.h"
 #endif
 
 #ifdef QGC_ZEROCONF_ENABLED
@@ -130,22 +115,15 @@ bool LinkManager::createConnectedLink(SharedLinkConfigurationPtr &config)
     case LinkConfiguration::TypeTcp:
         link = std::make_shared<TCPLink>(config);
         break;
-#ifdef QGC_ENABLE_BLUETOOTH
     case LinkConfiguration::TypeBluetooth:
         link = std::make_shared<BluetoothLink>(config);
         break;
-#endif
     case LinkConfiguration::TypeLogReplay:
         link = std::make_shared<LogReplayLink>(config);
         break;
 #ifdef QT_DEBUG
     case LinkConfiguration::TypeMock:
         link = std::make_shared<MockLink>(config);
-        break;
-#endif
-#ifndef QGC_AIRLINK_DISABLED
-    case LinkConfiguration::AirLink:
-        link = std::make_shared<AirLinkLink>(config);
         break;
 #endif
     case LinkConfiguration::TypeLast:
@@ -169,7 +147,6 @@ bool LinkManager::createConnectedLink(SharedLinkConfigurationPtr &config)
     (void) connect(link.get(), &LinkInterface::disconnected, this, &LinkManager::_linkDisconnected);
 
     MAVLinkProtocol::instance()->resetMetadataForLink(link.get());
-    MAVLinkProtocol::instance()->setVersion(MAVLinkProtocol::instance()->getCurrentVersion());
 
     // Try to connect before adding to active links list
     if (!link->_connect()) {
@@ -378,22 +355,15 @@ void LinkManager::loadLinkConfigurationList()
             case LinkConfiguration::TypeTcp:
                 link = new TCPConfiguration(name);
                 break;
-#ifdef QGC_ENABLE_BLUETOOTH
             case LinkConfiguration::TypeBluetooth:
                 link = new BluetoothConfiguration(name);
                 break;
-#endif
             case LinkConfiguration::TypeLogReplay:
                 link = new LogReplayConfiguration(name);
                 break;
 #ifdef QT_DEBUG
             case LinkConfiguration::TypeMock:
                 link = new MockConfiguration(name);
-                break;
-#endif
-#ifndef QGC_AIRLINK_DISABLED
-            case LinkConfiguration::AirLink:
-                link = new AirLinkConfiguration(name);
                 break;
 #endif
             case LinkConfiguration::TypeLast:
@@ -597,14 +567,9 @@ QStringList LinkManager::linkTypeStrings() const
 #endif
     list += tr("UDP");
     list += tr("TCP");
-#ifdef QGC_ENABLE_BLUETOOTH
     list += tr("Bluetooth");
-#endif
 #ifdef QT_DEBUG
     list += tr("Mock Link");
-#endif
-#ifndef QGC_AIRLINK_DISABLED
-    list += tr("AirLink");
 #endif
     list += tr("Log Replay");
 
@@ -707,7 +672,7 @@ void LinkManager::_removeConfiguration(const LinkConfiguration *config)
 
 bool LinkManager::isBluetoothAvailable()
 {
-    return QGCDeviceInfo::isBluetoothAvailable();
+    return QGCNetworkHelper::isBluetoothAvailable();
 }
 
 bool LinkManager::containsLink(const LinkInterface *link)

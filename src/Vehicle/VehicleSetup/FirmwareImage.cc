@@ -1,14 +1,5 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "FirmwareImage.h"
-#include "JsonHelper.h"
+#include "JsonParsing.h"
 #include "QGCApplication.h"
 #include "CompInfoParam.h"
 #include "Bootloader.h"
@@ -221,7 +212,7 @@ bool FirmwareImage::_px4Load(const QString& imageFilename)
     QString errorString;
     QStringList requiredKeys;
     requiredKeys << _jsonBoardIdKey << _jsonImageKey << _jsonImageSizeKey;
-    if (!JsonHelper::validateRequiredKeys(px4Json, requiredKeys, errorString)) {
+    if (!JsonParsing::validateRequiredKeys(px4Json, requiredKeys, errorString)) {
         emit statusMessage(tr("Firmware file missing required key: %1").arg(errorString));
         return false;
     }
@@ -231,7 +222,7 @@ bool FirmwareImage::_px4Load(const QString& imageFilename)
     QList<QJsonValue::Type> types;
     keys << _jsonBoardIdKey << _jsonParamXmlSizeKey << _jsonParamXmlKey << _jsonAirframeXmlSizeKey << _jsonAirframeXmlKey << _jsonImageSizeKey << _jsonImageKey << _jsonMavAutopilotKey;
     types << QJsonValue::Double << QJsonValue::Double << QJsonValue::String << QJsonValue::Double << QJsonValue::String << QJsonValue::Double << QJsonValue::String << QJsonValue::Double;
-    if (!JsonHelper::validateKeyTypes(px4Json, keys, types, errorString)) {
+    if (!JsonParsing::validateKeyTypes(px4Json, keys, types, errorString)) {
         emit statusMessage(tr("Firmware file has invalid key: %1").arg(errorString));
         return false;
     }

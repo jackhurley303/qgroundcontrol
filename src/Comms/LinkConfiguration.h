@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #pragma once
 
 #include <QtCore/QLoggingCategory>
@@ -85,14 +76,9 @@ public:
 #endif
         TypeUdp,        ///< UDP Link
         TypeTcp,        ///< TCP Link
-#ifdef QGC_ENABLE_BLUETOOTH
         TypeBluetooth,  ///< Bluetooth Link
-#endif
 #ifdef QT_DEBUG
         TypeMock,       ///< Mock Link for Unitesting
-#endif
-#ifndef QGC_AIRLINK_DISABLED
-        AirLink,
 #endif
         TypeLogReplay,
         TypeLast        // Last type value (type >= TypeLast == invalid)

@@ -1,19 +1,10 @@
-/****************************************************************************
- *
- * Copyright (C) 2018 Pinecone Inc. All rights reserved.
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "AndroidInterface.h"
 #include "QGCLoggingCategory.h"
 
 #include <QtCore/QJniObject>
 #include <QtCore/QJniEnvironment>
 
-QGC_LOGGING_CATEGORY(AndroidInterfaceLog, "qgc.android.src.androidinterface")
+QGC_LOGGING_CATEGORY(AndroidInterfaceLog, "Android.AndroidInterface")
 
 namespace AndroidInterface
 {

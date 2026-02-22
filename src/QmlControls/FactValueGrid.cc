@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "FactValueGrid.h"
 #include "InstrumentValueData.h"
 #include "QGCApplication.h"
@@ -285,9 +276,9 @@ void FactValueGrid::_saveSettings(void)
         settings.setArrayIndex(colIndex);
         settings.beginWriteArray(_rowsKey);
 
-        for (int colIndex=0; colIndex<columns->count(); colIndex++) {
-            InstrumentValueData* value = columns->value<InstrumentValueData*>(colIndex);
-            settings.setArrayIndex(colIndex);
+        for (int rowIndex=0; rowIndex<columns->count(); rowIndex++) {
+            InstrumentValueData* value = columns->value<InstrumentValueData*>(rowIndex);
+            settings.setArrayIndex(rowIndex);
             _saveValueData(settings, value);
         }
 

@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "VideoManager.h"
 #include "AppSettings.h"
 #include "MavlinkCameraControl.h"
@@ -22,6 +13,7 @@
 #include "VideoSettings.h"
 #ifdef QGC_GST_STREAMING
 #include "GStreamer.h"
+#include "VideoItemStub.h"
 #else
 #include "VideoItemStub.h"
 #endif
@@ -55,7 +47,13 @@ VideoManager::VideoManager(QObject *parent)
     (void) qRegisterMetaType<VideoReceiver::STATUS>("STATUS");
 
 #ifdef QGC_GST_STREAMING
-    if (!GStreamer::initialize()) {
+    const bool skipGStreamerForUnitTests =
+        qgcApp() && qgcApp()->runningUnitTests() && !qEnvironmentVariableIsSet("QGC_TEST_ENABLE_GSTREAMER");
+
+    if (skipGStreamerForUnitTests) {
+        (void) qmlRegisterType<VideoItemStub>("org.freedesktop.gstreamer.Qt6GLVideoItem", 1, 0, "GstGLQt6VideoItem");
+        qCInfo(VideoManagerLog) << "Skipping GStreamer initialization for unit tests";
+    } else if (!GStreamer::initialize()) {
         qCCritical(VideoManagerLog) << "Failed To Initialize GStreamer";
     }
 #else
@@ -97,7 +95,7 @@ void VideoManager::init(QQuickWindow *mainWindow)
 
     (void) connect(this, &VideoManager::autoStreamConfiguredChanged, this, &VideoManager::_videoSourceChanged);
 
-    _mainWindow->scheduleRenderJob(new FinishVideoInitialization(), QQuickWindow::BeforeSynchronizingStage);
+    _mainWindow->scheduleRenderJob(new FinishVideoInitialization(), QQuickWindow::AfterSynchronizingStage);
 
     _initialized = true;
 }
@@ -391,7 +389,7 @@ void VideoManager::_videoSourceChanged()
     }
 }
 
-bool VideoManager::_updateUVC(VideoReceiver *receiver)
+bool VideoManager::_updateUVC(VideoReceiver * /*receiver*/)
 {
     bool result = false;
 
@@ -827,5 +825,5 @@ FinishVideoInitialization::~FinishVideoInitialization()
 void FinishVideoInitialization::run()
 {
     qCDebug(VideoManagerLog) << "FinishVideoInitialization::run";
-    VideoManager::instance()->_initAfterQmlIsReady();
+    QMetaObject::invokeMethod(VideoManager::instance(), &VideoManager::_initAfterQmlIsReady, Qt::QueuedConnection);
 }

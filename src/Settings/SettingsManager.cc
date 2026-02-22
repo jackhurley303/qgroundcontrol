@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "SettingsManager.h"
 #include "QGCLoggingCategory.h"
 #include "ADSBVehicleManagerSettings.h"
@@ -33,10 +24,10 @@
 #include "NTRIPSettings.h"
 #include "VideoSettings.h"
 #include "MavlinkSettings.h"
-#ifdef QGC_VIEWER3D
+#include "JoystickManagerSettings.h"
 #include "Viewer3DSettings.h"
-#endif
 #include "JsonHelper.h"
+#include "JsonParsing.h"
 #include "QGCCorePlugin.h"
 #include "QGCApplication.h"
 
@@ -95,9 +86,8 @@ void SettingsManager::init()
     _ntripSettings = new NTRIPSettings(this);
     _videoSettings = new VideoSettings(this);
     _mavlinkSettings = new MavlinkSettings(this);
-#ifdef QGC_VIEWER3D
+    _joystickManagerSettings = new JoystickManagerSettings(this);
     _viewer3DSettings = new Viewer3DSettings(this);
-#endif
     _adsbVehicleManagerSettings = new ADSBVehicleManagerSettings(this);
 #ifndef QGC_NO_ARDUPILOT_DIALECT
     _apmMavlinkStreamRateSettings = new APMMavlinkStreamRateSettings(this);
@@ -128,9 +118,8 @@ UnitsSettings *SettingsManager::unitsSettings() const { return _unitsSettings; }
 NTRIPSettings *SettingsManager::ntripSettings() const { return _ntripSettings; }
 VideoSettings *SettingsManager::videoSettings() const { return _videoSettings; }
 MavlinkSettings *SettingsManager::mavlinkSettings() const { return _mavlinkSettings; }
-#ifdef QGC_VIEWER3D
+JoystickManagerSettings *SettingsManager::joystickManagerSettings() const { return _joystickManagerSettings; }
 Viewer3DSettings *SettingsManager::viewer3DSettings() const { return _viewer3DSettings; }
-#endif
 
 void SettingsManager::_loadSettingsFiles()
 {
@@ -169,7 +158,7 @@ void SettingsManager::_loadSettingsFiles()
 
         QJsonDocument jsonDoc;
         QString errorString;
-        if (!JsonHelper::isJsonFile(fileInfo.absoluteFilePath(), jsonDoc, errorString)) {
+        if (!JsonParsing::isJsonFile(fileInfo.absoluteFilePath(), jsonDoc, errorString)) {
             qCWarning(SettingsManagerLog) << "Failed to load settings file:" << fileInfo.absoluteFilePath() << errorString;
             continue;
         }

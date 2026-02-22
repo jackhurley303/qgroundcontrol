@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #pragma once
 
 #include <QtCore/QLoggingCategory>
@@ -46,6 +37,7 @@ public:
     void removeVehicleReference();
     bool initMavlinkSigning();
     void setSigningSignatureFailure(bool failure);
+    void reportMavlinkV1Traffic();
 
 signals:
     void bytesReceived(LinkInterface *link, const QByteArray &data);
@@ -80,6 +72,7 @@ private:
     bool _decodedFirstMavlinkPacket = false;
     int _vehicleReferenceCount = 0;
     bool _signingSignatureFailure = false;
+    bool _mavlinkV1TrafficReported = false;
 };
 
 typedef std::shared_ptr<LinkInterface> SharedLinkInterfacePtr;

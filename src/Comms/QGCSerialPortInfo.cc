@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "QGCSerialPortInfo.h"
 
 #include "JsonHelper.h"
@@ -297,6 +288,8 @@ bool QGCSerialPortInfo::isSystemPort(const QSerialPortInfo &port)
             return true;
         }
     }
+#else
+    Q_UNUSED(port);
 #endif
 
     // TODO: Add Linux (LTE modems, etc) and Windows as needed

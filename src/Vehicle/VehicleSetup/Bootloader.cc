@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "Bootloader.h"
 #include "QGCLoggingCategory.h"
 #include "FirmwareImage.h"
@@ -683,7 +674,7 @@ bool Bootloader::_verifyCRC(void)
 {
     uint8_t buf[2] = { PROTO_GET_CRC, PROTO_EOC };
 
-    quint32 flashCRC;
+    quint32 flashCRC = 0;
 
     bool failed = true;
     if (_write(buf, 2)) {

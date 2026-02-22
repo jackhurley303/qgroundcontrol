@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #pragma once
 
 #include <atomic>
@@ -25,6 +16,7 @@ class RTCMMavlink;
 class NTRIPSettings;
 class Vehicle;
 class MultiVehicleManager;
+class GpsTest;
 
 #define RTCM3_PREAMBLE 0xD3
 
@@ -63,6 +55,10 @@ class NTRIPTCPLink : public QObject
     Q_OBJECT
 
 public:
+#ifdef QGC_UNITTEST_BUILD
+    friend class GpsTest;
+#endif
+
     NTRIPTCPLink(const QString& hostAddress,
                  int port,
                  const QString& username,
@@ -70,6 +66,7 @@ public:
                  const QString& mountpoint,
                  const QString& whitelist,
                  bool useSpartn,
+                 bool autoStart = true,
                  QObject* parent = nullptr);
 
     Q_INVOKABLE void debugFetchSourceTable();

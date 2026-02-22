@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-import os
 import json
-import codecs
+import os
 import sys
+import xml.etree.ElementTree as ET
 
 qgcFileTypeKey = "fileType"
 translateKeysKey = "translateKeys"
@@ -50,7 +50,7 @@ def parseJsonArrayForTranslateKeys(
         jsonObject = jsonArray[index]
         arrayIndexStr = str(index)
         for arrayIDKey in arrayIDKeys:
-            if arrayIDKey in jsonObject.keys():
+            if arrayIDKey in jsonObject:
                 arrayIndexStr = jsonObject[arrayIDKey]
                 break
         currentHierarchy = jsonObjectHierarchy + "[" + arrayIndexStr + "]"
@@ -78,8 +78,8 @@ def addLocKeysBasedOnQGCFileType(jsonPath, jsonDict):
 
 
 def parseJson(jsonPath, locStringDict):
-    jsonFile = open(jsonPath, "rb")
-    jsonDict = json.load(jsonFile)
+    with open(jsonPath, "rb") as jsonFile:
+        jsonDict = json.load(jsonFile)
     if not isinstance(jsonDict, dict):
         return
     addLocKeysBasedOnQGCFileType(jsonPath, jsonDict)
@@ -87,9 +87,7 @@ def parseJson(jsonPath, locStringDict):
         return
     translateKeys = jsonDict[translateKeysKey].split(",")
     arrayIDKeys = jsonDict.get(arrayIDKeysKey, "").split(",")
-    parseJsonObjectForTranslateKeys(
-        "", jsonDict, translateKeys, arrayIDKeys, locStringDict
-    )
+    parseJsonObjectForTranslateKeys("", jsonDict, translateKeys, arrayIDKeys, locStringDict)
 
 
 def walkDirectoryTreeForJsonFiles(dir, multiFileLocArray):
@@ -103,66 +101,56 @@ def walkDirectoryTreeForJsonFiles(dir, multiFileLocArray):
                 # Check for duplicate file names
                 for entry in multiFileLocArray:
                     if entry[0] == filename:
-                        print(
-                            "Error: Duplicate filenames: %s paths: %s %s"
-                            % (filename, path, entry[1])
-                        )
+                        print(f"Error: Duplicate filenames: {filename} paths: {path} {entry[1]}")
                         sys.exit(1)
                 multiFileLocArray.append([filename, path, singleFileLocStringDict])
         if os.path.isdir(path):
             walkDirectoryTreeForJsonFiles(path, multiFileLocArray)
 
 
-def escapeXmlString(xmlStr):
-    # Escape the string so it can be used in XML
-    xmlStr = xmlStr.replace("&", "&amp;")
-    xmlStr = xmlStr.replace("<", "&lt;")
-    xmlStr = xmlStr.replace(">", "&gt;")
-    xmlStr = xmlStr.replace("'", "&apos;")
-    xmlStr = xmlStr.replace('"', "&quot;")
-    return xmlStr
-
-
 def writeJsonTSFile(multiFileLocArray):
-    jsonTSFile = codecs.open("translations/qgc-json.ts", "w", "utf-8")
-    jsonTSFile.write('<?xml version="1.0" encoding="utf-8"?>\n')
-    jsonTSFile.write("<!DOCTYPE TS>\n")
-    jsonTSFile.write('<TS version="2.1">\n')
+    ts_root = ET.Element("TS", version="2.1")
+
     for entry in multiFileLocArray:
-        jsonTSFile.write("<context>\n")
-        jsonTSFile.write("    <name>%s</name>\n" % entry[0])
+        context = ET.SubElement(ts_root, "context")
+        ET.SubElement(context, "name").text = entry[0]
+
         singleFileLocStringDict = entry[2]
-        for locStr in singleFileLocStringDict.keys():
+        for locKey in singleFileLocStringDict:
+            sourceStr = locKey
             disambiguation = ""
-            if locStr.startswith(disambiguationPrefix):
-                workStr = locStr[len(disambiguationPrefix) :]
+            if sourceStr.startswith(disambiguationPrefix):
+                workStr = sourceStr[len(disambiguationPrefix) :]
                 terminatorIndex = workStr.find("#")
                 if terminatorIndex == -1:
-                    print(f"Bad disambiguation {entry[0]} '{locStr}'")
+                    print(f"Bad disambiguation {entry[0]} '{sourceStr}'")
                     sys.exit(1)
                 disambiguation = workStr[:terminatorIndex]
-                locStr = workStr[terminatorIndex + 1 :]
-            jsonTSFile.write("    <message>\n")
+                sourceStr = workStr[terminatorIndex + 1 :]
+
+            message = ET.SubElement(context, "message")
             if len(disambiguation):
-                jsonTSFile.write("        <comment>%s</comment>\n" % disambiguation)
+                ET.SubElement(message, "comment").text = disambiguation
+
             extraCommentStr = ""
-            for jsonHierachy in singleFileLocStringDict[locStr]:
-                extraCommentStr += "%s, " % jsonHierachy
-            locStr = escapeXmlString(locStr)
-            jsonTSFile.write(
-                "        <extracomment>%s</extracomment>\n" % extraCommentStr
-            )
+            for jsonHierachy in singleFileLocStringDict[locKey]:
+                extraCommentStr += f"{jsonHierachy}, "
+            ET.SubElement(message, "extracomment").text = extraCommentStr
+
             if extraCommentStr.endswith(".enumStrings, "):
-                jsonTSFile.write(
-                    "        <translatorcomment>Only use english comma &apos;,&apos; to separate strings</translatorcomment>\n"
-                )
-            jsonTSFile.write('        <location filename="%s"/>\n' % entry[1])
-            jsonTSFile.write("        <source>%s</source>\n" % locStr)
-            jsonTSFile.write('        <translation type="unfinished"></translation>\n')
-            jsonTSFile.write("    </message>\n")
-        jsonTSFile.write("</context>\n")
-    jsonTSFile.write("</TS>\n")
-    jsonTSFile.close()
+                ET.SubElement(
+                    message, "translatorcomment"
+                ).text = "Only use english comma ',' to separate strings"
+
+            ET.SubElement(message, "location", filename=entry[1])
+            ET.SubElement(message, "source").text = sourceStr
+            ET.SubElement(message, "translation", type="unfinished")
+
+    with open("translations/qgc-json.ts", "w", encoding="utf-8") as jsonTSFile:
+        jsonTSFile.write('<?xml version="1.0" encoding="utf-8"?>\n')
+        jsonTSFile.write("<!DOCTYPE TS>\n")
+        jsonTSFile.write(ET.tostring(ts_root, encoding="unicode"))
+        jsonTSFile.write("\n")
 
 
 def main():

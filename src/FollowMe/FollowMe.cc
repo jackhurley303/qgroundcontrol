@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "FollowMe.h"
 #include "MultiVehicleManager.h"
 #include "FirmwarePlugin.h"
@@ -120,7 +111,7 @@ void FollowMe::_sendGCSMotionReport()
         return;
     }
 
-    GCSMotionReport motionReport{0};
+    GCSMotionReport motionReport{};
     uint8_t estimationCapabilities = 0;
 
     // Get the current location coordinates

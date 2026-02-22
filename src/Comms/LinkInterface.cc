@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "LinkInterface.h"
 #include "LinkManager.h"
 #include "QGCApplication.h"
@@ -88,6 +79,7 @@ bool LinkInterface::_allocateMavlinkChannel()
 
     qCDebug(LinkInterfaceLog) << "_allocateMavlinkChannel" << _mavlinkChannel;
 
+    mavlink_set_proto_version(_mavlinkChannel, MAVLINK_VERSION); // We only support v2 protcol
     initMavlinkSigning();
 
     return true;
@@ -138,5 +130,21 @@ void LinkInterface::setSigningSignatureFailure(bool failure)
         if (_signingSignatureFailure) {
             emit communicationError(tr("Signing Failure"), tr("Signing signature mismatch"));
         }
+    }
+}
+
+void LinkInterface::reportMavlinkV1Traffic()
+{
+    if (!_mavlinkV1TrafficReported) {
+        _mavlinkV1TrafficReported = true;
+
+        const SharedLinkConfigurationPtr linkConfig = linkConfiguration();
+        const QString linkName = linkConfig ? linkConfig->name() : QStringLiteral("unknown");
+        qCWarning(LinkInterfaceLog) << "MAVLink v1 traffic detected on link" << linkName;
+        const QString message = tr("MAVLink v1 traffic detected on link '%1'. "
+                                   "%2 only supports MAVLink v2. "
+                                   "Please ensure your vehicle is configured to use MAVLink v2.")
+                                    .arg(linkName).arg(qgcApp()->applicationName());
+        qgcApp()->showAppMessage(message);
     }
 }

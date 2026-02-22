@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "QGCLoggingCategory.h"
 
 #include <QtCore/QGlobalStatic>
@@ -186,11 +177,11 @@ QGCLoggingCategoryItem *QGCLoggingCategoryManager::_findLoggingCategory(const QS
     return nullptr;
 }
 
-QGCLoggingCategoryItem::QGCLoggingCategoryItem(const QString& _shortCategory, const QString& _fullCategory, bool _enabled, QObject* parent)
+QGCLoggingCategoryItem::QGCLoggingCategoryItem(const QString& shortCategory_, const QString& fullCategory_, bool enabled_, QObject* parent)
     : QObject(parent)
-    , shortCategory(_shortCategory)
-    , fullCategory(_fullCategory)
-    , _enabled(_enabled)
+    , shortCategory(shortCategory_)
+    , fullCategory(fullCategory_)
+    , _enabled(enabled_)
 {
     connect(this, &QGCLoggingCategoryItem::enabledChanged, this, [this]() {
         QGCLoggingCategoryManager::instance()->setCategoryLoggingOn(this->fullCategory, this->_enabled);

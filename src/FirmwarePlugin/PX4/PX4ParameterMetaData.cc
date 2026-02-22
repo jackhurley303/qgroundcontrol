@@ -1,16 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
-
-/// @file
-///     @author Don Gagne <don@thegagnes.com>
-
 #include "PX4ParameterMetaData.h"
 #include "QGCLoggingCategory.h"
 
@@ -316,13 +303,13 @@ void PX4ParameterMetaData::loadParameterFactMetaDataFile(const QString& metaData
                                                              << "value desc:" << enumString << "code:" << enumValueStr;
 
                             QVariant    enumValue;
-                            QString     errorString;
-                            if (metaData->convertAndValidateRaw(enumValueStr, false /* validate */, enumValue, errorString)) {
+                            QString     enumErrorString;
+                            if (metaData->convertAndValidateRaw(enumValueStr, false /* validate */, enumValue, enumErrorString)) {
                                 metaData->addEnumInfo(enumString, enumValue);
                             } else {
                                 qCDebug(PX4ParameterMetaDataLog) << "Invalid enum value, name:" << metaData->name()
                                                                  << " type:" << metaData->type() << " value:" << enumValueStr
-                                                                 << " error:" << errorString;
+                                                                 << " error:" << enumErrorString;
                             }
                         } else if (elementName == "increment") {
                             double  increment;
@@ -356,13 +343,13 @@ void PX4ParameterMetaData::loadParameterFactMetaDataFile(const QString& metaData
                                 if (bit < 32) {
                                     QVariant bitmaskRawValue = 1 << bit;
                                     QVariant bitmaskValue;
-                                    QString errorString;
-                                    if (metaData->convertAndValidateRaw(bitmaskRawValue, true, bitmaskValue, errorString)) {
+                                    QString bitmaskErrorString;
+                                    if (metaData->convertAndValidateRaw(bitmaskRawValue, true, bitmaskValue, bitmaskErrorString)) {
                                         metaData->addBitmaskInfo(bitDescription, bitmaskValue);
                                     } else {
                                         qCDebug(PX4ParameterMetaDataLog) << "Invalid bitmask value, name:" << metaData->name()
                                                                          << " type:" << metaData->type() << " value:" << bitmaskValue
-                                                                         << " error:" << errorString;
+                                                                         << " error:" << bitmaskErrorString;
                                     }
                                 } else {
                                     qCWarning(PX4ParameterMetaDataLog) << "Invalid value for bitmask bit, name:" << metaData->name() << " bit:" << bit;

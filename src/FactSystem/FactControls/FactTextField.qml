@@ -3,10 +3,7 @@ import QtQuick.Controls
 import QtQuick.Dialogs
 
 import QGroundControl
-
-
 import QGroundControl.Controls
-
 
 QGCTextField {
     id:                 control
@@ -33,7 +30,13 @@ QGCTextField {
         }
     }
 
-    onHelpClicked: helpDialogComponent.createObject(mainWindow).open()
+    onHelpClicked: helpDialogFactory.open()
+
+    QGCPopupDialogFactory {
+        id: helpDialogFactory
+
+        dialogComponent: helpDialogComponent
+    }
 
     Component {
         id: helpDialogComponent
