@@ -209,6 +209,21 @@ std::optional<int> Platform::initialize(int argc, char* argv[],
     disableAppNapViaInfoDict();
 #endif
 
+    // Force the native platform media backend where available.
+    // This avoids FFmpeg-specific bugs (e.g. CoreVideo→Metal use-after-free on macOS).
+    // The check allows the user/developer to override via environment if needed.
+    if (!qEnvironmentVariableIsSet("QT_MEDIA_BACKEND")) {
+#if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
+        (void) qputenv("QT_MEDIA_BACKEND", "darwin");   // AVFoundation
+#elif defined(Q_OS_WIN)
+        (void) qputenv("QT_MEDIA_BACKEND", "windows");  // Windows Media Foundation
+#elif defined(Q_OS_ANDROID)
+        (void) qputenv("QT_MEDIA_BACKEND", "android");  // Android MediaPlayer
+#endif
+        // Linux: leave unset — FFmpeg/GStreamer works reliably there
+    }
+
+    // --- Unit test mode: run headless ---
 #ifdef QGC_UNITTEST_BUILD
     if (args.runningUnitTests || args.listTests) {
         if (!qEnvironmentVariableIsSet("QT_QPA_PLATFORM")) {
