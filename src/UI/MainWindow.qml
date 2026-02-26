@@ -114,6 +114,15 @@ ApplicationWindow {
         toolDrawer.visible = false
     }
 
+    function openTelemetryLog(filePath) {
+        if (allowViewSwitch()) {
+            closeTool()
+            QGroundControl.settingsManager.flyViewSettings.showLogReplayStatusBar.rawValue = true
+            showFlyView()
+            footer.loadLogFile(filePath)
+        }
+    }
+
     function closeTool() {
         toolDrawer.visible = false
     }
