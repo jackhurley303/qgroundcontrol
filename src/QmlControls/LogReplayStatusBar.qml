@@ -23,6 +23,14 @@ Rectangle {
         filePicker.openForLoad()
     }
 
+    function loadLogFile(filePath) {
+        if (globals.activeVehicle) {
+            QGroundControl.showMessageDialog(_root, qsTr("Log Replay"), qsTr("You must close all connections prior to replaying a log."))
+            return
+        }
+        controller.link = QGroundControl.linkManager.startLogReplay(filePath)
+    }
+
     QGCPalette { id: qgcPal }
 
     QGCFileDialog {
