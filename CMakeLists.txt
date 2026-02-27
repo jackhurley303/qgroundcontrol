@@ -374,23 +374,24 @@ if(IS_DIRECTORY "${CMAKE_SOURCE_DIR}/plugins" AND EXISTS "${CMAKE_SOURCE_DIR}/pl
         CACHE INTERNAL "Include directories for QGC plugins"
     )
     
-    # Add MAVLink include paths if available
-    # MAVLink is added via CPM in src/MAVLink/CMakeLists.txt
-    # Check if the binary dir variable exists (it's in the cache after first configure)
-    if(DEFINED mavlink_BINARY_DIR AND EXISTS "${mavlink_BINARY_DIR}/include/mavlink")
-        list(APPEND QGC_PLUGIN_INCLUDE_DIRECTORIES
-            ${mavlink_BINARY_DIR}/include/mavlink
-            ${mavlink_BINARY_DIR}/include/mavlink/${QGC_MAVLINK_DIALECT}
-        )
+    # Add MAVLink include paths if available.
+    # mavlink_BINARY_DIR is only in scope inside src/MAVLink/CMakeLists.txt (CPMAddPackage
+    # PARENT_SCOPE does not propagate past one add_subdirectory boundary).  That file
+    # exports QGC_MAVLINK_INCLUDE_DIRS as CACHE INTERNAL so we can safely use it here.
+    if(DEFINED QGC_MAVLINK_INCLUDE_DIRS)
+        list(APPEND QGC_PLUGIN_INCLUDE_DIRECTORIES ${QGC_MAVLINK_INCLUDE_DIRS})
         message(STATUS "QGC: Added MAVLink paths to plugin includes")
     else()
         message(WARNING "QGC: MAVLink headers not found, plugins may fail to compile")
     endif()
     
-    # Add libevents include paths if available
-    if(DEFINED libevents_SOURCE_DIR AND EXISTS "${libevents_SOURCE_DIR}")
+    # Add libevents include paths if available.
+    # Mirror what src/MAVLink/LibEvents/CMakeLists.txt does for the main target:
+    # it uses ${libevents_SOURCE_DIR}/libs/cpp (not the bare source root), because
+    # protocol/receive.h and friends live under libs/cpp/.
+    if(DEFINED CPM_PACKAGE_libevents_SOURCE_DIR AND EXISTS "${CPM_PACKAGE_libevents_SOURCE_DIR}/libs/cpp")
         list(APPEND QGC_PLUGIN_INCLUDE_DIRECTORIES
-            ${libevents_SOURCE_DIR}
+            ${CPM_PACKAGE_libevents_SOURCE_DIR}/libs/cpp
         )
         message(STATUS "QGC: Added libevents paths to plugin includes")
     else()

@@ -39,6 +39,9 @@ CPMAddPackage(
 
 if(mavlink_ADDED)
     add_dependencies(${CMAKE_PROJECT_NAME} mavlink)
+endif()
+
+if(DEFINED mavlink_BINARY_DIR)
     target_include_directories(${CMAKE_PROJECT_NAME}
                                PRIVATE ${mavlink_BINARY_DIR}/include/mavlink
                                        ${mavlink_BINARY_DIR}/include/mavlink/${QGC_MAVLINK_DIALECT}
@@ -72,6 +75,15 @@ if(mavlink_ADDED)
     # Register the QML anchor files so AUTOMOC picks up Q_NAMESPACE + Q_ENUM_NS
     set_source_files_properties("${MAVLINK_ENUMS_QML_H}" "${MAVLINK_ENUMS_QML_CC}" PROPERTIES GENERATED TRUE)
     target_sources(${CMAKE_PROJECT_NAME} PRIVATE "${MAVLINK_ENUMS_QML_H}" "${MAVLINK_ENUMS_QML_CC}")
+
+    # Export as CACHE INTERNAL so the root CMakeLists.txt can add these paths to
+    # QGC_PLUGIN_INCLUDE_DIRECTORIES for plugin builds.  mavlink_BINARY_DIR is only
+    # in scope here (CPMAddPackage PARENT_SCOPE doesn't reach the root directory).
+    set(QGC_MAVLINK_INCLUDE_DIRS
+        ${mavlink_BINARY_DIR}/include/mavlink
+        ${mavlink_BINARY_DIR}/include/mavlink/${QGC_MAVLINK_DIALECT}
+        CACHE INTERNAL "MAVLink generated-header include directories"
+    )
 endif()
 
 # ----------------------------------------------------------------------------
