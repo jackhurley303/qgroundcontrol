@@ -41,10 +41,21 @@ CPMAddPackage(
 
 if(mavlink_ADDED)
     add_dependencies(${CMAKE_PROJECT_NAME} mavlink)
+endif()
+
+if(DEFINED mavlink_BINARY_DIR)
     target_include_directories(${CMAKE_PROJECT_NAME}
         PRIVATE
             ${mavlink_BINARY_DIR}/include/mavlink
             ${mavlink_BINARY_DIR}/include/mavlink/${QGC_MAVLINK_DIALECT}
+    )
+    # Export as CACHE INTERNAL so the root CMakeLists.txt can add these paths to
+    # QGC_PLUGIN_INCLUDE_DIRECTORIES for plugin builds.  mavlink_BINARY_DIR is only
+    # in scope here (CPMAddPackage PARENT_SCOPE doesn't reach the root directory).
+    set(QGC_MAVLINK_INCLUDE_DIRS
+        ${mavlink_BINARY_DIR}/include/mavlink
+        ${mavlink_BINARY_DIR}/include/mavlink/${QGC_MAVLINK_DIALECT}
+        CACHE INTERNAL "MAVLink generated-header include directories"
     )
 endif()
 

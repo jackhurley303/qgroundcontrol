@@ -57,6 +57,13 @@ function(qgc_add_plugin PLUGIN_NAME)
         )
     endif()
     
+    # Ensure mavlink-generated headers exist before this plugin compiles.
+    # The mavlink CPM target generates headers at build time; without this dependency
+    # a parallel build can compile the plugin before the headers are ready.
+    if(TARGET mavlink)
+        add_dependencies(${PLUGIN_NAME} mavlink)
+    endif()
+
     # Link against required Qt libraries
     target_link_libraries(${PLUGIN_NAME}
         PRIVATE
