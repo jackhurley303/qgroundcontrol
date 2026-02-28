@@ -146,6 +146,16 @@ ApplicationWindow {
         }
     }
 
+    property string pendingParamsFile: ""
+
+    function openParamsFile(filePath) {
+        if (allowViewSwitch()) {
+            closeTool()
+            pendingParamsFile = filePath
+            showVehicleConfigParametersPage()
+        }
+    }
+
     function closeTool() {
         toolDrawer.visible = false
     }

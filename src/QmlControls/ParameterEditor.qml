@@ -142,6 +142,29 @@ Item {
         }
     }
 
+    Component.onCompleted: {
+        if (mainWindow.pendingParamsFile !== "") {
+            var filePath = mainWindow.pendingParamsFile
+            mainWindow.pendingParamsFile = ""
+            if (controller.buildDiffFromFile(filePath)) {
+                parameterDiffDialogFactory.open()
+            }
+        }
+    }
+
+    Connections {
+        target: mainWindow
+        function onPendingParamsFileChanged() {
+            if (mainWindow.pendingParamsFile !== "") {
+                var filePath = mainWindow.pendingParamsFile
+                mainWindow.pendingParamsFile = ""
+                if (controller.buildDiffFromFile(filePath)) {
+                    parameterDiffDialogFactory.open()
+                }
+            }
+        }
+    }
+
     RowLayout {
         id:             header
         anchors.left:   parent.left
