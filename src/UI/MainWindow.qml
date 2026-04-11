@@ -146,6 +146,18 @@ ApplicationWindow {
         }
     }
 
+    function openTelemetryLogWithFlight(flightEntry) {
+        if (allowViewSwitch()) {
+            closeTool()
+            var replay = QGroundControl.pluginManager.replayExtension
+            if (replay) {
+                QGroundControl.settingsManager.flyViewSettings.showLogReplayStatusBar.rawValue = true
+                showFlyView()
+                replay.openFlight(flightEntry)
+            }
+        }
+    }
+
     property string pendingParamsFile: ""
 
     function openParamsFile(filePath) {

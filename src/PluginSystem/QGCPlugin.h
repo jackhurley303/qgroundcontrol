@@ -13,6 +13,8 @@
 #include <QtCore/QVariantList>
 #include <QtQmlIntegration/QtQmlIntegration>
 
+#include "QGCReplayExtension.h"
+
 Q_DECLARE_LOGGING_CATEGORY(QGCPluginLog)
 
 /**
@@ -48,6 +50,10 @@ public:
     /// Returns a QVariantMap with keys: title, icon, source, visible
     /// @return A tool menu item
     virtual QVariantMap toolMenuItem() const { return QVariantMap(); }
+
+    /// Returns the plugin's flight replay extension, or nullptr if this plugin
+    /// does not provide replay functionality.
+    virtual QGCReplayExtension* replayExtension() const { return nullptr; }
 
     /// Get the plugin's display name
     /// @return Human-readable plugin name

@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
+import QtMultimedia
 
 import QGroundControl
 import QGroundControl.Controls
@@ -13,6 +14,23 @@ Rectangle {
 
     property real _margins: ScreenTools.defaultFontPixelHeight / 4
     property var _logReplayLink: null
+
+    // Plugin-agnostic accessor for the replay extension (null when no plugin is loaded)
+    readonly property var _replay: QGroundControl.pluginManager.replayExtension
+
+    // When the replay extension opens a flight it manages the replay link.
+    // Keep controller.link in sync so all existing timeline UI still works.
+    Connections {
+        target: _replay
+        enabled: _replay !== null
+        function onIsActiveChanged() {
+            if (_replay.isActive) {
+                controller.link = _replay.logReplayLink
+            } else {
+                controller.link = null
+            }
+        }
+    }
 
     function pickLogFile() {
         if (globals.activeVehicle) {
@@ -32,6 +50,65 @@ Rectangle {
     }
 
     QGCPalette { id: qgcPal }
+
+    // ── Video player (drives audio + position tracking) ───────────────────────
+    MediaPlayer {
+        id:          videoPlayer
+        source:      _replay && _replay.hasVideo ? _replay.videoUrl : ""
+        videoOutput: videoOutputPanel
+
+        // Mirror play/pause from the tlog controller
+        onPlaybackStateChanged: {
+            // Intentionally driven externally via videoPanel's controls + _replay
+        }
+    }
+
+    // Sync video position whenever the replay extension ticks
+    Connections {
+        target: _replay
+        enabled: _replay !== null
+        function onVideoPositionMsChanged() {
+            if (_replay.hasVideo && Math.abs(videoPlayer.position - _replay.videoPositionMs) > 1000) {
+                videoPlayer.position = _replay.videoPositionMs
+            }
+        }
+        function onIsPlayingChanged() {
+            if (_replay.hasVideo) {
+                if (_replay.isPlaying) videoPlayer.play()
+                else videoPlayer.pause()
+            }
+        }
+    }
+
+    // ── Floating video panel (above status bar) ───────────────────────────────
+    Item {
+        id:      videoPanel
+        visible: _replay ? _replay.hasVideo : false
+        width:   videoPanelWidth
+        height:  videoPanelHeight
+        anchors {
+            bottom:       _root.top
+            right:        _root.right
+            rightMargin:  _margins * 2
+            bottomMargin: _margins
+        }
+
+        readonly property real videoPanelWidth:  ScreenTools.defaultFontPixelHeight * 22
+        readonly property real videoPanelHeight: videoPanelWidth * 9 / 16
+
+        Rectangle {
+            anchors.fill: parent
+            color:        "black"
+            radius:       6
+            border.color: Qt.rgba(1, 1, 1, 0.2)
+            border.width: 1
+
+            VideoOutput {
+                id:           videoOutputPanel
+                anchors.fill: parent
+            }
+        }
+    }
 
     QGCFileDialog {
         id: filePicker
@@ -81,7 +158,11 @@ Rectangle {
                 ListElement { text: "10x";  value: 10 }
             }
 
-            onActivated: (index) => { controller.playbackSpeed = model.get(currentIndex).value }
+            onActivated: (index) => {
+                controller.playbackSpeed = model.get(currentIndex).value
+                if (_replay && _replay.isActive)
+                    _replay.setPlaybackSpeed(model.get(currentIndex).value)
+            }
         }
 
         QGCLabel { text: controller.playheadTime }
@@ -104,11 +185,35 @@ Rectangle {
             onValueChanged: {
                 if (!manualUpdate) {
                     controller.percentComplete = value
+                    // Also seek the video through the replay extension
+                    if (_replay && _replay.isActive)
+                        _replay.seekTo(value)
                 }
             }
         }
 
         QGCLabel { text: controller.totalTime }
+
+        // ── Video camera icon — visible when a video attachment is active ──────
+        Item {
+            visible:          _replay ? _replay.hasVideo : false
+            width:            ScreenTools.defaultFontPixelHeight * 1.6
+            height:           ScreenTools.defaultFontPixelHeight * 1.6
+            Layout.alignment: Qt.AlignVCenter
+
+            QGCColoredImage {
+                anchors.fill:     parent
+                source:           "/qmlimages/video.svg"
+                color:            videoOffsetPopover.visible ? qgcPal.brandingBlue : qgcPal.text
+                sourceSize.width: width
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape:  Qt.PointingHandCursor
+                onClicked:    videoOffsetPopover.visible ? videoOffsetPopover.close() : videoOffsetPopover.open()
+            }
+        }
 
         QGCButton {
             text: qsTr("Load Telemetry Log")
@@ -119,11 +224,90 @@ Rectangle {
         QGCButton {
             text: qsTr("Close")
             onClicked: {
+                if (_replay) _replay.closeFlight()
                 var activeVehicle = QGroundControl.multiVehicleManager.activeVehicle
                 if (activeVehicle) {
                     activeVehicle.closeVehicle()
                 }
                 QGroundControl.settingsManager.flyViewSettings.showLogReplayStatusBar.rawValue = false
+            }
+        }
+    }
+
+    // ── Video offset popover ──────────────────────────────────────────────────
+    Popup {
+        id:          videoOffsetPopover
+        modal:       false
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        // Position above the camera icon — anchored to the parent bar
+        x: _root.width - width - _margins * 2
+        y: -height - _margins
+
+        background: Rectangle {
+            color:        qgcPal.window
+            radius:       8
+            border.color: Qt.rgba(1, 1, 1, 0.2)
+            border.width: 1
+        }
+
+        contentItem: ColumnLayout {
+            spacing: ScreenTools.defaultFontPixelHeight * 0.4
+            width:   ScreenTools.defaultFontPixelWidth * 26
+
+            QGCLabel {
+                Layout.fillWidth:    true
+                text:                qsTr("Video offset: %1s").arg(_replay ? _replay.videoOffsetSecs.toFixed(1) : "0.0")
+                font.bold:           true
+                horizontalAlignment: Text.AlignHCenter
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                height:           1
+                color:            Qt.rgba(1, 1, 1, 0.1)
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing:          ScreenTools.defaultFontPixelWidth * 0.5
+
+                QGCButton {
+                    text:    "◀ -0.5s"
+                    onClicked: if (_replay) _replay.adjustVideoOffset(-0.5)
+                    Layout.fillWidth: true
+                }
+
+                QGCButton {
+                    text:    "+0.5s ▶"
+                    onClicked: if (_replay) _replay.adjustVideoOffset(0.5)
+                    Layout.fillWidth: true
+                }
+            }
+
+            QGCTextField {
+                id:               offsetTextField
+                Layout.fillWidth: true
+                text:             _replay ? _replay.videoOffsetSecs.toFixed(2) : "0.00"
+                inputMethodHints: Qt.ImhFormattedNumbersOnly
+                onEditingFinished: {
+                    var v = parseFloat(text)
+                    if (!isNaN(v) && _replay) _replay.adjustVideoOffset(v - _replay.videoOffsetSecs)
+                }
+                Connections {
+                    target: _replay
+                    enabled: _replay !== null
+                    function onVideoOffsetSecsChanged() {
+                        if (!offsetTextField.activeFocus)
+                            offsetTextField.text = _replay.videoOffsetSecs.toFixed(2)
+                    }
+                }
+            }
+
+            QGCButton {
+                Layout.fillWidth: true
+                text:             qsTr("↺ Reset to auto-detected")
+                onClicked:        if (_replay) _replay.resetVideoOffsetToAuto()
             }
         }
     }

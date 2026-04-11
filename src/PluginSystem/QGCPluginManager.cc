@@ -59,6 +59,10 @@ void QGCPluginManager::cleanup()
     }
     _loadedPluginInfos.clear();
     _toolMenuItems.clear();
+    if (_replayExtension) {
+        _replayExtension = nullptr;
+        emit replayExtensionChanged();
+    }
     emit loadedPluginsChanged();
     emit toolMenuItemsChanged();
 }
@@ -128,7 +132,16 @@ void QGCPluginManager::_loadPlugins()
             
             // Initialize the plugin
             plugin->init();
-            
+
+            // Register replay extension if this plugin provides one and none is set yet
+            if (!_replayExtension) {
+                QGCReplayExtension* ext = plugin->replayExtension();
+                if (ext) {
+                    _replayExtension = ext;
+                    emit replayExtensionChanged();
+                }
+            }
+
             // Get plugin's tool menu item and add it
             QVariantMap menuItem = plugin->toolMenuItem();
             if (!menuItem.isEmpty()) {
@@ -184,10 +197,21 @@ void QGCPluginManager::unloadPlugin(const QString& pluginName)
             
             // Remove from list
             _loadedPluginInfos.removeAt(i);
-            
+
+            // Recalculate replay extension in case the unloaded plugin owned it
+            QGCReplayExtension* newExt = nullptr;
+            for (const PluginInfo& pi : _loadedPluginInfos) {
+                newExt = pi.plugin->replayExtension();
+                if (newExt) break;
+            }
+            if (_replayExtension != newExt) {
+                _replayExtension = newExt;
+                emit replayExtensionChanged();
+            }
+
             // Remove associated menu items
             _removeToolMenuItemsForPlugin(pluginName);
-            
+
             emit loadedPluginsChanged();
             qCDebug(QGCPluginManagerLog) << "Plugin unloaded:" << pluginName;
             return;
@@ -288,7 +312,16 @@ void QGCPluginManager::_addLoadedPlugin(const PluginLoadInfo& loadInfo)
     
     // Initialize the plugin
     plugin->init();
-    
+
+    // Register replay extension if this plugin provides one and none is set yet
+    if (!_replayExtension) {
+        QGCReplayExtension* ext = plugin->replayExtension();
+        if (ext) {
+            _replayExtension = ext;
+            emit replayExtensionChanged();
+        }
+    }
+
     // Add tool menu item
     QVariantMap menuItem = plugin->toolMenuItem();
     if (!menuItem.isEmpty()) {
@@ -296,6 +329,6 @@ void QGCPluginManager::_addLoadedPlugin(const PluginLoadInfo& loadInfo)
         addToolMenuItem(menuItem);
         qCDebug(QGCPluginManagerLog) << "Added menu item for plugin:" << menuItem["title"];
     }
-    
+
     emit loadedPluginsChanged();
 }

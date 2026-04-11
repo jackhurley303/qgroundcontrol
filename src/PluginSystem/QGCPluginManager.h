@@ -14,6 +14,8 @@
 #include <QtCore/QVariantList>
 #include <QtQmlIntegration/QtQmlIntegration>
 
+#include "QGCReplayExtension.h"
+
 class QGCPlugin;
 struct PluginLoadInfo;
 
@@ -32,8 +34,9 @@ class QGCPluginManager : public QObject
 {
     Q_OBJECT
     QML_UNCREATABLE("")
-    Q_PROPERTY(QVariantList loadedPlugins READ loadedPlugins NOTIFY loadedPluginsChanged)
-    Q_PROPERTY(QVariantList toolMenuItems READ toolMenuItems NOTIFY toolMenuItemsChanged)
+    Q_PROPERTY(QVariantList         loadedPlugins    READ loadedPlugins    NOTIFY loadedPluginsChanged)
+    Q_PROPERTY(QVariantList         toolMenuItems    READ toolMenuItems    NOTIFY toolMenuItemsChanged)
+    Q_PROPERTY(QGCReplayExtension*  replayExtension  READ replayExtension  NOTIFY replayExtensionChanged)
 
 public:
     explicit QGCPluginManager(QObject *parent = nullptr);
@@ -56,6 +59,9 @@ public:
     /// @return A list of tool menu items
     QVariantList toolMenuItems() const { return _toolMenuItems; }
 
+    /// Get the replay extension provided by any loaded plugin, or nullptr if none.
+    QGCReplayExtension* replayExtension() const { return _replayExtension; }
+
     /// Add a tool menu item from a loaded plugin
     /// @param item QVariantMap with keys: title, icon, source, visible
     void addToolMenuItem(const QVariantMap& item);
@@ -75,6 +81,9 @@ signals:
     /// Emitted when the loaded plugins list changes
     void loadedPluginsChanged();
 
+    /// Emitted when the replay extension changes (plugin loaded or unloaded)
+    void replayExtensionChanged();
+
 private:
     void _loadPlugins();
     void _removeToolMenuItemsForPlugin(const QString& pluginName);
@@ -88,4 +97,5 @@ private:
 
     QVariantList _toolMenuItems;           // List of tool menu items (from plugins)
     QList<PluginInfo> _loadedPluginInfos; // List of loaded plugins with their info
+    QGCReplayExtension* _replayExtension = nullptr; // First replay extension found across loaded plugins
 };
