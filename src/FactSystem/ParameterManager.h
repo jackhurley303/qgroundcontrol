@@ -90,6 +90,11 @@ public:
     static MAV_PARAM_TYPE factTypeToMavType(FactMetaData::ValueType_t factType);
     static FactMetaData::ValueType_t mavTypeToFactType(MAV_PARAM_TYPE mavType);
 
+    /// Called by FlightReplayController before starting tlog replay to pre-register
+    /// a params file for a vehicle. ParameterManager will load it during refreshAllParameters
+    /// instead of immediately completing with missing parameters.
+    static void registerReplayParamFile(int vehicleId, const QString& filePath);
+
     static constexpr int defaultComponentId = -1;
 
     // These are public for creating unit tests
@@ -153,6 +158,9 @@ private:
     bool _mavlinkParamUnionToVariant(const mavlink_param_union_t &paramUnion, QVariant &outValue) const;
     /// The offline editing vehicle can have custom loaded params bolted into it.
     void _loadOfflineEditingParams();
+    /// Load parameters from a text params file into this vehicle's ParameterManager.
+    /// Used for log replay vehicles that have an attached params file.
+    void _loadReplayParamsFromFile(const QString& filePath);
     QString _logVehiclePrefix(int componentId) const;
     void _setLoadProgress(double loadProgress);
     /// Requests missing index based parameters from the vehicle.
@@ -169,8 +177,6 @@ private:
     void _incrementPendingWriteCount();
     void _decrementPendingWriteCount();
     QString _vehicleAndComponentString(int componentId) const;
-
-    static QVariant _stringToTypedVariant(const QString &string, FactMetaData::ValueType_t type, bool failOk = false);
 
     Vehicle *_vehicle = nullptr;
 
@@ -221,4 +227,6 @@ private:
     Fact _defaultFact;   ///< Used to return default fact, when parameter not found
 
     bool _tryftp = false;
+
+    static QMap<int, QString> _replayParamFileRegistry; ///< sysId -> path, populated before tlog replay starts
 };

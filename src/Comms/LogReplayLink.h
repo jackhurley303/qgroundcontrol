@@ -74,6 +74,7 @@ public slots:
     void disconnectFromLog();
     void play();
     void pause();
+    void beginStream();
     void setPlaybackSpeed(qreal playbackSpeed);
     void movePlayhead(qreal percentComplete);
 
@@ -85,6 +86,8 @@ private:
     quint64 _seekToNextMavlinkMessage(mavlink_message_t &nextMsg);
     quint64 _findLastTimestamp();
     quint64 _readNextMavlinkMessage(QByteArray &bytes);
+    quint64 _readNextMavlinkMessage(QByteArray &bytes, mavlink_message_t &outMsg);
+    void _readUntilHeartbeat();
     bool _loadLogFile();
     void _resetPlaybackToBeginning();
     void _signalCurrentLogTimeSecs();
@@ -127,6 +130,7 @@ public:
     bool isPlaying() const;
     void play();
     void pause();
+    void beginStream();
     void setPlaybackSpeed(qreal playbackSpeed);
     void movePlayhead(qreal percentComplete);
 

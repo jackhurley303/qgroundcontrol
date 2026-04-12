@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
-import QtMultimedia
 
 import QGroundControl
 import QGroundControl.Controls
@@ -50,65 +49,6 @@ Rectangle {
     }
 
     QGCPalette { id: qgcPal }
-
-    // ── Video player (drives audio + position tracking) ───────────────────────
-    MediaPlayer {
-        id:          videoPlayer
-        source:      _replay && _replay.hasVideo ? _replay.videoUrl : ""
-        videoOutput: videoOutputPanel
-
-        // Mirror play/pause from the tlog controller
-        onPlaybackStateChanged: {
-            // Intentionally driven externally via videoPanel's controls + _replay
-        }
-    }
-
-    // Sync video position whenever the replay extension ticks
-    Connections {
-        target: _replay
-        enabled: _replay !== null
-        function onVideoPositionMsChanged() {
-            if (_replay.hasVideo && Math.abs(videoPlayer.position - _replay.videoPositionMs) > 1000) {
-                videoPlayer.position = _replay.videoPositionMs
-            }
-        }
-        function onIsPlayingChanged() {
-            if (_replay.hasVideo) {
-                if (_replay.isPlaying) videoPlayer.play()
-                else videoPlayer.pause()
-            }
-        }
-    }
-
-    // ── Floating video panel (above status bar) ───────────────────────────────
-    Item {
-        id:      videoPanel
-        visible: _replay ? _replay.hasVideo : false
-        width:   videoPanelWidth
-        height:  videoPanelHeight
-        anchors {
-            bottom:       _root.top
-            right:        _root.right
-            rightMargin:  _margins * 2
-            bottomMargin: _margins
-        }
-
-        readonly property real videoPanelWidth:  ScreenTools.defaultFontPixelHeight * 22
-        readonly property real videoPanelHeight: videoPanelWidth * 9 / 16
-
-        Rectangle {
-            anchors.fill: parent
-            color:        "black"
-            radius:       6
-            border.color: Qt.rgba(1, 1, 1, 0.2)
-            border.width: 1
-
-            VideoOutput {
-                id:           videoOutputPanel
-                anchors.fill: parent
-            }
-        }
-    }
 
     QGCFileDialog {
         id: filePicker

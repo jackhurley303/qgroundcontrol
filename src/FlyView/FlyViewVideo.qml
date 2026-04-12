@@ -46,6 +46,14 @@ Item {
         useSmallFont:   _root.pipState.state !== _root.pipState.fullState
         visible:        QGroundControl.videoManager.isStreamSource || QGroundControl.videoManager.isUvc
     }
+    //-- Replay Video (file-based, synced to log replay timeline)
+    Loader {
+        anchors.fill:   parent
+        active:         QGroundControl.pluginManager.replayExtension !== null &&
+                        QGroundControl.pluginManager.replayExtension.isActive &&
+                        QGroundControl.pluginManager.replayExtension.hasVideo
+        source:         "qrc:/qml/QGroundControl/FlyView/FlightDisplayViewReplayVideo.qml"
+    }
 
     QGCLabel {
         text: qsTr("Double-click to exit full screen")

@@ -31,6 +31,19 @@ QGC_LOGGING_CATEGORY(ParameterManagerVerbose1Log, "FactSystem.ParameterManager:v
 QGC_LOGGING_CATEGORY(ParameterManagerVerbose2Log, "FactSystem.ParameterManager:verbose2")
 QGC_LOGGING_CATEGORY(ParameterManagerDebugCacheFailureLog, "FactSystem.ParameterManager:debugCacheFailure") // Turn on to debug parameter cache crc misses
 
+QMap<int, QString> ParameterManager::_replayParamFileRegistry;
+
+void ParameterManager::registerReplayParamFile(int vehicleId, const QString& filePath)
+{
+    if (filePath.isEmpty()) {
+        qCDebug(ParameterManagerLog) << "registerReplayParamFile: clearing entry for vehicle" << vehicleId;
+        _replayParamFileRegistry.remove(vehicleId);
+    } else {
+        qCDebug(ParameterManagerLog) << "registerReplayParamFile: vehicle" << vehicleId << "->" << filePath;
+        _replayParamFileRegistry[vehicleId] = filePath;
+    }
+}
+
 ParameterManager::ParameterManager(Vehicle *vehicle)
     : QObject(vehicle)
     , _vehicle(vehicle)
@@ -625,7 +638,15 @@ void ParameterManager::_startParameterDownload(uint8_t componentId)
     }
 
     if (sharedLink->linkConfiguration()->isHighLatency() || _logReplay) {
-        // These links don't load params
+        if (_logReplay) {
+            const QString replayParamFile = _replayParamFileRegistry.take(_vehicle->id());
+            if (!replayParamFile.isEmpty()) {
+                qCDebug(ParameterManagerLog) << _logVehiclePrefix(-1) << "refreshAllParameters: loading replay params from" << replayParamFile;
+                _loadReplayParamsFromFile(replayParamFile);
+                return;
+            }
+        }
+        // High latency or log replay with no params file — immediate complete
         _parametersReady = true;
         _missingParameters = true;
         _initialLoadComplete = true;
@@ -633,6 +654,10 @@ void ParameterManager::_startParameterDownload(uint8_t componentId)
         emit parametersReadyChanged(_parametersReady);
         emit missingParametersChanged(_missingParameters);
         return;
+    }
+
+    if (!_initialLoadComplete) {
+        _initialRequestTimeoutTimer.start();
     }
 
     if (_tryftp && ((componentId == MAV_COMP_ID_ALL) || (componentId == MAV_COMP_ID_AUTOPILOT1))) {
@@ -1508,6 +1533,90 @@ void ParameterManager::_loadOfflineEditingParams()
     _parametersReady = true;
     _initialLoadComplete = true;
     _debugCacheCRC.clear();
+}
+
+void ParameterManager::_loadReplayParamsFromFile(const QString& filePath)
+{
+    qCDebug(ParameterManagerLog) << _logVehiclePrefix(-1) << "_loadReplayParamsFromFile: opening" << filePath;
+    QFile f(filePath);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qCWarning(ParameterManagerLog) << "_loadReplayParamsFromFile: cannot open" << filePath;
+        _parametersReady = true;
+        _missingParameters = true;
+        _initialLoadComplete = true;
+        _waitingForDefaultComponent = false;
+        emit parametersReadyChanged(_parametersReady);
+        emit missingParametersChanged(_missingParameters);
+        return;
+    }
+
+    // First pass: collect rows (needed to know total count for progress reporting)
+    QList<QStringList> rows;
+    QTextStream stream(&f);
+    while (!stream.atEnd()) {
+        const QString line = stream.readLine().trimmed();
+        if (line.isEmpty() || line.startsWith('#')) continue;
+        const QStringList fields = line.split('\t');
+        if (fields.size() >= 5) rows.append(fields);
+    }
+    f.close();
+
+    const int total = rows.size();
+    qCDebug(ParameterManagerLog) << _logVehiclePrefix(-1) << "_loadReplayParamsFromFile: parsed" << total << "parameter rows";
+    if (total == 0) {
+        _parametersReady = true;
+        _missingParameters = false;
+        _initialLoadComplete = true;
+        emit parametersReadyChanged(_parametersReady);
+        emit missingParametersChanged(_missingParameters);
+        return;
+    }
+
+    // Second pass: create Facts directly (same pattern as _loadOfflineEditingParams)
+    for (int i = 0; i < total; ++i) {
+        const QStringList& fields                = rows[i];
+        const int componentId                    = fields[1].toInt();
+        const QString paramName                  = fields[2];
+        const QString valStr                     = fields[3];
+        const MAV_PARAM_TYPE paramType           = static_cast<MAV_PARAM_TYPE>(fields[4].toUInt());
+        const FactMetaData::ValueType_t factType = mavTypeToFactType(paramType);
+
+        QVariant paramValue;
+        switch (paramType) {
+        case MAV_PARAM_TYPE_REAL32:  paramValue = QVariant(valStr.toFloat());                break;
+        case MAV_PARAM_TYPE_UINT32:  paramValue = QVariant(valStr.toUInt());                 break;
+        case MAV_PARAM_TYPE_UINT16:  paramValue = QVariant((quint16)valStr.toUInt());        break;
+        case MAV_PARAM_TYPE_INT16:   paramValue = QVariant((qint16)valStr.toInt());          break;
+        case MAV_PARAM_TYPE_UINT8:   paramValue = QVariant((quint8)valStr.toUInt());         break;
+        case MAV_PARAM_TYPE_INT8:    paramValue = QVariant((qint8)valStr.toUInt());          break;
+        default:
+            [[fallthrough]];
+        case MAV_PARAM_TYPE_INT32:   paramValue = QVariant(valStr.toInt());                  break;
+        }
+
+        Fact* fact = nullptr;
+        if (_mapCompId2FactMap.contains(componentId) && _mapCompId2FactMap[componentId].contains(paramName)) {
+            fact = _mapCompId2FactMap[componentId][paramName];
+        } else {
+            fact = new Fact(componentId, paramName, factType, this);
+            FactMetaData* const md = _vehicle->compInfoManager()->compInfoParam(componentId)->factMetaDataForName(paramName, factType);
+            fact->setMetaData(md);
+            _mapCompId2FactMap[componentId][paramName] = fact;
+            (void) connect(fact, &Fact::containerRawValueChanged, this, &ParameterManager::_factRawValueUpdated);
+            emit factAdded(componentId, fact);
+        }
+        fact->containerSetRawValue(paramValue);
+        _setLoadProgress(static_cast<double>(i + 1) / total);
+    }
+
+    qCDebug(ParameterManagerLog) << _logVehiclePrefix(-1) << "_loadReplayParamsFromFile: loaded" << total
+                                 << "facts into" << _mapCompId2FactMap.keys().count() << "components"
+                                 << "defaultComponentId:" << _vehicle->defaultComponentId()
+                                 << "hasDefaultComponent:" << _mapCompId2FactMap.contains(_vehicle->defaultComponentId());
+    // _waitingReadParamIndexMap is empty (never populated for replay load) so the
+    // loop in _checkInitialLoadComplete passes immediately. Default component facts
+    // are now in _mapCompId2FactMap, so the guard there passes too.
+    _checkInitialLoadComplete();
 }
 
 void ParameterManager::resetAllParametersToDefaults()

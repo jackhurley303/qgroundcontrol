@@ -30,6 +30,10 @@ Item {
         Component.onCompleted:  start()
     }
 
+    readonly property var  _replayExt:          QGroundControl.pluginManager.replayExtension
+    readonly property bool _hasAnyVideo:        QGroundControl.videoManager.hasVideo ||
+                                                (_replayExt !== null && _replayExt.isActive && _replayExt.hasVideo)
+
     property bool   _mainWindowIsMap:       mapControl.pipState.state === mapControl.pipState.fullState
     property bool   _isFullWindowItemDark:  _mainWindowIsMap ? mapControl.isSatelliteMap : true
     property var    _activeVehicle:         QGroundControl.multiVehicleManager.activeVehicle
@@ -95,8 +99,8 @@ Item {
             anchors.margins:        _toolsMargin
             item1IsFullSettingsKey: "MainFlyWindowIsMap"
             item1:                  mapControl
-            item2:                  QGroundControl.videoManager.hasVideo ? videoControl : null
-            show:                   QGroundControl.videoManager.hasVideo && !QGroundControl.videoManager.fullScreen &&
+            item2:                  _hasAnyVideo ? videoControl : null
+            show:                   _hasAnyVideo && !QGroundControl.videoManager.fullScreen &&
                                         (videoControl.pipState.state === videoControl.pipState.pipState || mapControl.pipState.state === mapControl.pipState.pipState)
             z:                      QGroundControl.zOrderWidgets
 

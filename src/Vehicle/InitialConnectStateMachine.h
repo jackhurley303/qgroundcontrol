@@ -39,7 +39,7 @@ private:
     // State callbacks
     void _handleAutopilotVersionSuccess(const mavlink_message_t& message);
     void _handleAutopilotVersionFailure();
-    void _requestStandardModes(AsyncFunctionState* state);
+    void _requestStandardModes(SkippableAsyncState* state);
     void _requestCompInfo(AsyncFunctionState* state);
     void _requestParameters(SkippableAsyncState* state);
     void _onParametersReady(bool ready);
@@ -59,7 +59,7 @@ private:
 
     // State pointers for wiring
     RetryableRequestMessageState* _stateAutopilotVersion = nullptr;
-    AsyncFunctionState* _stateStandardModes = nullptr;
+    SkippableAsyncState* _stateStandardModes = nullptr;
     AsyncFunctionState* _stateCompInfo = nullptr;
     SkippableAsyncState* _stateParameters = nullptr;
     SkippableAsyncState* _stateMission = nullptr;

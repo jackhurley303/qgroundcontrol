@@ -117,7 +117,11 @@ void LogReplayWorker::connectToLog()
     _isConnected = true;
     emit connected();
 
-    play();
+    // Read messages until the first HEARTBEAT is emitted. This bootstraps
+    // vehicle creation on the main thread (params + plan init) without
+    // starting the full tlog stream. beginStream() is called by
+    // FlightReplayController after init completes.
+    _readUntilHeartbeat();
 }
 
 void LogReplayWorker::disconnectFromLog()
@@ -170,6 +174,41 @@ void LogReplayWorker::pause()
     _readTickTimer->stop();
 
     emit playbackPaused();
+}
+
+void LogReplayWorker::beginStream()
+{
+    LinkManager::instance()->setConnectionsSuspended(tr("Connect not allowed during Flight Data replay."));
+    MAVLinkProtocol::instance()->suspendLogForReplay(true);
+
+    _playbackStartTimeMSecs = static_cast<quint64>(QDateTime::currentMSecsSinceEpoch());
+    _playbackStartLogTimeUSecs = _logCurrentTimeUSecs;
+    _readTickTimer->start(1);
+
+    emit playbackStarted();
+}
+
+void LogReplayWorker::_readUntilHeartbeat()
+{
+    while (!_logFile.atEnd()) {
+        QByteArray bytes;
+        mavlink_message_t msg{};
+        const qint64 nextTimeUSecs = _readNextMavlinkMessage(bytes, msg);
+        emit dataReceived(bytes);
+        emit playbackPercentCompleteChanged(0.0f);
+
+        if (_logFile.atEnd()) {
+            pause();
+            emit playbackAtEnd();
+            return;
+        }
+
+        _logCurrentTimeUSecs = nextTimeUSecs;
+
+        if (msg.msgid == MAVLINK_MSG_ID_HEARTBEAT) {
+            break;
+        }
+    }
 }
 
 void LogReplayWorker::setPlaybackSpeed(qreal playbackSpeed)
@@ -319,6 +358,12 @@ quint64 LogReplayWorker::_parseTimestamp(const QByteArray &bytes)
 
 quint64 LogReplayWorker::_readNextMavlinkMessage(QByteArray &bytes)
 {
+    mavlink_message_t dummy{};
+    return _readNextMavlinkMessage(bytes, dummy);
+}
+
+quint64 LogReplayWorker::_readNextMavlinkMessage(QByteArray &bytes, mavlink_message_t &outMsg)
+{
     bytes.clear();
 
     char nextByte;
@@ -333,6 +378,7 @@ quint64 LogReplayWorker::_readNextMavlinkMessage(QByteArray &bytes)
         (void) bytes.append(nextByte);
 
         if (messageFound) {
+            outMsg = message;
             const QByteArray rawTime = _logFile.read(kTimestamp);
             return _parseTimestamp(rawTime);
         }
@@ -495,6 +541,11 @@ void LogReplayLink::play()
 void LogReplayLink::pause()
 {
     (void) QMetaObject::invokeMethod(_worker, "pause", Qt::QueuedConnection);
+}
+
+void LogReplayLink::beginStream()
+{
+    (void) QMetaObject::invokeMethod(_worker, "beginStream", Qt::QueuedConnection);
 }
 
 void LogReplayLink::setPlaybackSpeed(qreal playbackSpeed)
