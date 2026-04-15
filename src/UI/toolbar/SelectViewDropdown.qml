@@ -16,6 +16,8 @@ ToolIndicatorPage {
             columnSpacing: ScreenTools.defaultFontPixelWidth
             rowSpacing: columnSpacing
 
+            QGCPalette { id: qgcPal; colorGroupEnabled: true }
+
             SubMenuButton {
                 implicitHeight: root._toolButtonHeight
                 Layout.fillWidth: true
@@ -85,6 +87,44 @@ ToolIndicatorPage {
                 }
             }
 
+            SubMenuButton {
+                id: closeButton
+                implicitHeight: root._toolButtonHeight
+                Layout.fillWidth: true
+                text: qsTr("Close")
+                imageResource: "/res/OpenDoor.svg"
+                onClicked: {
+                    if (mainWindow.allowViewSwitch()) {
+                        mainWindow.finishCloseProcess()
+                    }
+                }
+            }
+
+            // Plugin section separator
+            ColumnLayout {
+                Layout.columnSpan:  2
+                Layout.fillWidth:   true
+                spacing:            ScreenTools.defaultFontPixelHeight * 0.3
+                visible:            QGroundControl.pluginManager.toolMenuItems.length > 0
+
+                QGCLabel {
+                    Layout.fillWidth:    true
+                    text:                qsTr("PLUGINS")
+                    font.pointSize:      ScreenTools.smallFontPointSize * 0.85
+                    font.bold:           true
+                    font.letterSpacing:  1.2
+                    opacity:             0.4
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height:           1
+                    color:            qgcPal.text
+                    opacity:          0.2
+                }
+            }
+
             // Dynamic plugin tool menu items
             Repeater {
                 model: QGroundControl.pluginManager.toolMenuItems
@@ -100,19 +140,6 @@ ToolIndicatorPage {
                             var toolbarSrc = modelData.toolbarSource !== undefined ? modelData.toolbarSource : ""
                             mainWindow.showTool(modelData.title, modelData.source, modelData.icon, toolbarSrc)
                         }
-                    }
-                }
-            }
-
-            SubMenuButton {
-                id: closeButton
-                implicitHeight: root._toolButtonHeight
-                Layout.fillWidth: true
-                text: qsTr("Close")
-                imageResource: "/res/OpenDoor.svg"
-                onClicked: {
-                    if (mainWindow.allowViewSwitch()) {
-                        mainWindow.finishCloseProcess()
                     }
                 }
             }

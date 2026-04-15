@@ -32,7 +32,10 @@ public:
 
 /**
  * @class ExampleRuntimePlugin
- * @brief Runtime plugin implementation for the example plugin
+ * @brief Runtime plugin implementation for the example plugin.
+ *
+ * This serves as a template for developers building their own plugins.
+ * Each override below demonstrates one feature of the plugin system.
  */
 class ExampleRuntimePlugin : public QGCPlugin
 {
@@ -43,9 +46,39 @@ public:
     explicit ExampleRuntimePlugin(QObject* parent = nullptr);
     ~ExampleRuntimePlugin() override = default;
 
-    // QGCPlugin interface
-    QString name() const override { return "Example"; }
+    // --- Required ---
+
+    /// Unique display name for this plugin.
+    QString name() const override { return QStringLiteral("Example"); }
+
+    // --- Tool menu (optional) ---
+
+    /// Adds an entry to the main tool menu that opens a full-screen view.
+    /// Remove this method (or return an empty QVariantMap) if you don't need a tool menu entry.
     QVariantMap toolMenuItem() const override;
+
+    // --- Fly-view panel (optional) ---
+
+    /// QML component loaded inside the floating fly-view panel.
+    /// Remove this method (or return an empty string) to opt out of a fly-view panel entirely.
+    QString flyViewPanelUrl() const override { return QStringLiteral("qrc:/qml/ExampleFlyViewPanel.qml"); }
+
+    /// QML component shown as the collapsed row in the fly-view dock strip.
+    /// Remove this method (or return an empty string) to use the default plain-name label.
+    QString flyViewPanelDockUrl() const override { return QStringLiteral("qrc:/qml/ExampleDockItem.qml"); }
+
+    /// Default panel width in units of ScreenTools.defaultFontPixelWidth.
+    /// Return 0 to use the framework default (30 units).
+    double flyViewPanelDefaultWidth() const override { return 35; }
+
+    /// Default panel height in units of ScreenTools.defaultFontPixelHeight.
+    /// Return 0 to use the framework default (15 units).
+    double flyViewPanelDefaultHeight() const override { return 18; }
+
+    /// Default panel position as fractions [0, 1] of the parent size.
+    /// (0, 0) = top-left, (1, 0) = top-right, (0, 1) = bottom-left, (1, 1) = bottom-right.
+    /// Return (-1, -1) to use the framework default (staggered from the right edge).
+    QPointF flyViewPanelDefaultPosition() const override { return QPointF(0.0, 0.0); }
 
 private:
     QVariantMap _toolMenuItem;

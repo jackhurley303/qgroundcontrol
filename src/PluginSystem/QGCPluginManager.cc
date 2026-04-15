@@ -63,6 +63,8 @@ void QGCPluginManager::cleanup()
         _replayExtension = nullptr;
         emit replayExtensionChanged();
     }
+    _flyViewPanelItems.clear();
+    emit flyViewPanelItemsChanged();
     emit loadedPluginsChanged();
     emit toolMenuItemsChanged();
 }
@@ -146,13 +148,30 @@ void QGCPluginManager::_loadPlugins()
             QVariantMap menuItem = plugin->toolMenuItem();
             if (!menuItem.isEmpty()) {
                 qCDebug(QGCPluginManagerLog) << "  - Provides menu item:" << menuItem["title"];
-                
+
                 // Store the plugin name with the menu item so we can check enabled state dynamically
                 menuItem["pluginName"] = pluginName;
-                
+
                 addToolMenuItem(menuItem);
             } else {
                 qCDebug(QGCPluginManagerLog) << "  - No menu item provided";
+            }
+
+            // Register fly-view panel item if this plugin provides one
+            QString panelUrl = plugin->flyViewPanelUrl();
+            if (!panelUrl.isEmpty()) {
+                QPointF defaultPos = plugin->flyViewPanelDefaultPosition();
+                QVariantMap panelItem;
+                panelItem["name"]           = pluginName;
+                panelItem["panelUrl"]       = panelUrl;
+                panelItem["dockUrl"]        = plugin->flyViewPanelDockUrl();
+                panelItem["defaultWidth"]   = plugin->flyViewPanelDefaultWidth();
+                panelItem["defaultHeight"]  = plugin->flyViewPanelDefaultHeight();
+                panelItem["defaultXFraction"] = defaultPos.x();
+                panelItem["defaultYFraction"] = defaultPos.y();
+                _flyViewPanelItems.append(panelItem);
+                emit flyViewPanelItemsChanged();
+                qCDebug(QGCPluginManagerLog) << "  - Provides fly-view panel:" << panelUrl;
             }
         } else {
             // Plugin is disabled, don't load it
@@ -178,6 +197,15 @@ void QGCPluginManager::_removeToolMenuItemsForPlugin(const QString& pluginName)
         }
     }
     emit toolMenuItemsChanged();
+
+    // Remove fly-view panel item for this plugin
+    for (int i = _flyViewPanelItems.size() - 1; i >= 0; --i) {
+        QVariantMap item = _flyViewPanelItems[i].toMap();
+        if (item["name"].toString() == pluginName) {
+            _flyViewPanelItems.removeAt(i);
+        }
+    }
+    emit flyViewPanelItemsChanged();
 }
 
 void QGCPluginManager::unloadPlugin(const QString& pluginName)
@@ -328,6 +356,23 @@ void QGCPluginManager::_addLoadedPlugin(const PluginLoadInfo& loadInfo)
         menuItem["pluginName"] = pluginName;
         addToolMenuItem(menuItem);
         qCDebug(QGCPluginManagerLog) << "Added menu item for plugin:" << menuItem["title"];
+    }
+
+    // Register fly-view panel item if this plugin provides one
+    QString panelUrl = plugin->flyViewPanelUrl();
+    if (!panelUrl.isEmpty()) {
+        QPointF defaultPos = plugin->flyViewPanelDefaultPosition();
+        QVariantMap panelItem;
+        panelItem["name"]             = pluginName;
+        panelItem["panelUrl"]         = panelUrl;
+        panelItem["dockUrl"]          = plugin->flyViewPanelDockUrl();
+        panelItem["defaultWidth"]     = plugin->flyViewPanelDefaultWidth();
+        panelItem["defaultHeight"]    = plugin->flyViewPanelDefaultHeight();
+        panelItem["defaultXFraction"] = defaultPos.x();
+        panelItem["defaultYFraction"] = defaultPos.y();
+        _flyViewPanelItems.append(panelItem);
+        emit flyViewPanelItemsChanged();
+        qCDebug(QGCPluginManagerLog) << "Added fly-view panel for plugin:" << pluginName;
     }
 
     emit loadedPluginsChanged();

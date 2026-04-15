@@ -30,11 +30,10 @@ ExampleRuntimePlugin::ExampleRuntimePlugin(QObject* parent)
     qCDebug(ExamplePluginLog) << "ExampleRuntimePlugin instance created";
 
     // Build tool menu item - enabled/disabled state is handled by PluginSettings
-    _toolMenuItem["title"] = "Example Plugin";
-    _toolMenuItem["icon"] = "/res/QGCLogoFull.svg";
+    _toolMenuItem["title"] = "Example";
+    _toolMenuItem["icon"] = "/qmlimages/plugin.svg";
     _toolMenuItem["source"] = "qrc:/qml/ExamplePluginView.qml";
-    _toolMenuItem["toolbarSource"] = "qrc:/qml/ExampleToolBar.qml";  // Custom toolbar
-    _toolMenuItem["visible"] = true;
+    _toolMenuItem["toolbarSource"] = "qrc:/qml/ExampleToolBar.qml";
 }
 
 QVariantMap ExampleRuntimePlugin::toolMenuItem() const

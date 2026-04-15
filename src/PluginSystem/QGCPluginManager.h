@@ -37,6 +37,7 @@ class QGCPluginManager : public QObject
     Q_PROPERTY(QVariantList         loadedPlugins    READ loadedPlugins    NOTIFY loadedPluginsChanged)
     Q_PROPERTY(QVariantList         toolMenuItems    READ toolMenuItems    NOTIFY toolMenuItemsChanged)
     Q_PROPERTY(QGCReplayExtension*  replayExtension  READ replayExtension  NOTIFY replayExtensionChanged)
+    Q_PROPERTY(QVariantList         flyViewPanelItems READ flyViewPanelItems NOTIFY flyViewPanelItemsChanged)
 
 public:
     explicit QGCPluginManager(QObject *parent = nullptr);
@@ -62,6 +63,10 @@ public:
     /// Get the replay extension provided by any loaded plugin, or nullptr if none.
     QGCReplayExtension* replayExtension() const { return _replayExtension; }
 
+    /// Get the list of fly-view panel items from all loaded plugins.
+    /// Each item is a QVariantMap with keys: name, panelUrl
+    QVariantList flyViewPanelItems() const { return _flyViewPanelItems; }
+
     /// Add a tool menu item from a loaded plugin
     /// @param item QVariantMap with keys: title, icon, source, visible
     void addToolMenuItem(const QVariantMap& item);
@@ -84,6 +89,9 @@ signals:
     /// Emitted when the replay extension changes (plugin loaded or unloaded)
     void replayExtensionChanged();
 
+    /// Emitted when the fly-view panel items list changes
+    void flyViewPanelItemsChanged();
+
 private:
     void _loadPlugins();
     void _removeToolMenuItemsForPlugin(const QString& pluginName);
@@ -96,6 +104,7 @@ private:
     };
 
     QVariantList _toolMenuItems;           // List of tool menu items (from plugins)
+    QVariantList _flyViewPanelItems;       // List of fly-view panel items (from plugins)
     QList<PluginInfo> _loadedPluginInfos; // List of loaded plugins with their info
     QGCReplayExtension* _replayExtension = nullptr; // First replay extension found across loaded plugins
 };

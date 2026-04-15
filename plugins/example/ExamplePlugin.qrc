@@ -2,5 +2,10 @@
     <qresource prefix="/qml">
         <file alias="ExamplePluginView.qml">ExamplePluginView.qml</file>
         <file alias="ExampleToolBar.qml">ExampleToolBar.qml</file>
+        <file alias="ExampleFlyViewPanel.qml">ExampleFlyViewPanel.qml</file>
+        <file alias="ExampleDockItem.qml">ExampleDockItem.qml</file>
+    </qresource>
+    <qresource prefix="/qmlimages">
+        <file alias="plugin.svg">images/plugin.svg</file>
     </qresource>
 </RCC>

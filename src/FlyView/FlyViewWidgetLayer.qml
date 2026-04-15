@@ -175,6 +175,80 @@ Item {
         property real topEdgeCenterInset: visible ? y + height : 0
     }
 
+    // Expanded state keyed by plugin name: { "PluginName": true } = floating panel visible
+    property var _panelExpanded: ({})
+
+    function _setPanelExpanded(name, val) {
+        var s = Object.assign({}, _panelExpanded)
+        s[name] = val
+        _panelExpanded = s
+    }
+
+    function _popOutPanel(panelItem) {
+        var name = panelItem.name
+        _setPanelExpanded(name, "popped")   // hides floating panel AND dock row
+        var win = _windowedPluginPanel.createObject(_root)
+        win.panelTitle    = panelItem.name
+        win.panelUrl      = panelItem.panelUrl
+        win.closeCallback = function() { _setPanelExpanded(name, false) }
+    }
+
+    Component {
+        id: _windowedPluginPanel
+
+        Window {
+            property string panelTitle
+            property string panelUrl
+            property var    closeCallback: null
+
+            title:   panelTitle + " (Fly View)"
+            width:   ScreenTools.defaultFontPixelWidth  * 60
+            height:  ScreenTools.defaultFontPixelHeight * 25
+            visible: true
+
+            Rectangle {
+                anchors.fill: parent
+                color:        Qt.rgba(0.08, 0.08, 0.08, 1.0)
+
+                Loader {
+                    anchors.fill:    parent
+                    anchors.margins: ScreenTools.defaultFontPixelWidth
+                    source:          panelUrl
+                }
+            }
+
+            onClosing: {
+                if (closeCallback) closeCallback()
+                destroy()
+            }
+        }
+    }
+
+    // Plugin button strip — below the main action tool strip
+    FlyViewPluginButtonStrip {
+        id:                _pluginStrip
+        anchors.left:      parent.left
+        anchors.top:       toolStrip.bottom
+        anchors.topMargin: _toolsMargin
+        expandedSet:       _panelExpanded
+        onExpandPlugin:    function(idx) {
+            var item = QGroundControl.pluginManager.flyViewPanelItems[idx]
+            if (item) _setPanelExpanded(item.name, true)
+        }
+    }
+
+    // One floating panel per plugin
+    Repeater {
+        model: QGroundControl.pluginManager.flyViewPanelItems
+        FlyViewPluginPanel {
+            panelItem:   modelData
+            panelIndex:  index
+            expanded:    _panelExpanded[modelData.name] === true
+            onMinimized: _setPanelExpanded(modelData.name, false)
+            onPoppedOut: _popOutPanel(modelData)
+        }
+    }
+
     Loader {
         id: preFlightChecklistLoader
         sourceComponent: preFlightChecklistPopup
