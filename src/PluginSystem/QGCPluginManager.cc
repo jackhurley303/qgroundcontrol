@@ -64,9 +64,22 @@ void QGCPluginManager::cleanup()
         emit replayExtensionChanged();
     }
     _flyViewPanelItems.clear();
+    _hasLoggingController = false;
     emit flyViewPanelItemsChanged();
     emit loadedPluginsChanged();
     emit toolMenuItemsChanged();
+}
+
+void QGCPluginManager::_recalcLoggingController()
+{
+    bool found = false;
+    for (const PluginInfo& pi : _loadedPluginInfos) {
+        if (pi.plugin && pi.plugin->controlsTelemetryLogging()) {
+            found = true;
+            break;
+        }
+    }
+    _hasLoggingController = found;
 }
 
 QVariantList QGCPluginManager::loadedPlugins() const
@@ -180,9 +193,10 @@ void QGCPluginManager::_loadPlugins()
         }
     }
 
+    _recalcLoggingController();
     emit loadedPluginsChanged();
     qCDebug(QGCPluginManagerLog) << "=== Plugin Loading Complete:" << _loadedPluginInfos.size() << "plugin(s) active ===";
-    
+
     // Refresh logging category settings now that plugin categories are registered
     QGCLoggingCategoryManager::instance()->setFilterRulesFromSettings(QString());
 }
@@ -240,6 +254,7 @@ void QGCPluginManager::unloadPlugin(const QString& pluginName)
             // Remove associated menu items
             _removeToolMenuItemsForPlugin(pluginName);
 
+            _recalcLoggingController();
             emit loadedPluginsChanged();
             qCDebug(QGCPluginManagerLog) << "Plugin unloaded:" << pluginName;
             return;
@@ -375,5 +390,6 @@ void QGCPluginManager::_addLoadedPlugin(const PluginLoadInfo& loadInfo)
         qCDebug(QGCPluginManagerLog) << "Added fly-view panel for plugin:" << pluginName;
     }
 
+    _recalcLoggingController();
     emit loadedPluginsChanged();
 }

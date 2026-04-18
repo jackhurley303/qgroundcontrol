@@ -78,6 +78,13 @@ public:
     /// Return (-1, -1) to use the framework default (staggered from the right edge).
     virtual QPointF flyViewPanelDefaultPosition() const { return QPointF(-1, -1); }
 
+    /// Returns true if this plugin wants to take exclusive control of telemetry
+    /// logging (tlog). When any loaded plugin returns true, MAVLinkProtocol
+    /// disables its built-in auto-start/auto-save behaviour and exposes
+    /// startTlogLogging() / stopTlogLogging() / savePendingLog() /
+    /// discardPendingLog() for the plugin to drive instead.
+    virtual bool controlsTelemetryLogging() const { return false; }
+
     /// Get the plugin's display name
     /// @return Human-readable plugin name
     virtual QString name() const = 0;

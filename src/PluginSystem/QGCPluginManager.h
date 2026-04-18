@@ -67,6 +67,10 @@ public:
     /// Each item is a QVariantMap with keys: name, panelUrl
     QVariantList flyViewPanelItems() const { return _flyViewPanelItems; }
 
+    /// Returns true if any active plugin has claimed exclusive control of
+    /// telemetry logging via QGCPlugin::controlsTelemetryLogging().
+    bool hasLoggingController() const { return _hasLoggingController; }
+
     /// Add a tool menu item from a loaded plugin
     /// @param item QVariantMap with keys: title, icon, source, visible
     void addToolMenuItem(const QVariantMap& item);
@@ -103,8 +107,11 @@ private:
         QString name;
     };
 
+    void _recalcLoggingController();
+
     QVariantList _toolMenuItems;           // List of tool menu items (from plugins)
     QVariantList _flyViewPanelItems;       // List of fly-view panel items (from plugins)
     QList<PluginInfo> _loadedPluginInfos; // List of loaded plugins with their info
     QGCReplayExtension* _replayExtension = nullptr; // First replay extension found across loaded plugins
+    bool _hasLoggingController = false;   // True if any active plugin claims telemetry-logging control
 };

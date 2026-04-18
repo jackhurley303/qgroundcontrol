@@ -1,4 +1,14 @@
 #include "MAVLinkProtocol.h"
+#include "AppSettings.h"
+#include "LinkManager.h"
+#include "MavlinkSettings.h"
+#include "MultiVehicleManager.h"
+#include "QGCApplication.h"
+#include "QGCFileHelper.h"
+#include "QGCLoggingCategory.h"
+#include "QGCPluginManager.h"
+#include "QmlObjectListModel.h"
+#include "SettingsManager.h"
 
 #include <QtCore/QApplicationStatic>
 #include <QtCore/QDir>
@@ -35,7 +45,18 @@ MAVLinkProtocol::MAVLinkProtocol(QObject* parent) : QObject(parent), _tempLogFil
 
 MAVLinkProtocol::~MAVLinkProtocol()
 {
-    _closeLogFile();
+    // If the app exits while actively logging, close the file and treat it as a
+    // pending log so it falls through to the auto-save below.
+    if (_tempLogFile->isOpen() && _closeLogFile() && _pendingLogPath.isEmpty()) {
+        _pendingLogPath = _tempLogFile->fileName();
+        _pendingLogName = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd hh-mm-ss"))
+                          + QStringLiteral(".") + AppSettings::telemetryFileExtension;
+    }
+
+    // Auto-save any pending log so data is never lost on exit.
+    if (!_pendingLogPath.isEmpty()) {
+        _saveTelemetryLog(_pendingLogPath, _pendingLogName);
+    }
 
     qCDebug(MAVLinkProtocolLog) << this;
 }
@@ -248,31 +269,40 @@ void MAVLinkProtocol::_logData(LinkInterface* link, const mavlink_message_t& mes
         }
     }
 
+    // Auto-start tlog on first heartbeat — suppressed when a plugin claims logging control
+    const bool pluginControlsLogging = QGCPluginManager::instance()->hasLoggingController();
+
     switch (message.msgid) {
-        case MAVLINK_MSG_ID_HEARTBEAT: {
+    case MAVLINK_MSG_ID_HEARTBEAT: {
+        if (!pluginControlsLogging) {
             _startLogging();
-            mavlink_heartbeat_t heartbeat{};
-            mavlink_msg_heartbeat_decode(&message, &heartbeat);
-            emit vehicleHeartbeatInfo(link, message.sysid, message.compid, heartbeat.autopilot, heartbeat.type);
-            break;
         }
-        case MAVLINK_MSG_ID_HIGH_LATENCY: {
+        mavlink_heartbeat_t heartbeat{};
+        mavlink_msg_heartbeat_decode(&message, &heartbeat);
+        emit vehicleHeartbeatInfo(link, message.sysid, message.compid, heartbeat.autopilot, heartbeat.type);
+        break;
+    }
+    case MAVLINK_MSG_ID_HIGH_LATENCY: {
+        if (!pluginControlsLogging) {
             _startLogging();
-            mavlink_high_latency_t highLatency{};
-            mavlink_msg_high_latency_decode(&message, &highLatency);
-            // HIGH_LATENCY does not provide autopilot or type information, generic is our safest bet
-            emit vehicleHeartbeatInfo(link, message.sysid, message.compid, MAV_AUTOPILOT_GENERIC, MAV_TYPE_GENERIC);
-            break;
         }
-        case MAVLINK_MSG_ID_HIGH_LATENCY2: {
+        mavlink_high_latency_t highLatency{};
+        mavlink_msg_high_latency_decode(&message, &highLatency);
+        // HIGH_LATENCY does not provide autopilot or type information, generic is our safest bet
+        emit vehicleHeartbeatInfo(link, message.sysid, message.compid, MAV_AUTOPILOT_GENERIC, MAV_TYPE_GENERIC);
+        break;
+    }
+    case MAVLINK_MSG_ID_HIGH_LATENCY2: {
+        if (!pluginControlsLogging) {
             _startLogging();
-            mavlink_high_latency2_t highLatency2{};
-            mavlink_msg_high_latency2_decode(&message, &highLatency2);
-            emit vehicleHeartbeatInfo(link, message.sysid, message.compid, highLatency2.autopilot, highLatency2.type);
-            break;
         }
-        default:
-            break;
+        mavlink_high_latency2_t highLatency2{};
+        mavlink_msg_high_latency2_decode(&message, &highLatency2);
+        emit vehicleHeartbeatInfo(link, message.sysid, message.compid, highLatency2.autopilot, highLatency2.type);
+        break;
+    }
+    default:
+        break;
     }
 }
 
@@ -364,19 +394,43 @@ void MAVLinkProtocol::_startLogging()
 
 void MAVLinkProtocol::_stopLogging()
 {
+    const bool wasLogging = tlogLogging();
+
     if (_tempLogFile->isOpen() && _closeLogFile()) {
-        auto appSettings = SettingsManager::instance()->appSettings();
-        auto mavlinkSettings = SettingsManager::instance()->mavlinkSettings();
-        if ((_vehicleWasArmed || mavlinkSettings->telemetrySaveNotArmed()->rawValue().toBool()) &&
-            mavlinkSettings->telemetrySave()->rawValue().toBool() &&
-            !appSettings->disableAllPersistence()->rawValue().toBool()) {
-            _saveTelemetryLog(_tempLogFile->fileName());
+        if (QGCPluginManager::instance()->hasLoggingController()) {
+            // A plugin controls logging — leave the temp file as a pending log so the
+            // plugin (and its UI) can decide whether to save or discard it.
+            _pendingLogPath = _tempLogFile->fileName();
+            // Pre-generate the save filename from the stop timestamp so the UI can
+            // display it and the actual save uses the exact same name.
+            _pendingLogName = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd hh-mm-ss"))
+                              + QStringLiteral(".") + AppSettings::telemetryFileExtension;
+            emit hasPendingLogChanged();
+
+            // Only count automatic stops — not when the user explicitly pressed Stop.
+            if (!_manualStop) {
+                ++_autoCompletedLogCount;
+                emit autoCompletedLogCountChanged();
+            }
         } else {
-            (void)QFile::remove(_tempLogFile->fileName());
+            // Default behaviour: auto-save or auto-delete based on user settings.
+            auto appSettings = SettingsManager::instance()->appSettings();
+            auto mavlinkSettings = SettingsManager::instance()->mavlinkSettings();
+            if ((_vehicleWasArmed || mavlinkSettings->telemetrySaveNotArmed()->rawValue().toBool()) &&
+                    mavlinkSettings->telemetrySave()->rawValue().toBool() &&
+                    !appSettings->disableAllPersistence()->rawValue().toBool()) {
+                _saveTelemetryLog(_tempLogFile->fileName());
+            } else {
+                (void) QFile::remove(_tempLogFile->fileName());
+            }
         }
     }
 
     _vehicleWasArmed = false;
+
+    if (wasLogging) {
+        emit tlogLoggingChanged();
+    }
 }
 
 void MAVLinkProtocol::checkForLostLogFiles()
@@ -412,21 +466,34 @@ void MAVLinkProtocol::deleteTempLogFiles()
     }
 }
 
-void MAVLinkProtocol::_saveTelemetryLog(const QString& tempLogfile)
+void MAVLinkProtocol::_saveTelemetryLog(const QString &tempLogfile, const QString &desiredFileName)
 {
     if (_checkTelemetrySavePath()) {
         const QString saveDirPath = SettingsManager::instance()->appSettings()->telemetrySavePath();
         const QDir saveDir(saveDirPath);
 
-        const QString nameFormat("%1%2.%3");
-        const QString dtFormat("yyyy-MM-dd hh-mm-ss");
-
-        int tryIndex = 1;
-        QString saveFileName = nameFormat.arg(QDateTime::currentDateTime().toString(dtFormat), QString(),
-                                              AppSettings::telemetryFileExtension);
-        while (saveDir.exists(saveFileName)) {
-            saveFileName = nameFormat.arg(QDateTime::currentDateTime().toString(dtFormat),
-                                          QStringLiteral(".%1").arg(tryIndex++), AppSettings::telemetryFileExtension);
+        // Use the pre-generated name when available (so the UI and saved file match);
+        // fall back to generating one from the current timestamp.
+        QString saveFileName;
+        if (!desiredFileName.isEmpty()) {
+            saveFileName = desiredFileName;
+            // Resolve collisions by appending an index.
+            if (saveDir.exists(saveFileName)) {
+                const QString base = QFileInfo(saveFileName).completeBaseName();
+                const QString ext  = QFileInfo(saveFileName).suffix();
+                int tryIndex = 1;
+                do {
+                    saveFileName = QStringLiteral("%1.%2.%3").arg(base).arg(tryIndex++).arg(ext);
+                } while (saveDir.exists(saveFileName));
+            }
+        } else {
+            const QString nameFormat("%1%2.%3");
+            const QString dtFormat("yyyy-MM-dd hh-mm-ss");
+            int tryIndex = 1;
+            saveFileName = nameFormat.arg(QDateTime::currentDateTime().toString(dtFormat), QString(), AppSettings::telemetryFileExtension);
+            while (saveDir.exists(saveFileName)) {
+                saveFileName = nameFormat.arg(QDateTime::currentDateTime().toString(dtFormat), QStringLiteral(".%1").arg(tryIndex++), AppSettings::telemetryFileExtension);
+            }
         }
 
         const QString saveFilePath = saveDir.absoluteFilePath(saveFileName);
@@ -524,4 +591,77 @@ void MAVLinkProtocol::_vehicleCountChanged()
 int MAVLinkProtocol::getSystemId() const
 {
     return SettingsManager::instance()->mavlinkSettings()->gcsMavlinkSystemID()->rawValue().toInt();
+}
+
+bool MAVLinkProtocol::tlogLogging() const
+{
+    return _tempLogFile->isOpen() && !_logSuspendError && !_logSuspendReplay;
+}
+
+bool MAVLinkProtocol::hasPendingLog() const
+{
+    return !_pendingLogPath.isEmpty();
+}
+
+QString MAVLinkProtocol::pendingLogName() const
+{
+    return _pendingLogName;
+}
+
+void MAVLinkProtocol::clearAutoCompletedLogCount()
+{
+    if (_autoCompletedLogCount != 0) {
+        _autoCompletedLogCount = 0;
+        emit autoCompletedLogCountChanged();
+    }
+}
+
+void MAVLinkProtocol::startTlogLogging()
+{
+    if (!QGCPluginManager::instance()->hasLoggingController()) {
+        return; // manual API is only available when a plugin controls logging
+    }
+    if (!_pendingLogPath.isEmpty()) {
+        return; // save or discard the pending log before starting a new one
+    }
+
+    const bool wasLogging = tlogLogging();
+    _startLogging();
+    if (!wasLogging && tlogLogging()) {
+        emit tlogLoggingChanged();
+    }
+}
+
+void MAVLinkProtocol::stopTlogLogging()
+{
+    if (!QGCPluginManager::instance()->hasLoggingController()) {
+        return; // manual API is only available when a plugin controls logging
+    }
+    _manualStop = true;
+    _stopLogging();
+    _manualStop = false;
+}
+
+void MAVLinkProtocol::savePendingLog()
+{
+    if (_pendingLogPath.isEmpty()) {
+        return;
+    }
+    const QString path = _pendingLogPath;
+    const QString name = _pendingLogName;
+    _pendingLogPath.clear();
+    _pendingLogName.clear();
+    emit hasPendingLogChanged();
+    _saveTelemetryLog(path, name);
+}
+
+void MAVLinkProtocol::discardPendingLog()
+{
+    if (_pendingLogPath.isEmpty()) {
+        return;
+    }
+    (void) QFile::remove(_pendingLogPath);
+    _pendingLogPath.clear();
+    _pendingLogName.clear();
+    emit hasPendingLogChanged();
 }
