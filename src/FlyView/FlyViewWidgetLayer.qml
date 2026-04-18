@@ -184,13 +184,22 @@ Item {
         _panelExpanded = s
     }
 
-    function _popOutPanel(panelItem) {
-        var name = panelItem.name
+    function _popOutPanel(panelItem, panelRef) {
+        var name   = panelItem.name
+        var loader = panelRef.contentLoader
         _setPanelExpanded(name, "popped")   // hides floating panel AND dock row
         var win = _windowedPluginPanel.createObject(_root)
         win.panelTitle    = panelItem.name
-        win.panelUrl      = panelItem.panelUrl
-        win.closeCallback = function() { _setPanelExpanded(name, false) }
+        win.closeCallback = function() {
+            // Return the Loader to its original ColumnLayout in the floating panel.
+            // Must clear anchors.fill first so the Layout can take over sizing again.
+            loader.anchors.fill = undefined
+            loader.parent       = panelRef.contentArea
+            _setPanelExpanded(name, false)
+        }
+        // Move the existing Loader into the window — state is preserved.
+        loader.parent       = win.contentSlot
+        loader.anchors.fill = win.contentSlot
     }
 
     Component {
@@ -198,8 +207,8 @@ Item {
 
         Window {
             property string panelTitle
-            property string panelUrl
             property var    closeCallback: null
+            property alias  contentSlot: _contentSlot
 
             title:   panelTitle + " (Fly View)"
             width:   ScreenTools.defaultFontPixelWidth  * 60
@@ -210,10 +219,10 @@ Item {
                 anchors.fill: parent
                 color:        Qt.rgba(0.08, 0.08, 0.08, 1.0)
 
-                Loader {
+                Item {
+                    id:              _contentSlot
                     anchors.fill:    parent
                     anchors.margins: ScreenTools.defaultFontPixelWidth
-                    source:          panelUrl
                 }
             }
 
@@ -241,11 +250,12 @@ Item {
     Repeater {
         model: QGroundControl.pluginManager.flyViewPanelItems
         FlyViewPluginPanel {
+            id:          _thisPanel
             panelItem:   modelData
             panelIndex:  index
             expanded:    _panelExpanded[modelData.name] === true
             onMinimized: _setPanelExpanded(modelData.name, false)
-            onPoppedOut: _popOutPanel(modelData)
+            onPoppedOut: _popOutPanel(modelData, _thisPanel)
         }
     }
 

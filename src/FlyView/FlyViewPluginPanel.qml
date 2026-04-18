@@ -33,6 +33,10 @@ Item {
                                             ? panelItem.defaultHeight * ScreenTools.defaultFontPixelHeight
                                             : ScreenTools.defaultFontPixelHeight * 15
 
+    // Exposed so FlyViewWidgetLayer can reparent the Loader when popping out to a window.
+    property alias contentLoader: _contentLoader
+    property alias contentArea:   _contentColumnLayout
+
     visible: (expanded || _panel.opacity > 0) && !QGroundControl.videoManager.fullScreen
     z:       QGroundControl.zOrderWidgets
 
@@ -206,6 +210,7 @@ Item {
 
         // --- Content ---
         ColumnLayout {
+            id:              _contentColumnLayout
             anchors.top:     _header.bottom
             anchors.left:    parent.left
             anchors.right:   parent.right
@@ -214,6 +219,7 @@ Item {
             spacing:         _margin
 
             Loader {
+                id:                _contentLoader
                 Layout.fillWidth:  true
                 Layout.fillHeight: true
                 source:            panelItem ? panelItem.panelUrl : ""
