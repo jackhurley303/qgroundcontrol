@@ -698,6 +698,13 @@ public:
 
     void forceInitialPlanRequestComplete();
 
+    // ── Replay plan registry ──────────────────────────────────────────────────
+    // Plugins pre-register a .plan file path per vehicle system ID before the
+    // tlog link starts. PlanMasterController::_showPlanFromManagerVehicle() checks
+    // this registry and loads from file instead of reading from empty managers.
+    static void    registerReplayPlanFile(int vehicleId, const QString& planPath);
+    static QString peekReplayPlanFile    (int vehicleId);
+
     void _setFlying(bool flying);
     void _setLanding(bool landing);
     void _setHomePosition(QGeoCoordinate& homeCoord);
@@ -949,6 +956,8 @@ private:
     static const int    _prearmErrorTimeoutMSecs = 35 * 1000;   ///< Take away prearm error after 35 seconds
 
     bool                _initialPlanRequestComplete = false;
+
+    static QMap<int, QString> _replayPlanFileRegistry;
 
     ParameterManager*               _parameterManager               = nullptr;
     ComponentInformationManager*    _componentInformationManager    = nullptr;

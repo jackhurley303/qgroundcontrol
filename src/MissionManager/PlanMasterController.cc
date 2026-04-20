@@ -706,6 +706,12 @@ void PlanMasterController::_showPlanFromManagerVehicle(void)
         return;
     }
 
+    const QString replayFile = Vehicle::peekReplayPlanFile(_managerVehicle->id());
+    if (!replayFile.isEmpty()) {
+        loadFromFile(replayFile);
+        return;
+    }
+
     // The crazy if structure is to handle the load propagating by itself through the system
     if (!_missionController.showPlanFromManagerVehicle()) {
         if (!_geoFenceController.showPlanFromManagerVehicle()) {

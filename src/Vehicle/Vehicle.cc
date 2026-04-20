@@ -87,6 +87,8 @@
 
 QGC_LOGGING_CATEGORY(VehicleLog, "Vehicle.Vehicle")
 
+QMap<int, QString> Vehicle::_replayPlanFileRegistry;
+
 #define UPDATE_TIMER 50
 #define DEFAULT_LAT  38.965767f
 #define DEFAULT_LON -120.083923f
@@ -2708,6 +2710,19 @@ void Vehicle::forceInitialPlanRequestComplete()
 {
     _initialPlanRequestComplete = true;
     emit initialPlanRequestCompleteChanged(true);
+}
+
+void Vehicle::registerReplayPlanFile(int vehicleId, const QString& planPath)
+{
+    if (planPath.isEmpty())
+        _replayPlanFileRegistry.remove(vehicleId);
+    else
+        _replayPlanFileRegistry[vehicleId] = planPath;
+}
+
+QString Vehicle::peekReplayPlanFile(int vehicleId)
+{
+    return _replayPlanFileRegistry.value(vehicleId);
 }
 
 void Vehicle::sendPlan(QString planFile)

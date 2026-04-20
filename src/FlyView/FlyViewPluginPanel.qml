@@ -223,6 +223,13 @@ Item {
                 Layout.fillWidth:  true
                 Layout.fillHeight: true
                 source:            panelItem ? panelItem.panelUrl : ""
+                onLoaded: {
+                    if (!item) return
+                    if (item.hasOwnProperty("planMasterControllerFlyView"))
+                        item.planMasterControllerFlyView  = globals.planMasterControllerFlyView
+                    if (item.hasOwnProperty("planMasterControllerPlanView"))
+                        item.planMasterControllerPlanView = globals.planMasterControllerPlanView
+                }
             }
         }
 
