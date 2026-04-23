@@ -209,12 +209,15 @@ std::optional<int> Platform::initialize(int argc, char* argv[],
     disableAppNapViaInfoDict();
 #endif
 
-    // Force the native platform media backend where available.
-    // This avoids FFmpeg-specific bugs (e.g. CoreVideo→Metal use-after-free on macOS).
-    // The check allows the user/developer to override via environment if needed.
+    // Set the multimedia backend. FFmpeg is used on macOS for broad format support (MKV etc.).
+    // Hardware decoding is disabled on macOS because VideoToolbox-decoded frames passed through
+    // the CoreVideo→Metal texture path trigger a use-after-free crash in Qt 6.x's FFmpeg plugin.
+    // Software decoding avoids that path entirely at a modest CPU cost.
+    // Windows and Android keep their native backends; Linux leaves the backend unset (FFmpeg/GStreamer).
+    // All settings can be overridden via environment variables before launch.
     if (!qEnvironmentVariableIsSet("QT_MEDIA_BACKEND")) {
 #if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
-        (void) qputenv("QT_MEDIA_BACKEND", "darwin");   // AVFoundation
+        (void) qputenv("QT_MEDIA_BACKEND", "ffmpeg");
 #elif defined(Q_OS_WIN)
         (void) qputenv("QT_MEDIA_BACKEND", "windows");  // Windows Media Foundation
 #elif defined(Q_OS_ANDROID)
@@ -222,6 +225,12 @@ std::optional<int> Platform::initialize(int argc, char* argv[],
 #endif
         // Linux: leave unset — FFmpeg/GStreamer works reliably there
     }
+#if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
+    // Disable VideoToolbox hardware decoding to avoid the CoreVideo→Metal crash (see above).
+    if (!qEnvironmentVariableIsSet("QT_FFMPEG_DECODING_HW_DEVICE_TYPES")) {
+        (void) qputenv("QT_FFMPEG_DECODING_HW_DEVICE_TYPES", "");
+    }
+#endif
 
     // --- Unit test mode: run headless ---
 #ifdef QGC_UNITTEST_BUILD
