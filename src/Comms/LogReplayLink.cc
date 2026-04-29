@@ -205,7 +205,7 @@ void LogReplayWorker::_readUntilHeartbeat()
 
         _logCurrentTimeUSecs = nextTimeUSecs;
 
-        if (msg.msgid == MAVLINK_MSG_ID_HEARTBEAT) {
+        if (msg.msgid == MAVLINK_MSG_ID_HEARTBEAT && msg.compid == MAV_COMP_ID_AUTOPILOT1) {
             break;
         }
     }

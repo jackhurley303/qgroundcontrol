@@ -40,7 +40,8 @@ class QGCReplayExtension : public QObject
     Q_PROPERTY(bool     hasVideo        READ hasVideo        NOTIFY hasVideoChanged)
     Q_PROPERTY(QString  videoUrl        READ videoUrl        NOTIFY videoUrlChanged)
     Q_PROPERTY(qreal    videoOffsetSecs READ videoOffsetSecs NOTIFY videoOffsetSecsChanged)
-    Q_PROPERTY(qint64   videoPositionMs READ videoPositionMs NOTIFY videoPositionMsChanged)
+    Q_PROPERTY(qint64   videoPositionMs  READ videoPositionMs  NOTIFY videoPositionMsChanged)
+    Q_PROPERTY(qint64   videoDurationMs  READ videoDurationMs  NOTIFY videoDurationMsChanged)
 
 public:
     explicit QGCReplayExtension(QObject* parent = nullptr) : QObject(parent) {}
@@ -51,7 +52,8 @@ public:
     virtual bool     hasVideo()        const = 0;
     virtual QString  videoUrl()        const = 0;
     virtual qreal    videoOffsetSecs() const = 0;
-    virtual qint64   videoPositionMs() const = 0;
+    virtual qint64   videoPositionMs()  const = 0;
+    virtual qint64   videoDurationMs()  const = 0;
 
     // ── Primary API ───────────────────────────────────────────────────────────
 
@@ -69,7 +71,6 @@ public:
     // ── Video offset adjustment ───────────────────────────────────────────────
 
     Q_INVOKABLE virtual void adjustVideoOffset(qreal deltaSecs) = 0;
-    Q_INVOKABLE virtual void resetVideoOffsetToAuto() = 0;
 
 signals:
     void isActiveChanged();
@@ -78,4 +79,5 @@ signals:
     void videoUrlChanged();
     void videoOffsetSecsChanged();
     void videoPositionMsChanged();
+    void videoDurationMsChanged();
 };

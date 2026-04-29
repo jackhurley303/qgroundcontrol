@@ -151,7 +151,14 @@ Rectangle {
             MouseArea {
                 anchors.fill: parent
                 cursorShape:  Qt.PointingHandCursor
-                onClicked:    videoOffsetPopover.visible ? videoOffsetPopover.close() : videoOffsetPopover.open()
+                onClicked: {
+                    if (videoOffsetPopover.visible) {
+                        videoOffsetPopover.close()
+                    } else {
+                        if (_replay && _replay.isPlaying) _replay.pause()
+                        videoOffsetPopover.open()
+                    }
+                }
             }
         }
 
@@ -244,11 +251,6 @@ Rectangle {
                 }
             }
 
-            QGCButton {
-                Layout.fillWidth: true
-                text:             qsTr("↺ Reset to auto-detected")
-                onClicked:        if (_replay) _replay.resetVideoOffsetToAuto()
-            }
         }
     }
 }
