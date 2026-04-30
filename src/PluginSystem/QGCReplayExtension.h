@@ -35,6 +35,7 @@ class QGCReplayExtension : public QObject
     Q_PROPERTY(bool     isActive        READ isActive        NOTIFY isActiveChanged)
     Q_PROPERTY(QObject* logReplayLink   READ logReplayLink   NOTIFY isActiveChanged)
     Q_PROPERTY(bool     isPlaying       READ isPlaying       NOTIFY isPlayingChanged)
+    Q_PROPERTY(qreal    playbackSpeed   READ playbackSpeed   NOTIFY playbackSpeedChanged)
 
     // ── Video state ───────────────────────────────────────────────────────────
     Q_PROPERTY(bool     hasVideo        READ hasVideo        NOTIFY hasVideoChanged)
@@ -49,6 +50,7 @@ public:
     virtual bool     isActive()        const = 0;
     virtual QObject* logReplayLink()   const = 0;
     virtual bool     isPlaying()       const = 0;
+    virtual qreal    playbackSpeed()   const = 0;
     virtual bool     hasVideo()        const = 0;
     virtual QString  videoUrl()        const = 0;
     virtual qreal    videoOffsetSecs() const = 0;
@@ -75,6 +77,7 @@ public:
 signals:
     void isActiveChanged();
     void isPlayingChanged();
+    void playbackSpeedChanged();
     void hasVideoChanged();
     void videoUrlChanged();
     void videoOffsetSecsChanged();

@@ -23,9 +23,10 @@ Item {
     )
 
     MediaPlayer {
-        id:          videoPlayer
-        source:      _replay ? _replay.videoUrl : ""
-        videoOutput: videoOutput
+        id:           videoPlayer
+        source:       _replay ? _replay.videoUrl : ""
+        videoOutput:  videoOutput
+        playbackRate: _replay ? _replay.playbackSpeed : 1.0
         onSourceChanged:      { _videoEnded = false; _prevPositionMs = 0 }
         onMediaStatusChanged: if (mediaStatus === MediaPlayer.EndOfMedia) _videoEnded = true
     }

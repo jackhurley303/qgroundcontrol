@@ -216,7 +216,8 @@ void LogReplayWorker::setPlaybackSpeed(qreal playbackSpeed)
     _playbackSpeed = playbackSpeed;
     _playbackStartTimeMSecs = static_cast<quint64>(QDateTime::currentMSecsSinceEpoch());
     _playbackStartLogTimeUSecs = _logCurrentTimeUSecs;
-    _readTickTimer->start(1);
+    if (_readTickTimer->isActive())
+        _readTickTimer->start(1);
 }
 
 void LogReplayWorker::movePlayhead(qreal percentComplete)
