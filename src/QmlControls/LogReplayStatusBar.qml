@@ -123,9 +123,16 @@ Rectangle {
             }
 
             onValueChanged: {
-                if (!manualUpdate) {
+                if (!manualUpdate && !pressed) {
                     controller.percentComplete = value
-                    // Also seek the video through the replay extension
+                    if (_replay && _replay.isActive)
+                        _replay.seekTo(value)
+                }
+            }
+
+            onPressedChanged: {
+                if (!pressed && !manualUpdate) {
+                    controller.percentComplete = value
                     if (_replay && _replay.isActive)
                         _replay.seekTo(value)
                 }

@@ -21,12 +21,14 @@ public:
     void stop   (void);
 
 public slots:
-    void clear  (void);
+    void clear    (void);
+    void bulkLoad (const QList<QGeoCoordinate>& coords);
 
 signals:
-    void pointAdded     (QGeoCoordinate coordinate);
-    void updateLastPoint(QGeoCoordinate coordinate);
-    void pointsCleared  (void);
+    void pointAdded      (QGeoCoordinate coordinate);
+    void updateLastPoint (QGeoCoordinate coordinate);
+    void pointsCleared   (void);
+    void pointsBulkLoaded(void);
 
 private slots:
     void _vehicleCoordinateChanged(QGeoCoordinate coordinate);

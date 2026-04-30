@@ -5,6 +5,9 @@
 #include "QGCMAVLinkTypes.h"
 
 #include <QtCore/QFile>
+#include <QtCore/QList>
+#include <QtCore/QLoggingCategory>
+#include <QtPositioning/QGeoCoordinate>
 #include <QtQmlIntegration/QtQmlIntegration>
 
 #include <atomic>
@@ -67,6 +70,10 @@ signals:
     void playbackAtEnd();
     void playbackPercentCompleteChanged(qreal percentComplete);
     void currentLogTimeSecs(uint32_t secs);
+    void seekStarted();
+    void seekReplayComplete(QList<QGeoCoordinate> coords);
+    void seekFlightStatsReady(double flightTimeSecs, double flightDistanceMeters);
+    void playbackSpeedChanged(qreal speed);
 
 public slots:
     void setup();
@@ -141,6 +148,10 @@ signals:
     void playbackAtEnd();
     void playbackPercentCompleteChanged(qreal percentComplete);
     void currentLogTimeSecs(uint32_t secs);
+    void seekStarted();
+    void seekReplayComplete(QList<QGeoCoordinate> coords);
+    void seekFlightStatsReady(double flightTimeSecs, double flightDistanceMeters);
+    void playbackSpeedChanged(qreal speed);
 
 private slots:
     void _writeBytes(const QByteArray &bytes) override { Q_UNUSED(bytes); }

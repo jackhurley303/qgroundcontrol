@@ -42,10 +42,39 @@ void TrajectoryPoints::_vehicleCoordinateChanged(QGeoCoordinate coordinate)
     }
 }
 
+void TrajectoryPoints::bulkLoad(const QList<QGeoCoordinate>& coords)
+{
+    _points.clear();
+    _lastPoint = QGeoCoordinate();
+    _lastAzimuth = qQNaN();
+
+    for (const QGeoCoordinate& coord : coords) {
+        if (_lastPoint.isValid()) {
+            const double distance = _lastPoint.distanceTo(coord);
+            if (distance > _distanceTolerance) {
+                const double newAzimuth = _lastPoint.azimuthTo(coord);
+                if (qIsNaN(_lastAzimuth) || qAbs(newAzimuth - _lastAzimuth) > _azimuthTolerance) {
+                    _lastAzimuth = _lastPoint.azimuthTo(coord);
+                    _lastPoint = coord;
+                    _points.append(QVariant::fromValue(coord));
+                } else {
+                    _lastPoint = coord;
+                    _points[_points.count() - 1] = QVariant::fromValue(coord);
+                }
+            }
+        } else {
+            _lastPoint = coord;
+            _points.append(QVariant::fromValue(coord));
+        }
+    }
+
+    emit pointsBulkLoaded();
+}
+
 void TrajectoryPoints::start(void)
 {
     clear();
-    connect(_vehicle, &Vehicle::coordinateChanged, this, &TrajectoryPoints::_vehicleCoordinateChanged);
+    connect(_vehicle, &Vehicle::coordinateChanged, this, &TrajectoryPoints::_vehicleCoordinateChanged, Qt::UniqueConnection);
 }
 
 void TrajectoryPoints::stop(void)

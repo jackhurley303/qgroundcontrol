@@ -218,6 +218,7 @@ void LogReplayWorker::setPlaybackSpeed(qreal playbackSpeed)
     _playbackStartLogTimeUSecs = _logCurrentTimeUSecs;
     if (_readTickTimer->isActive())
         _readTickTimer->start(1);
+    emit playbackSpeedChanged(playbackSpeed);
 }
 
 void LogReplayWorker::movePlayhead(qreal percentComplete)
@@ -255,6 +256,109 @@ void LogReplayWorker::movePlayhead(qreal percentComplete)
     newRelativeTimeUSecs = static_cast<qreal>(_logCurrentTimeUSecs - _logStartTimeUSecs);
     percentComplete = ((newRelativeTimeUSecs / _logDurationUSecs) * 100);
     emit playbackPercentCompleteChanged(percentComplete);
+
+    const quint64 targetTimeUSecs = _logCurrentTimeUSecs;
+    const qint64 targetFilePos = _logFile.pos();
+
+    emit seekStarted();
+
+    if (!_logFile.reset()) {
+        qCWarning(LogReplayLinkLog) << "Failed to reset log file for seek replay";
+        return;
+    }
+    mavlink_reset_channel_status(_mavlinkChannel);
+
+    QList<QGeoCoordinate> coords;
+    QByteArray lastHeartbeatBytes;
+    QByteArray lastPositionBytes;
+    QByteArray lastAttitudeBytes;
+    QByteArray lastMissionCurrentBytes;
+    QByteArray lastVfrHudBytes;
+    QByteArray lastHomePositionBytes;
+
+    quint64 currentMsgTimeUSecs     = _logStartTimeUSecs;
+    quint64 lastArmedTransitionUSecs = 0;
+    bool    prevArmedState           = false;
+    bool    isArmedAtSeekPoint       = false;
+    QGeoCoordinate lastDistCoord;
+    double flightDistanceMeters   = 0.0;
+    static constexpr double kDistTolerance = 2.0;
+
+    while (!_logFile.atEnd()) {
+        QByteArray bytes;
+        mavlink_message_t msg{};
+        const quint64 nextTimeUSecs = _readNextMavlinkMessage(bytes, msg);
+        if (msg.msgid == MAVLINK_MSG_ID_GLOBAL_POSITION_INT) {
+            mavlink_global_position_int_t pos;
+            mavlink_msg_global_position_int_decode(&msg, &pos);
+            const QGeoCoordinate coord(pos.lat / 1e7, pos.lon / 1e7, pos.alt / 1000.0);
+            coords.append(coord);
+            if (lastDistCoord.isValid()) {
+                const double d = lastDistCoord.distanceTo(coord);
+                if (d > kDistTolerance) {
+                    flightDistanceMeters += d;
+                    lastDistCoord = coord;
+                }
+            } else {
+                lastDistCoord = coord;
+            }
+            lastPositionBytes = bytes;
+        } else if (msg.msgid == MAVLINK_MSG_ID_HEARTBEAT && msg.compid == MAV_COMP_ID_AUTOPILOT1) {
+            mavlink_heartbeat_t hb;
+            mavlink_msg_heartbeat_decode(&msg, &hb);
+            const bool armed = (hb.base_mode & MAV_MODE_FLAG_SAFETY_ARMED) != 0;
+            if (armed && !prevArmedState) {
+                lastArmedTransitionUSecs = currentMsgTimeUSecs;
+            }
+            prevArmedState     = armed;
+            isArmedAtSeekPoint = armed;
+            lastHeartbeatBytes = bytes;
+        } else if (msg.msgid == MAVLINK_MSG_ID_ATTITUDE) {
+            lastAttitudeBytes = bytes;
+        } else if (msg.msgid == MAVLINK_MSG_ID_MISSION_CURRENT) {
+            lastMissionCurrentBytes = bytes;
+        } else if (msg.msgid == MAVLINK_MSG_ID_VFR_HUD) {
+            lastVfrHudBytes = bytes;
+        } else if (msg.msgid == MAVLINK_MSG_ID_HOME_POSITION) {
+            lastHomePositionBytes = bytes;
+        }
+        currentMsgTimeUSecs = nextTimeUSecs;
+        if (nextTimeUSecs == 0 || nextTimeUSecs >= targetTimeUSecs) {
+            break;
+        }
+    }
+
+    const double flightTimeSecs = (isArmedAtSeekPoint && lastArmedTransitionUSecs > 0)
+        ? static_cast<double>(targetTimeUSecs - lastArmedTransitionUSecs) / 1e6
+        : 0.0;
+
+    emit seekReplayComplete(coords);
+
+    if (!lastHeartbeatBytes.isEmpty()) {
+        emit dataReceived(lastHeartbeatBytes);
+    }
+    if (!lastAttitudeBytes.isEmpty()) {
+        emit dataReceived(lastAttitudeBytes);
+    }
+    if (!lastMissionCurrentBytes.isEmpty()) {
+        emit dataReceived(lastMissionCurrentBytes);
+    }
+    if (!lastHomePositionBytes.isEmpty()) {
+        emit dataReceived(lastHomePositionBytes);
+    }
+    if (!lastVfrHudBytes.isEmpty()) {
+        emit dataReceived(lastVfrHudBytes);
+    }
+    if (!lastPositionBytes.isEmpty()) {
+        emit dataReceived(lastPositionBytes);
+    }
+    emit seekFlightStatsReady(flightTimeSecs, flightDistanceMeters);
+
+    mavlink_reset_channel_status(_mavlinkChannel);
+    if (!_logFile.seek(targetFilePos)) {
+        qCWarning(LogReplayLinkLog) << "Failed to restore file position after seek replay";
+    }
+    _logCurrentTimeUSecs = targetTimeUSecs;
 }
 
 void LogReplayWorker::_resetPlaybackToBeginning()
@@ -468,6 +572,10 @@ LogReplayLink::LogReplayLink(SharedLinkConfigurationPtr &config, QObject *parent
     (void) connect(_worker, &LogReplayWorker::playbackPaused, this, &LogReplayLink::playbackPaused, Qt::QueuedConnection);
     (void) connect(_worker, &LogReplayWorker::playbackPercentCompleteChanged, this, &LogReplayLink::playbackPercentCompleteChanged, Qt::QueuedConnection);
     (void) connect(_worker, &LogReplayWorker::currentLogTimeSecs, this, &LogReplayLink::currentLogTimeSecs, Qt::QueuedConnection);
+    (void) connect(_worker, &LogReplayWorker::seekStarted, this, &LogReplayLink::seekStarted, Qt::QueuedConnection);
+    (void) connect(_worker, &LogReplayWorker::seekReplayComplete,    this, &LogReplayLink::seekReplayComplete,    Qt::QueuedConnection);
+    (void) connect(_worker, &LogReplayWorker::seekFlightStatsReady,  this, &LogReplayLink::seekFlightStatsReady,  Qt::QueuedConnection);
+    (void) connect(_worker, &LogReplayWorker::playbackSpeedChanged, this, &LogReplayLink::playbackSpeedChanged, Qt::QueuedConnection);
     (void) connect(_worker, &LogReplayWorker::disconnected, this, &LogReplayLink::disconnected, Qt::QueuedConnection);
 
     _workerThread->start();

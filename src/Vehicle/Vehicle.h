@@ -890,6 +890,10 @@ private:
     void _writeCsvLine                  ();
     void _flightTimerStart              ();
     void _flightTimerStop               ();
+    void _onSeekFlightStatsReady        (double flightTimeSecs, double flightDistanceMeters);
+    void _onReplayPlaybackPaused        ();
+    void _onReplayPlaybackStarted       ();
+    void _onReplayPlaybackSpeedChanged  (qreal speed);
     void _setMessageInterval            (int messageId, int rate);
     bool setFlightModeCustom            (const QString& flightMode, uint8_t* base_mode, uint32_t* custom_mode);
     QString _formatMavCommand           (MAV_CMD command, float param1);
@@ -989,6 +993,8 @@ private:
 
     QElapsedTimer                   _flightTimer;
     QTimer                          _flightTimeUpdater;
+    double                          _flightTimeOffset = 0.0;
+    double                          _replayPlaybackSpeed = 1.0;
     TrajectoryPoints*               _trajectoryPoints = nullptr;
     std::unique_ptr<QmlObjectListModel> _cameraTriggerPoints;
     //QMap<QString, ADSBVehicle*>     _trafficVehicleMap;
