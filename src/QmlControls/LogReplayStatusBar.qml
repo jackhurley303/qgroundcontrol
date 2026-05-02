@@ -148,21 +148,24 @@ Rectangle {
             height:           ScreenTools.defaultFontPixelHeight * 1.6
             Layout.alignment: Qt.AlignVCenter
 
+            readonly property bool _enabled: _replay !== null && _replay.videoDurationMs > 0
+
             QGCColoredImage {
                 anchors.fill:     parent
                 source:           "/qmlimages/video.svg"
-                color:            videoOffsetPopover.visible ? qgcPal.brandingBlue : qgcPal.text
+                color:            videoOffsetPopover.visible ? qgcPal.brandingBlue
+                                      : (parent._enabled ? qgcPal.text : qgcPal.colorGrey)
                 sourceSize.width: width
             }
 
             MouseArea {
                 anchors.fill: parent
-                cursorShape:  Qt.PointingHandCursor
+                cursorShape:  parent._enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                 onClicked: {
+                    if (!parent._enabled) return
                     if (videoOffsetPopover.visible) {
                         videoOffsetPopover.close()
                     } else {
-                        if (_replay && _replay.isPlaying) _replay.pause()
                         videoOffsetPopover.open()
                     }
                 }
@@ -193,6 +196,7 @@ Rectangle {
         id:          videoOffsetPopover
         modal:       false
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        width:       ScreenTools.defaultFontPixelWidth * 56
 
         // Position above the camera icon — anchored to the parent bar
         x: _root.width - width - _margins * 2
@@ -205,59 +209,9 @@ Rectangle {
             border.width: 1
         }
 
-        contentItem: ColumnLayout {
-            spacing: ScreenTools.defaultFontPixelHeight * 0.4
-            width:   ScreenTools.defaultFontPixelWidth * 26
-
-            QGCLabel {
-                Layout.fillWidth:    true
-                text:                qsTr("Video offset: %1s").arg(_replay ? _replay.videoOffsetSecs.toFixed(1) : "0.0")
-                font.bold:           true
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                height:           1
-                color:            Qt.rgba(1, 1, 1, 0.1)
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing:          ScreenTools.defaultFontPixelWidth * 0.5
-
-                QGCButton {
-                    text:    "◀ -0.5s"
-                    onClicked: if (_replay) _replay.adjustVideoOffset(-0.5)
-                    Layout.fillWidth: true
-                }
-
-                QGCButton {
-                    text:    "+0.5s ▶"
-                    onClicked: if (_replay) _replay.adjustVideoOffset(0.5)
-                    Layout.fillWidth: true
-                }
-            }
-
-            QGCTextField {
-                id:               offsetTextField
-                Layout.fillWidth: true
-                text:             _replay ? _replay.videoOffsetSecs.toFixed(2) : "0.00"
-                inputMethodHints: Qt.ImhFormattedNumbersOnly
-                onEditingFinished: {
-                    var v = parseFloat(text)
-                    if (!isNaN(v) && _replay) _replay.adjustVideoOffset(v - _replay.videoOffsetSecs)
-                }
-                Connections {
-                    target: _replay
-                    enabled: _replay !== null
-                    function onVideoOffsetSecsChanged() {
-                        if (!offsetTextField.activeFocus)
-                            offsetTextField.text = _replay.videoOffsetSecs.toFixed(2)
-                    }
-                }
-            }
-
+        contentItem: VideoOffsetEditor {
+            replay:     _replay
+            controller: controller
         }
     }
 }
