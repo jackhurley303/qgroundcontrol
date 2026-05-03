@@ -16,6 +16,7 @@
 #include "QGCCompression.h"
 #include "QGCCompressionJob.h"
 #include "QGCLoggingCategory.h"
+#include "LogReplayLink.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QDirIterator>
@@ -113,6 +114,10 @@ void PlanMasterController::_activeVehicleChanged(Vehicle* activeVehicle)
         disconnect(_managerVehicle->missionManager(),       nullptr, this, nullptr);
         disconnect(_managerVehicle->geoFenceManager(),      nullptr, this, nullptr);
         disconnect(_managerVehicle->rallyPointManager(),    nullptr, this, nullptr);
+        auto oldLink = _managerVehicle->vehicleLinkManager()->primaryLink().lock();
+        if (auto* replayLink = qobject_cast<LogReplayLink*>(oldLink.get())) {
+            disconnect(replayLink, &LogReplayLink::replayPlanReloadRequested, this, &PlanMasterController::_showPlanFromManagerVehicle);
+        }
     }
 
     bool newOffline = false;
@@ -136,6 +141,10 @@ void PlanMasterController::_activeVehicleChanged(Vehicle* activeVehicle)
         connect(_managerVehicle->missionManager(),      &MissionManager::sendComplete,              this, &PlanMasterController::_sendMissionComplete);
         connect(_managerVehicle->geoFenceManager(),     &GeoFenceManager::sendComplete,             this, &PlanMasterController::_sendGeoFenceComplete);
         connect(_managerVehicle->rallyPointManager(),   &RallyPointManager::sendComplete,           this, &PlanMasterController::_sendRallyPointsComplete);
+        auto newLink = _managerVehicle->vehicleLinkManager()->primaryLink().lock();
+        if (auto* replayLink = qobject_cast<LogReplayLink*>(newLink.get())) {
+            connect(replayLink, &LogReplayLink::replayPlanReloadRequested, this, &PlanMasterController::_showPlanFromManagerVehicle, Qt::UniqueConnection);
+        }
     }
 
     _offline = newOffline;

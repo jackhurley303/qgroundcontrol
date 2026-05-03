@@ -15,6 +15,8 @@
 class QTimer;
 
 Q_DECLARE_METATYPE(QList<mavlink_mission_item_int_t>)
+using MissionItemsByType = QMap<int, QList<mavlink_mission_item_int_t>>;
+Q_DECLARE_METATYPE(MissionItemsByType)
 
 Q_DECLARE_LOGGING_CATEGORY(LogReplayLinkLog)
 
@@ -82,6 +84,9 @@ signals:
     /// Emitted when the tlog contains a complete GCS→vehicle mission upload sequence
     /// (MISSION_COUNT + all MISSION_ITEM_INT from a non-autopilot compid). missionType is MAV_MISSION_TYPE.
     void replayMissionUploaded(int missionType, QList<mavlink_mission_item_int_t> items);
+    /// Emitted after seek (and on restart-from-end) with the last known mission state per type
+    /// at or before the seek point. Types absent from the map had no events — initial plan applies.
+    void replaySeekMissionResolved(QMap<int, QList<mavlink_mission_item_int_t>> resolvedByType);
 
 public slots:
     void setup();
@@ -107,6 +112,12 @@ private:
     void _resetPlaybackToBeginning();
     void _signalCurrentLogTimeSecs();
     void _detectReplayMissionUpload(const mavlink_message_t &msg);
+    void _buildMissionTimeline();
+
+    struct MissionSnapshot {
+        quint64 timeUSecs;
+        QList<mavlink_mission_item_int_t> items;  // empty = cleared
+    };
 
     const LogReplayConfiguration *_logReplayConfig = nullptr;
     QTimer *_readTickTimer = nullptr;
@@ -128,9 +139,12 @@ private:
 
     static constexpr size_t kTimestamp = sizeof(quint64);
 
-    // Download-detection state: buffer vehicle→GCS mission items until full set received
+    // Live playback upload detection state
     QMap<uint8_t, QList<mavlink_mission_item_int_t>> _pendingUploadItems;
     QMap<uint8_t, uint16_t>                          _pendingUploadCount;
+
+    // Pre-scanned timeline of mission state changes, keyed by MAV_MISSION_TYPE
+    QMap<uint8_t, QList<MissionSnapshot>> _missionTimeline;
 };
 
 /*===========================================================================*/
@@ -166,6 +180,11 @@ signals:
     void seekFlightStatsReady(double flightTimeSecs, double flightDistanceMeters);
     void playbackSpeedChanged(qreal speed);
     void replayMissionUploaded(int missionType, QList<mavlink_mission_item_int_t> items);
+    void replaySeekMissionResolved(QMap<int, QList<mavlink_mission_item_int_t>> resolvedByType);
+    void replayPlanReloadRequested();
+
+public slots:
+    void requestPlanReload();
 
 private slots:
     void _writeBytes(const QByteArray &bytes) override { Q_UNUSED(bytes); }

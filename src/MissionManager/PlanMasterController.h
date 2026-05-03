@@ -209,4 +209,6 @@ private:
     bool _userSelectedManualCreation = false;
     QGCCompressionJob* _extractionJob = nullptr;
     QString _extractionOutputDir;
+
+
 };
