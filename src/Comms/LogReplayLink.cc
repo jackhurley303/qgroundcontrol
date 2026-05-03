@@ -12,6 +12,9 @@
 
 QGC_LOGGING_CATEGORY(LogReplayLinkLog, "Comms.LogReplayLink")
 
+static const bool _missionItemListRegistered =
+    []{ qRegisterMetaType<QList<mavlink_mission_item_int_t>>(); return true; }();
+
 /*===========================================================================*/
 
 LogReplayConfiguration::LogReplayConfiguration(const QString &name, QObject *parent)
@@ -230,6 +233,9 @@ void LogReplayWorker::movePlayhead(qreal percentComplete)
         }
     }
 
+    _pendingUploadItems.clear();
+    _pendingUploadCount.clear();
+
     percentComplete = qBound(0., percentComplete, 100.);
     const qreal percentCompleteMult = percentComplete / 100.0;
     const qint64 newFilePos = static_cast<qint64>(percentCompleteMult * static_cast<qreal>(_logFile.size()));
@@ -374,13 +380,70 @@ void LogReplayWorker::_resetPlaybackToBeginning()
     _logCurrentTimeUSecs = _logStartTimeUSecs;
 }
 
+void LogReplayWorker::_detectReplayMissionUpload(const mavlink_message_t& msg)
+{
+    switch (msg.msgid) {
+    case MAVLINK_MSG_ID_MISSION_COUNT: {
+        mavlink_mission_count_t mc{};
+        mavlink_msg_mission_count_decode(&msg, &mc);
+        qCDebug(LogReplayLinkLog) << "MISSION_COUNT sysid=" << msg.sysid << "compid=" << msg.compid
+                                  << "mission_type=" << mc.mission_type << "count=" << mc.count;
+        const uint8_t type = mc.mission_type;
+        if (msg.compid != MAV_COMP_ID_AUTOPILOT1 && mc.count > 0) {
+            _pendingUploadItems[type].clear();
+            _pendingUploadCount[type] = mc.count;
+        } else if (msg.compid != MAV_COMP_ID_AUTOPILOT1 && mc.count == 0) {
+            emit replayMissionUploaded(type, {});
+        }
+        break;
+    }
+    case MAVLINK_MSG_ID_MISSION_ITEM_INT: {
+        mavlink_mission_item_int_t item{};
+        mavlink_msg_mission_item_int_decode(&msg, &item);
+        qCDebug(LogReplayLinkLog) << "MISSION_ITEM_INT sysid=" << msg.sysid << "compid=" << msg.compid
+                                  << "mission_type=" << item.mission_type << "seq=" << item.seq;
+        const uint8_t type = item.mission_type;
+        if (msg.compid != MAV_COMP_ID_AUTOPILOT1 && _pendingUploadCount.contains(type)) {
+            _pendingUploadItems[type].append(item);
+            const int buffered = _pendingUploadItems[type].count();
+            const int expected = static_cast<int>(_pendingUploadCount[type]);
+            if (buffered == expected) {
+                qCDebug(LogReplayLinkLog) << "replayMissionUploaded type=" << type << "count=" << buffered;
+                emit replayMissionUploaded(type, _pendingUploadItems[type]);
+                _pendingUploadItems.remove(type);
+                _pendingUploadCount.remove(type);
+            }
+        }
+        break;
+    }
+    case MAVLINK_MSG_ID_MISSION_ACK: {
+        mavlink_mission_ack_t ack{};
+        mavlink_msg_mission_ack_decode(&msg, &ack);
+        qCDebug(LogReplayLinkLog) << "MISSION_ACK sysid=" << msg.sysid << "compid=" << msg.compid
+                                  << "mission_type=" << ack.mission_type << "result=" << ack.type;
+        break;
+    }
+    case MAVLINK_MSG_ID_MISSION_REQUEST_INT: {
+        mavlink_mission_request_int_t req{};
+        mavlink_msg_mission_request_int_decode(&msg, &req);
+        qCDebug(LogReplayLinkLog) << "MISSION_REQUEST_INT sysid=" << msg.sysid << "compid=" << msg.compid
+                                  << "mission_type=" << req.mission_type << "seq=" << req.seq;
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 void LogReplayWorker::_readNextLogEntry()
 {
     int timeToNextExecutionMSecs = 0;
     while (timeToNextExecutionMSecs < 3) {
         QByteArray bytes;
         bytes.reserve(_logFile.bytesAvailable());
-        const qint64 nextTimeUSecs = _readNextMavlinkMessage(bytes);
+        mavlink_message_t msg{};
+        const qint64 nextTimeUSecs = _readNextMavlinkMessage(bytes, msg);
+        _detectReplayMissionUpload(msg);
         emit dataReceived(bytes);
         emit playbackPercentCompleteChanged((static_cast<float>(_logCurrentTimeUSecs - _logStartTimeUSecs) / static_cast<float>(_logDurationUSecs)) * 100);
 
@@ -577,6 +640,7 @@ LogReplayLink::LogReplayLink(SharedLinkConfigurationPtr &config, QObject *parent
     (void) connect(_worker, &LogReplayWorker::seekFlightStatsReady,  this, &LogReplayLink::seekFlightStatsReady,  Qt::QueuedConnection);
     (void) connect(_worker, &LogReplayWorker::playbackSpeedChanged, this, &LogReplayLink::playbackSpeedChanged, Qt::QueuedConnection);
     (void) connect(_worker, &LogReplayWorker::disconnected, this, &LogReplayLink::disconnected, Qt::QueuedConnection);
+    (void) connect(_worker, &LogReplayWorker::replayMissionUploaded, this, &LogReplayLink::replayMissionUploaded, Qt::QueuedConnection);
 
     _workerThread->start();
 }

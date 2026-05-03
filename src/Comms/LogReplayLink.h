@@ -2,7 +2,7 @@
 
 #include "LinkConfiguration.h"
 #include "LinkInterface.h"
-#include "QGCMAVLinkTypes.h"
+#include "MAVLinkLib.h"
 
 #include <QtCore/QFile>
 #include <QtCore/QList>
@@ -13,6 +13,11 @@
 #include <atomic>
 
 class QTimer;
+
+Q_DECLARE_METATYPE(QList<mavlink_mission_item_int_t>)
+
+Q_DECLARE_LOGGING_CATEGORY(LogReplayLinkLog)
+
 
 /*===========================================================================*/
 
@@ -74,6 +79,9 @@ signals:
     void seekReplayComplete(QList<QGeoCoordinate> coords);
     void seekFlightStatsReady(double flightTimeSecs, double flightDistanceMeters);
     void playbackSpeedChanged(qreal speed);
+    /// Emitted when the tlog contains a complete GCS→vehicle mission upload sequence
+    /// (MISSION_COUNT + all MISSION_ITEM_INT from a non-autopilot compid). missionType is MAV_MISSION_TYPE.
+    void replayMissionUploaded(int missionType, QList<mavlink_mission_item_int_t> items);
 
 public slots:
     void setup();
@@ -98,6 +106,7 @@ private:
     bool _loadLogFile();
     void _resetPlaybackToBeginning();
     void _signalCurrentLogTimeSecs();
+    void _detectReplayMissionUpload(const mavlink_message_t &msg);
 
     const LogReplayConfiguration *_logReplayConfig = nullptr;
     QTimer *_readTickTimer = nullptr;
@@ -118,6 +127,10 @@ private:
     quint64 _logFileSize = 0;
 
     static constexpr size_t kTimestamp = sizeof(quint64);
+
+    // Download-detection state: buffer vehicle→GCS mission items until full set received
+    QMap<uint8_t, QList<mavlink_mission_item_int_t>> _pendingUploadItems;
+    QMap<uint8_t, uint16_t>                          _pendingUploadCount;
 };
 
 /*===========================================================================*/
@@ -152,6 +165,7 @@ signals:
     void seekReplayComplete(QList<QGeoCoordinate> coords);
     void seekFlightStatsReady(double flightTimeSecs, double flightDistanceMeters);
     void playbackSpeedChanged(qreal speed);
+    void replayMissionUploaded(int missionType, QList<mavlink_mission_item_int_t> items);
 
 private slots:
     void _writeBytes(const QByteArray &bytes) override { Q_UNUSED(bytes); }

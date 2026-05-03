@@ -484,6 +484,52 @@ void PlanManager::_clearMissionItems(void)
     _clearAndDeleteMissionItems();
 }
 
+void PlanManager::loadItemsFromReplay(const QList<mavlink_mission_item_int_t>& rawItems)
+{
+    qCDebug(PlanManagerLog) << QStringLiteral("loadItemsFromReplay %1 count:").arg(_planTypeString()) << rawItems.count() << "inProgress:" << inProgress();
+    if (inProgress()) return;
+    _clearAndDeleteMissionItems();
+    const bool sendHome = _vehicle->firmwarePlugin()->sendHomePositionToVehicle();
+    for (const mavlink_mission_item_int_t& raw : rawItems) {
+        _missionItems.append(missionItemFromMavlinkInt(raw, sendHome, this));
+    }
+    qCDebug(PlanManagerLog) << QStringLiteral("loadItemsFromReplay %1 emitting newMissionItemsAvailable, itemCount:").arg(_planTypeString()) << _missionItems.count();
+    emit newMissionItemsAvailable(false);
+}
+
+MissionItem* PlanManager::missionItemFromMavlinkInt(
+    const mavlink_mission_item_int_t& raw, bool sendHomePositionToVehicle, QObject* parent)
+{
+    MAV_FRAME frame = static_cast<MAV_FRAME>(raw.frame);
+    if (frame == MAV_FRAME_GLOBAL_INT) {
+        frame = MAV_FRAME_GLOBAL;
+    } else if (frame == MAV_FRAME_GLOBAL_RELATIVE_ALT_INT) {
+        frame = MAV_FRAME_GLOBAL_RELATIVE_ALT;
+    }
+
+    const double param5 = (raw.frame == MAV_FRAME_MISSION)
+        ? static_cast<double>(raw.x) : static_cast<double>(raw.x) * 1e-7;
+    const double param6 = (raw.frame == MAV_FRAME_MISSION)
+        ? static_cast<double>(raw.y) : static_cast<double>(raw.y) * 1e-7;
+
+    MissionItem* item = new MissionItem(
+        raw.seq,
+        static_cast<MAV_CMD>(raw.command),
+        frame,
+        raw.param1, raw.param2, raw.param3, raw.param4,
+        param5, param6,
+        static_cast<double>(raw.z),
+        raw.autocontinue,
+        raw.current,
+        parent);
+
+    if (item->command() == MAV_CMD_DO_JUMP && !sendHomePositionToVehicle) {
+        item->setParam1(static_cast<int>(item->param1()) + 1);
+    }
+
+    return item;
+}
+
 void PlanManager::_handleMissionRequest(const mavlink_message_t& message)
 {
     MAV_MISSION_TYPE    missionRequestMissionType;

@@ -88,8 +88,6 @@
 
 QGC_LOGGING_CATEGORY(VehicleLog, "Vehicle.Vehicle")
 
-QMap<int, QString> Vehicle::_replayPlanFileRegistry;
-
 #define UPDATE_TIMER 50
 #define DEFAULT_LAT  38.965767f
 #define DEFAULT_LON -120.083923f
@@ -2248,6 +2246,22 @@ int Vehicle::_findMavCommandListEntryIndex(int targetCompId, MAV_CMD command)
     return _mavCmdQueue->findEntryIndex(targetCompId, command);
 }
 
+QMap<int, QString> Vehicle::_replayPlanFileRegistry;
+
+void Vehicle::registerReplayPlanFile(int vehicleId, const QString& planFilePath)
+{
+    if (planFilePath.isEmpty()) {
+        _replayPlanFileRegistry.remove(vehicleId);
+    } else {
+        _replayPlanFileRegistry[vehicleId] = planFilePath;
+    }
+}
+
+QString Vehicle::peekReplayPlanFile(int vehicleId)
+{
+    return _replayPlanFileRegistry.value(vehicleId);
+}
+
 void Vehicle::showCommandAckError(const mavlink_command_ack_t& ack)
 {
     MavCommandQueue::showCommandAckError(ack);
@@ -2761,18 +2775,6 @@ void Vehicle::forceInitialPlanRequestComplete()
     emit initialPlanRequestCompleteChanged(true);
 }
 
-void Vehicle::registerReplayPlanFile(int vehicleId, const QString& planPath)
-{
-    if (planPath.isEmpty())
-        _replayPlanFileRegistry.remove(vehicleId);
-    else
-        _replayPlanFileRegistry[vehicleId] = planPath;
-}
-
-QString Vehicle::peekReplayPlanFile(int vehicleId)
-{
-    return _replayPlanFileRegistry.value(vehicleId);
-}
 
 void Vehicle::sendPlan(QString planFile)
 {
