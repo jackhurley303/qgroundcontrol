@@ -8,14 +8,15 @@ import QGroundControl.Controls
 
 Rectangle {
     id:     _root
-    height: visible ? (rowLayout.height + (_margins * 2)) : 0
+    height: visible ? (Math.max(rowLayout.implicitHeight, loadingRow.implicitHeight) + (_margins * 2)) : 0
     color: qgcPal.window
 
     property real _margins: ScreenTools.defaultFontPixelHeight / 4
     property var _logReplayLink: null
 
     // Plugin-agnostic accessor for the replay extension (null when no plugin is loaded)
-    readonly property var _replay: QGroundControl.pluginManager.replayExtension
+    readonly property var  _replay:          QGroundControl.pluginManager.replayExtension
+    readonly property bool _isLoadingRemote: _replay !== null && _replay.isLoadingRemote
 
     // When the replay extension opens a flight it manages the replay link.
     // Keep controller.link in sync so all existing timeline UI still works.
@@ -69,8 +70,39 @@ Rectangle {
         onPercentCompleteChanged: (percentComplete) => slider.updatePercentComplete(percentComplete)
     }
 
+    // Loading overlay shown while a remote flight's tlog is downloading.
+    RowLayout {
+        id:      loadingRow
+        visible: _isLoadingRemote
+        anchors {
+            margins: _margins
+            top:     parent.top
+            left:    parent.left
+            right:   parent.right
+        }
+        spacing: ScreenTools.defaultFontPixelWidth
+
+        QGCLabel {
+            text: qsTr("Downloading flight… %1%").arg(_replay ? _replay.remoteLoadProgress : 0)
+            font.bold: true
+        }
+
+        ProgressBar {
+            Layout.fillWidth: true
+            from:  0
+            to:    100
+            value: _replay ? _replay.remoteLoadProgress : 0
+        }
+
+        QGCButton {
+            text:      qsTr("Cancel")
+            onClicked: if (_replay) _replay.cancelRemoteLoad()
+        }
+    }
+
     RowLayout {
         id: rowLayout
+        visible: !_isLoadingRemote
         anchors {
             margins: _margins
             top: parent.top
