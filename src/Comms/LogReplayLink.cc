@@ -354,9 +354,6 @@ void LogReplayWorker::movePlayhead(qreal percentComplete)
     if (!lastAttitudeBytes.isEmpty()) {
         emit dataReceived(lastAttitudeBytes);
     }
-    if (!lastMissionCurrentBytes.isEmpty()) {
-        emit dataReceived(lastMissionCurrentBytes);
-    }
     if (!lastHomePositionBytes.isEmpty()) {
         emit dataReceived(lastHomePositionBytes);
     }
@@ -379,6 +376,10 @@ void LogReplayWorker::movePlayhead(qreal percentComplete)
         }
     }
     emit replaySeekMissionResolved(resolved);
+
+    if (!lastMissionCurrentBytes.isEmpty()) {
+        emit dataReceived(lastMissionCurrentBytes);
+    }
 
     mavlink_reset_channel_status(_mavlinkChannel);
     if (!_logFile.seek(targetFilePos)) {
