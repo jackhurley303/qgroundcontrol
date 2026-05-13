@@ -31,6 +31,7 @@ void PluginSettings::registerPlugin(const QString& pluginName)
     // Create metadata for the plugin enabled setting
     FactMetaData* metaData = new FactMetaData(FactMetaData::valueTypeBool, this);
     metaData->setName(pluginName);
+    metaData->setLabel(pluginName);
     metaData->setShortDescription(QString("%1 Enabled").arg(pluginName));
     metaData->setLongDescription(QString("Enable or disable the %1 plugin. Changes take effect immediately.").arg(pluginName));
 

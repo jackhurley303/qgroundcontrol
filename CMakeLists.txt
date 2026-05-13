@@ -360,6 +360,7 @@ if(IS_DIRECTORY "${CMAKE_SOURCE_DIR}/plugins" AND EXISTS "${CMAKE_SOURCE_DIR}/pl
         ${CMAKE_SOURCE_DIR}/src/QmlControls
         ${CMAKE_SOURCE_DIR}/src/Settings
         ${CMAKE_SOURCE_DIR}/src/Utilities
+        ${CMAKE_SOURCE_DIR}/src/Utilities/Logging
         ${CMAKE_SOURCE_DIR}/src/Vehicle
         ${CMAKE_SOURCE_DIR}/src/Vehicle/FactGroups
         ${CMAKE_SOURCE_DIR}/src/FactSystem
@@ -369,6 +370,7 @@ if(IS_DIRECTORY "${CMAKE_SOURCE_DIR}/plugins" AND EXISTS "${CMAKE_SOURCE_DIR}/pl
         ${CMAKE_SOURCE_DIR}/src/Comms
         ${CMAKE_SOURCE_DIR}/src/MAVLink
         ${CMAKE_SOURCE_DIR}/src/MAVLink/LibEvents
+        ${CMAKE_SOURCE_DIR}/src/MAVLink/Signing
         ${CMAKE_SOURCE_DIR}/src/PluginSystem
         ${CMAKE_BINARY_DIR}/src
         ${CMAKE_BINARY_DIR}

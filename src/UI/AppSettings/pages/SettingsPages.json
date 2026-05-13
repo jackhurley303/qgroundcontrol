@@ -87,6 +87,11 @@
             "visible": "QGroundControl.settingsManager.videoSettings.userVisible"
         },
         {
+            "name": "Plugins",
+            "qml": "PluginSettings.qml",
+            "icon": "qrc:/InstrumentValueIcons/plugins.svg"
+        },
+        {
             "divider": true
         },
         {

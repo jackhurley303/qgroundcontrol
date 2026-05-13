@@ -196,9 +196,6 @@ void QGCPluginManager::_loadPlugins()
     _recalcLoggingController();
     emit loadedPluginsChanged();
     qCDebug(QGCPluginManagerLog) << "=== Plugin Loading Complete:" << _loadedPluginInfos.size() << "plugin(s) active ===";
-
-    // Refresh logging category settings now that plugin categories are registered
-    QGCLoggingCategoryManager::instance()->setFilterRulesFromSettings(QString());
 }
 
 void QGCPluginManager::_removeToolMenuItemsForPlugin(const QString& pluginName)

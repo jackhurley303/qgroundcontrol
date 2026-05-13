@@ -656,10 +656,6 @@ void ParameterManager::_startParameterDownload(uint8_t componentId)
         return;
     }
 
-    if (!_initialLoadComplete) {
-        _initialRequestTimeoutTimer.start();
-    }
-
     if (_tryftp && ((componentId == MAV_COMP_ID_ALL) || (componentId == MAV_COMP_ID_AUTOPILOT1))) {
         if (!_initialLoadComplete) {
             _paramRequestListTimer.start();

@@ -1,5 +1,4 @@
 #include "QGCCorePlugin.h"
-#include "QGCLogging.h"
 #include "AppSettings.h"
 #include "MavlinkSettings.h"
 #include "FactMetaData.h"
@@ -383,4 +382,32 @@ void QGCCorePlugin::_setShowAdvancedUI(bool show)
         _showAdvancedUI = show;
         emit showAdvancedUIChanged(show);
     }
+}
+
+QVariantList QGCCorePlugin::complexMissionItemNames(Vehicle *vehicle)
+{
+    auto makeEntry = [](const char* canonical, const QString& translated) {
+        QVariantMap entry;
+        entry[QStringLiteral("canonicalName")]  = QString(canonical);
+        entry[QStringLiteral("translatedName")] = translated;
+        return entry;
+    };
+
+    QVariantList items;
+    items.append(makeEntry(SurveyComplexItem::canonicalName,       SurveyComplexItem::tr(SurveyComplexItem::canonicalName)));
+    items.append(makeEntry(CorridorScanComplexItem::canonicalName, CorridorScanComplexItem::tr(CorridorScanComplexItem::canonicalName)));
+    if (vehicle->multiRotor() || vehicle->vtol()) {
+        items.append(makeEntry(StructureScanComplexItem::canonicalName, StructureScanComplexItem::tr(StructureScanComplexItem::canonicalName)));
+    }
+    return items;
+}
+
+QList<PlanCreator*> QGCCorePlugin::planCreators(PlanMasterController *planMasterController)
+{
+    return {
+        new SurveyPlanCreator(planMasterController),
+        new CorridorScanPlanCreator(planMasterController),
+        new StructureScanPlanCreator(planMasterController),
+        new BlankPlanCreator(planMasterController),
+    };
 }

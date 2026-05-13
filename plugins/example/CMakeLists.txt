@@ -34,6 +34,7 @@ target_include_directories(ExamplePlugin
         ${CMAKE_SOURCE_DIR}/src/QmlControls
         ${CMAKE_SOURCE_DIR}/src/Settings
         ${CMAKE_SOURCE_DIR}/src/Utilities
+        ${CMAKE_SOURCE_DIR}/src/Utilities/Logging
         ${CMAKE_SOURCE_DIR}/src/Vehicle
         ${CMAKE_SOURCE_DIR}/src/FactSystem
 )
