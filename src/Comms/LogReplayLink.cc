@@ -17,6 +17,7 @@ QGC_LOGGING_CATEGORY(LogReplayLinkLog, "Comms.LogReplayLink")
 static const bool _missionItemListRegistered = []{
     qRegisterMetaType<QList<mavlink_mission_item_int_t>>();
     qRegisterMetaType<QMap<int, QList<mavlink_mission_item_int_t>>>();
+    qRegisterMetaType<QList<ParamSeekValue>>();
     return true;
 }();
 
@@ -168,6 +169,7 @@ void LogReplayWorker::play()
         _pendingUploadItems.clear();
         _pendingUploadCount.clear();
         emit replaySeekMissionResolved({});
+        _emitParamSeekReset();
     }
 
     _playbackStartTimeMSecs = static_cast<quint64>(QDateTime::currentMSecsSinceEpoch());
@@ -377,6 +379,32 @@ void LogReplayWorker::movePlayhead(qreal percentComplete)
     }
     emit replaySeekMissionResolved(resolved);
 
+    for (auto sysIt = _paramTimelineByKey.constBegin(); sysIt != _paramTimelineByKey.constEnd(); ++sysIt) {
+        const int sysId = static_cast<int>(sysIt.key());
+        QList<ParamSeekValue> paramResolved;
+        paramResolved.reserve(sysIt.value().size());
+        for (auto keyIt = sysIt.value().constBegin(); keyIt != sysIt.value().constEnd(); ++keyIt) {
+            const auto& entries = keyIt.value();
+            ParamSeekValue sv;
+            sv.compId  = keyIt.key().first;
+            sv.paramId = keyIt.key().second;
+            auto ub = std::upper_bound(entries.begin(), entries.end(), targetTimeUSecs,
+                [](quint64 t, const ParamTimelineEntry& e) { return t < e.timeUSecs; });
+            if (ub != entries.begin()) {
+                --ub;
+                sv.rawValue       = ub->rawValue;
+                sv.paramType      = ub->paramType;
+                sv.resetToInitial = false;
+            } else {
+                sv.resetToInitial = true;
+            }
+            paramResolved.append(sv);
+        }
+        if (!paramResolved.isEmpty()) {
+            emit replaySeekParamResolved(sysId, paramResolved);
+        }
+    }
+
     if (!lastMissionCurrentBytes.isEmpty()) {
         emit dataReceived(lastMissionCurrentBytes);
     }
@@ -468,6 +496,67 @@ void LogReplayWorker::_buildMissionTimeline()
         qCWarning(LogReplayLinkLog) << "Failed to reset log file after building mission timeline";
     }
     mavlink_reset_channel_status(_mavlinkChannel);
+}
+
+void LogReplayWorker::_buildParamTimeline()
+{
+    _paramTimelineByKey.clear();
+
+    if (!_logFile.reset()) return;
+    mavlink_reset_channel_status(_mavlinkChannel);
+
+    // Track the last seen value per (sysId, compId, paramId) to filter out
+    // duplicate PARAM_VALUE messages (e.g. the initial download flood).
+    QMap<uint8_t, QMap<QPair<int,QString>, float>> lastSeen;
+
+    while (!_logFile.atEnd()) {
+        QByteArray bytes;
+        mavlink_message_t msg{};
+        const quint64 timeUSecs = _readNextMavlinkMessage(bytes, msg);
+        if (timeUSecs == 0) break;
+        if (msg.msgid != MAVLINK_MSG_ID_PARAM_VALUE) continue;
+
+        mavlink_param_value_t pv{};
+        mavlink_msg_param_value_decode(&msg, &pv);
+        const QString paramId = QString::fromLatin1(pv.param_id,
+            static_cast<qsizetype>(qstrnlen(pv.param_id, sizeof(pv.param_id))));
+        if (paramId.isEmpty()) continue;
+
+        const QPair<int,QString> key{static_cast<int>(msg.compid), paramId};
+        auto& sysLastSeen = lastSeen[msg.sysid];
+        auto it = sysLastSeen.find(key);
+        if (it != sysLastSeen.end() && it.value() == pv.param_value) {
+            continue;  // unchanged — skip (filters out initial download flood duplicates)
+        }
+        sysLastSeen[key] = pv.param_value;
+
+        _paramTimelineByKey[msg.sysid][key].append(ParamTimelineEntry{timeUSecs, pv.param_value, pv.param_type});
+    }
+
+    for (auto sysIt = _paramTimelineByKey.constBegin(); sysIt != _paramTimelineByKey.constEnd(); ++sysIt) {
+        qCDebug(LogReplayLinkLog) << "_buildParamTimeline: sysId=" << sysIt.key()
+            << "tracked" << sysIt.value().size() << "params with in-flight changes";
+    }
+
+    if (!_logFile.reset()) {
+        qCWarning(LogReplayLinkLog) << "Failed to reset log file after building param timeline";
+    }
+    mavlink_reset_channel_status(_mavlinkChannel);
+}
+
+void LogReplayWorker::_emitParamSeekReset()
+{
+    for (auto sysIt = _paramTimelineByKey.constBegin(); sysIt != _paramTimelineByKey.constEnd(); ++sysIt) {
+        const int sysId = static_cast<int>(sysIt.key());
+        QList<ParamSeekValue> resetList;
+        resetList.reserve(sysIt.value().size());
+        for (auto keyIt = sysIt.value().constBegin(); keyIt != sysIt.value().constEnd(); ++keyIt) {
+            resetList.append(ParamSeekValue{keyIt.key().first, keyIt.key().second, 0.0f, 0, true});
+        }
+        if (!resetList.isEmpty()) {
+            emit replaySeekParamResolved(sysId, resetList);
+        }
+    }
 }
 
 void LogReplayWorker::_detectReplayMissionUpload(const mavlink_message_t& msg)
@@ -622,6 +711,7 @@ bool LogReplayWorker::_loadLogFile()
     emit logFileStats(logDurationSecondsTotal);
 
     _buildMissionTimeline();
+    _buildParamTimeline();
 
     return true;
 }
@@ -755,6 +845,7 @@ LogReplayLink::LogReplayLink(SharedLinkConfigurationPtr &config, QObject *parent
     (void) connect(_worker, &LogReplayWorker::disconnected, this, &LogReplayLink::disconnected, Qt::QueuedConnection);
     (void) connect(_worker, &LogReplayWorker::replayMissionUploaded, this, &LogReplayLink::replayMissionUploaded, Qt::QueuedConnection);
     (void) connect(_worker, &LogReplayWorker::replaySeekMissionResolved, this, &LogReplayLink::replaySeekMissionResolved, Qt::QueuedConnection);
+    (void) connect(_worker, &LogReplayWorker::replaySeekParamResolved, this, &LogReplayLink::replaySeekParamResolved, Qt::QueuedConnection);
 
     _workerThread->start();
 }

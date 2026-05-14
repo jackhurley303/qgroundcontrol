@@ -7,6 +7,9 @@
 #include <QtCore/QFile>
 #include <QtCore/QList>
 #include <QtCore/QLoggingCategory>
+#include <QtCore/QMap>
+#include <QtCore/QPair>
+#include <QtCore/QSet>
 #include <QtPositioning/QGeoCoordinate>
 #include <QtQmlIntegration/QtQmlIntegration>
 
@@ -17,6 +20,18 @@ class QTimer;
 Q_DECLARE_METATYPE(QList<mavlink_mission_item_int_t>)
 using MissionItemsByType = QMap<int, QList<mavlink_mission_item_int_t>>;
 Q_DECLARE_METATYPE(MissionItemsByType)
+
+/// Resolved parameter value emitted by replaySeekParamResolved.
+/// When resetToInitial is true the receiver should revert the parameter to
+/// its params-file initial value; rawValue and paramType are unused in that case.
+struct ParamSeekValue {
+    int     compId         = 0;
+    QString paramId;
+    float   rawValue       = 0.0f;
+    uint8_t paramType      = 0;        ///< MAV_PARAM_TYPE
+    bool    resetToInitial = false;
+};
+Q_DECLARE_METATYPE(QList<ParamSeekValue>)
 
 Q_DECLARE_LOGGING_CATEGORY(LogReplayLinkLog)
 
@@ -87,6 +102,10 @@ signals:
     /// Emitted after seek (and on restart-from-end) with the last known mission state per type
     /// at or before the seek point. Types absent from the map had no events — initial plan applies.
     void replaySeekMissionResolved(QMap<int, QList<mavlink_mission_item_int_t>> resolvedByType);
+    /// Emitted after seek (and on restart-from-end) with the resolved parameter values for
+    /// every parameter that appeared in the tlog. resetToInitial=true means the param should
+    /// be reverted to its params-file value (seek target is before its first recorded change).
+    void replaySeekParamResolved(int sysId, QList<ParamSeekValue> resolved);
 
 public slots:
     void setup();
@@ -113,10 +132,18 @@ private:
     void _signalCurrentLogTimeSecs();
     void _detectReplayMissionUpload(const mavlink_message_t &msg);
     void _buildMissionTimeline();
+    void _buildParamTimeline();
+    void _emitParamSeekReset();
 
     struct MissionSnapshot {
         quint64 timeUSecs;
         QList<mavlink_mission_item_int_t> items;  // empty = cleared
+    };
+
+    struct ParamTimelineEntry {
+        quint64 timeUSecs;
+        float   rawValue;
+        uint8_t paramType;
     };
 
     const LogReplayConfiguration *_logReplayConfig = nullptr;
@@ -145,6 +172,11 @@ private:
 
     // Pre-scanned timeline of mission state changes, keyed by MAV_MISSION_TYPE
     QMap<uint8_t, QList<MissionSnapshot>> _missionTimeline;
+
+    // Pre-scanned timeline of parameter value changes.
+    // Outer key: sysId. Inner key: (compId, paramId). Value: chronologically sorted entries.
+    // Only records actual value changes (initial download flood filtered out).
+    QMap<uint8_t, QMap<QPair<int,QString>, QList<ParamTimelineEntry>>> _paramTimelineByKey;
 };
 
 /*===========================================================================*/
@@ -181,6 +213,7 @@ signals:
     void playbackSpeedChanged(qreal speed);
     void replayMissionUploaded(int missionType, QList<mavlink_mission_item_int_t> items);
     void replaySeekMissionResolved(QMap<int, QList<mavlink_mission_item_int_t>> resolvedByType);
+    void replaySeekParamResolved(int sysId, QList<ParamSeekValue> resolved);
     void replayPlanReloadRequested();
 
 public slots:
