@@ -110,9 +110,3 @@ qt_add_qml_module(AppSettingsModule
     NO_PLUGIN
 )
 
-qt_add_resources(${CMAKE_PROJECT_NAME} appsettings_resources
-    PREFIX "/res"
-    BASE "${CMAKE_SOURCE_DIR}/resources"
-    FILES
-        "${CMAKE_SOURCE_DIR}/resources/pencil.svg"
-)

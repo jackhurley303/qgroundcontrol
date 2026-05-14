@@ -67,13 +67,6 @@ target_sources(${CMAKE_PROJECT_NAME}
 )
 
 # ----------------------------------------------------------------------------
-# GPS/RTK Configuration Resources
-# ----------------------------------------------------------------------------
-qt_add_resources(${CMAKE_PROJECT_NAME} json_gps_drivers
-    PREFIX "/json/Vehicle"
-    FILES GPSRTKFact.json
-)
-
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE GPS_DEFINITIONS_HEADER=<${CMAKE_CURRENT_SOURCE_DIR}/definitions.h>)
 
 target_include_directories(${CMAKE_PROJECT_NAME} SYSTEM PRIVATE ${px4-gpsdrivers_SOURCE_DIR}/src)

@@ -27,22 +27,6 @@ endif()
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-file(GLOB_RECURSE JSON_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/*.json)
-qt_add_resources(${CMAKE_PROJECT_NAME} json_firmaware_plugin_apm
-    PREFIX "/json"
-    FILES
-    ${JSON_FILES}
-)
-
-qt_add_resources(${CMAKE_PROJECT_NAME} firmaware_plugin_apm_resource
-    PREFIX "/FirmwarePlugin/APM"
-    FILES
-        Copter.OfflineEditing.params
-        Plane.OfflineEditing.params
-        Rover.OfflineEditing.params
-        Sub.OfflineEditing.params
-)
-
 #===========================================================================#
 
 CPMAddPackage(
