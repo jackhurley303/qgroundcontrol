@@ -40,6 +40,30 @@ Item {
     readonly property int _layerFence: 2
     readonly property int _layerRally: 3
 
+    // Plan-view plugin panel state — keyed by plugin name
+    property var _planPanelExpanded: ({})
+
+    function _setPlanPanelExpanded(name, val) {
+        var s = Object.assign({}, _planPanelExpanded)
+        s[name] = val
+        _planPanelExpanded = s
+    }
+
+    function _popOutPlanPanel(panelItem, panelRef) {
+        var name   = panelItem.name
+        var loader = panelRef.contentLoader
+        _setPlanPanelExpanded(name, "popped")
+        var win = _windowedPlanPluginPanel.createObject(_root)
+        win.panelTitle    = panelItem.name
+        win.closeCallback = function() {
+            loader.anchors.fill = undefined
+            loader.parent       = panelRef.contentArea
+            _setPlanPanelExpanded(name, false)
+        }
+        loader.parent       = win.contentSlot
+        loader.anchors.fill = win.contentSlot
+    }
+
     onVisibleChanged: {
         if(visible) {
             editorMap.zoomLevel = QGroundControl.flightMapZoom
@@ -507,6 +531,34 @@ Item {
             autoHide: true
         }
 
+        // Plugin button strip — below the left tool strip
+        PlanViewPluginButtonStrip {
+            id:               _planPluginStrip
+            anchors.left:     toolStrip.left
+            anchors.top:      toolStrip.bottom
+            anchors.topMargin: _toolsMargin
+            z:                QGroundControl.zOrderWidgets
+            expandedSet:      _planPanelExpanded
+            onExpandPlugin:   function(idx) {
+                var item = QGroundControl.pluginManager.planViewPanelItems[idx]
+                if (item) _setPlanPanelExpanded(item.name, true)
+            }
+        }
+
+        // One floating panel per plugin
+        Repeater {
+            model: QGroundControl.pluginManager.planViewPanelItems
+            PlanViewPluginPanel {
+                id:                   _thisPlanPanel
+                panelItem:            modelData
+                panelIndex:           index
+                planMasterController: _planMasterController
+                expanded:             _planPanelExpanded[modelData.name] === true
+                onMinimized:          _setPlanPanelExpanded(modelData.name, false)
+                onPoppedOut:          _popOutPlanPanel(modelData, _thisPlanPanel)
+            }
+        }
+
         PlanViewRightPanel {
             id: rightPanel
             anchors.top: parent.top
@@ -745,6 +797,37 @@ Item {
     }
 
         //- ToolStrip ToolStripDropPanel Components
+
+    Component {
+        id: _windowedPlanPluginPanel
+
+        Window {
+            property string panelTitle
+            property var    closeCallback: null
+            property alias  contentSlot: _contentSlot
+
+            title:   panelTitle + qsTr(" (Plan View)")
+            width:   ScreenTools.defaultFontPixelWidth  * 60
+            height:  ScreenTools.defaultFontPixelHeight * 25
+            visible: true
+
+            Rectangle {
+                anchors.fill: parent
+                color:        Qt.rgba(0.08, 0.08, 0.08, 1.0)
+
+                Item {
+                    id:              _contentSlot
+                    anchors.fill:    parent
+                    anchors.margins: ScreenTools.defaultFontPixelWidth
+                }
+            }
+
+            onClosing: {
+                if (closeCallback) closeCallback()
+                destroy()
+            }
+        }
+    }
 
     Component {
         id: patternDropPanel

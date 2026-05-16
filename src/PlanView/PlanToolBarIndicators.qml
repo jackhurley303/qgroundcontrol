@@ -59,12 +59,18 @@ RowLayout {
     function _saveButtonClicked() {
         if (_planMasterController.currentPlanFileName === "") {
             if (_planMasterController.currentPlanFile === "") {
-                // No file and no name typed — open the file dialog
+                // No file and no name typed — open the file dialog regardless of plugin overrides
                 _planMasterController.saveToSelectedFile()
-            } else {
-                // Have a file but name was cleared — save to the existing file
-                _planMasterController.saveToCurrent()
+                return
             }
+        }
+        if (PlanViewActionContext.hasSaveOverride) {
+            PlanViewActionContext.triggerSave(_planMasterController)
+            return
+        }
+        if (_planMasterController.currentPlanFileName === "") {
+            // Have a file but name was cleared — save to the existing file
+            _planMasterController.saveToCurrent()
             return
         }
 

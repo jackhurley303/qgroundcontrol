@@ -78,6 +78,28 @@ public:
     /// Return (-1, -1) to use the framework default (staggered from the right edge).
     virtual QPointF flyViewPanelDefaultPosition() const { return QPointF(-1, -1); }
 
+    /// Returns a QML URL for a plan-view panel component provided by this plugin.
+    /// Return an empty string (default) if the plugin does not provide a plan-view panel.
+    virtual QString planViewPanelUrl() const { return QString(); }
+
+    /// Returns a QML URL for the collapsed dock item shown in the plan-view plugin strip.
+    /// The loaded component fills the strip row and can show icons, badges, etc.
+    /// Return an empty string (default) to use the built-in plain-name label.
+    virtual QString planViewPanelDockUrl() const { return QString(); }
+
+    /// Default width of the plan-view floating panel in units of ScreenTools.defaultFontPixelWidth.
+    /// Return 0 to use the framework default (30 font-width units).
+    virtual double planViewPanelDefaultWidth() const { return 0; }
+
+    /// Default height of the plan-view floating panel in units of ScreenTools.defaultFontPixelHeight.
+    /// Return 0 to use the framework default (15 font-height units).
+    virtual double planViewPanelDefaultHeight() const { return 0; }
+
+    /// Default position of the plan-view floating panel as fractions [0, 1] of the parent size,
+    /// where (0, 0) is the top-left corner and (1, 1) is the bottom-right corner.
+    /// Return (-1, -1) to use the framework default (staggered from the right edge).
+    virtual QPointF planViewPanelDefaultPosition() const { return QPointF(-1, -1); }
+
     /// Returns true if this plugin wants to take exclusive control of telemetry
     /// logging (tlog). When any loaded plugin returns true, MAVLinkProtocol
     /// disables its built-in auto-start/auto-save behaviour and exposes

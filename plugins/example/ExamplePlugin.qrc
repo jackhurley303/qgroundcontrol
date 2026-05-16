@@ -3,7 +3,9 @@
         <file alias="ExamplePluginView.qml">ExamplePluginView.qml</file>
         <file alias="ExampleToolBar.qml">ExampleToolBar.qml</file>
         <file alias="ExampleFlyViewPanel.qml">ExampleFlyViewPanel.qml</file>
-        <file alias="ExampleDockItem.qml">ExampleDockItem.qml</file>
+        <file alias="ExampleFlyViewDockItem.qml">ExampleFlyViewDockItem.qml</file>
+        <file alias="ExamplePlanViewPanel.qml">ExamplePlanViewPanel.qml</file>
+        <file alias="ExamplePlanViewDockItem.qml">ExamplePlanViewDockItem.qml</file>
     </qresource>
     <qresource prefix="/qmlimages">
         <file alias="plugin.svg">images/plugin.svg</file>

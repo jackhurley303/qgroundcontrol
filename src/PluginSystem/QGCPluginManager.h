@@ -37,7 +37,8 @@ class QGCPluginManager : public QObject
     Q_PROPERTY(QVariantList         loadedPlugins    READ loadedPlugins    NOTIFY loadedPluginsChanged)
     Q_PROPERTY(QVariantList         toolMenuItems    READ toolMenuItems    NOTIFY toolMenuItemsChanged)
     Q_PROPERTY(QGCReplayExtension*  replayExtension  READ replayExtension  NOTIFY replayExtensionChanged)
-    Q_PROPERTY(QVariantList         flyViewPanelItems READ flyViewPanelItems NOTIFY flyViewPanelItemsChanged)
+    Q_PROPERTY(QVariantList         flyViewPanelItems  READ flyViewPanelItems  NOTIFY flyViewPanelItemsChanged)
+    Q_PROPERTY(QVariantList         planViewPanelItems READ planViewPanelItems NOTIFY planViewPanelItemsChanged)
 
 public:
     explicit QGCPluginManager(QObject *parent = nullptr);
@@ -66,6 +67,10 @@ public:
     /// Get the list of fly-view panel items from all loaded plugins.
     /// Each item is a QVariantMap with keys: name, panelUrl
     QVariantList flyViewPanelItems() const { return _flyViewPanelItems; }
+
+    /// Get the list of plan-view panel items from all loaded plugins.
+    /// Each item is a QVariantMap with keys: name, panelUrl
+    QVariantList planViewPanelItems() const { return _planViewPanelItems; }
 
     /// Returns true if any active plugin has claimed exclusive control of
     /// telemetry logging via QGCPlugin::controlsTelemetryLogging().
@@ -96,6 +101,9 @@ signals:
     /// Emitted when the fly-view panel items list changes
     void flyViewPanelItemsChanged();
 
+    /// Emitted when the plan-view panel items list changes
+    void planViewPanelItemsChanged();
+
 private:
     void _loadPlugins();
     void _removeToolMenuItemsForPlugin(const QString& pluginName);
@@ -111,6 +119,7 @@ private:
 
     QVariantList _toolMenuItems;           // List of tool menu items (from plugins)
     QVariantList _flyViewPanelItems;       // List of fly-view panel items (from plugins)
+    QVariantList _planViewPanelItems;      // List of plan-view panel items (from plugins)
     QList<PluginInfo> _loadedPluginInfos; // List of loaded plugins with their info
     QGCReplayExtension* _replayExtension = nullptr; // First replay extension found across loaded plugins
     bool _hasLoggingController = false;   // True if any active plugin claims telemetry-logging control

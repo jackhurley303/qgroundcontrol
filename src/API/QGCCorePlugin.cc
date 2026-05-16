@@ -28,6 +28,7 @@
 #include "Vehicle.h"
 #include "BlankPlanCreator.h"
 #include "PlanMasterController.h"
+#include "PlanViewActionContext.h"
 
 #ifdef QGC_CUSTOM_BUILD
 #include CUSTOMHEADER
@@ -285,6 +286,7 @@ QQmlApplicationEngine *QGCCorePlugin::createQmlApplicationEngine(QObject *parent
     QQmlApplicationEngine *const qmlEngine = new QQmlApplicationEngine(parent);
     qmlEngine->addImportPath(QStringLiteral("qrc:/qml"));
     qmlEngine->rootContext()->setContextProperty(QStringLiteral("joystickManager"), JoystickManager::instance());
+    qmlEngine->rootContext()->setContextProperty(QStringLiteral("PlanViewActionContext"), PlanViewActionContext::instance());
     return qmlEngine;
 }
 

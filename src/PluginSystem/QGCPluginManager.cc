@@ -64,8 +64,10 @@ void QGCPluginManager::cleanup()
         emit replayExtensionChanged();
     }
     _flyViewPanelItems.clear();
+    _planViewPanelItems.clear();
     _hasLoggingController = false;
     emit flyViewPanelItemsChanged();
+    emit planViewPanelItemsChanged();
     emit loadedPluginsChanged();
     emit toolMenuItemsChanged();
 }
@@ -175,16 +177,33 @@ void QGCPluginManager::_loadPlugins()
             if (!panelUrl.isEmpty()) {
                 QPointF defaultPos = plugin->flyViewPanelDefaultPosition();
                 QVariantMap panelItem;
-                panelItem["name"]           = pluginName;
-                panelItem["panelUrl"]       = panelUrl;
-                panelItem["dockUrl"]        = plugin->flyViewPanelDockUrl();
-                panelItem["defaultWidth"]   = plugin->flyViewPanelDefaultWidth();
-                panelItem["defaultHeight"]  = plugin->flyViewPanelDefaultHeight();
+                panelItem["name"]             = pluginName;
+                panelItem["panelUrl"]         = panelUrl;
+                panelItem["dockUrl"]          = plugin->flyViewPanelDockUrl();
+                panelItem["defaultWidth"]     = plugin->flyViewPanelDefaultWidth();
+                panelItem["defaultHeight"]    = plugin->flyViewPanelDefaultHeight();
                 panelItem["defaultXFraction"] = defaultPos.x();
                 panelItem["defaultYFraction"] = defaultPos.y();
                 _flyViewPanelItems.append(panelItem);
                 emit flyViewPanelItemsChanged();
                 qCDebug(QGCPluginManagerLog) << "  - Provides fly-view panel:" << panelUrl;
+            }
+
+            // Register plan-view panel item if this plugin provides one
+            QString planPanelUrl = plugin->planViewPanelUrl();
+            if (!planPanelUrl.isEmpty()) {
+                QPointF defaultPos = plugin->planViewPanelDefaultPosition();
+                QVariantMap panelItem;
+                panelItem["name"]             = pluginName;
+                panelItem["panelUrl"]         = planPanelUrl;
+                panelItem["dockUrl"]          = plugin->planViewPanelDockUrl();
+                panelItem["defaultWidth"]     = plugin->planViewPanelDefaultWidth();
+                panelItem["defaultHeight"]    = plugin->planViewPanelDefaultHeight();
+                panelItem["defaultXFraction"] = defaultPos.x();
+                panelItem["defaultYFraction"] = defaultPos.y();
+                _planViewPanelItems.append(panelItem);
+                emit planViewPanelItemsChanged();
+                qCDebug(QGCPluginManagerLog) << "  - Provides plan-view panel:" << planPanelUrl;
             }
         } else {
             // Plugin is disabled, don't load it
@@ -211,12 +230,19 @@ void QGCPluginManager::_removeToolMenuItemsForPlugin(const QString& pluginName)
 
     // Remove fly-view panel item for this plugin
     for (int i = _flyViewPanelItems.size() - 1; i >= 0; --i) {
-        QVariantMap item = _flyViewPanelItems[i].toMap();
-        if (item["name"].toString() == pluginName) {
+        if (_flyViewPanelItems[i].toMap()["name"].toString() == pluginName) {
             _flyViewPanelItems.removeAt(i);
         }
     }
     emit flyViewPanelItemsChanged();
+
+    // Remove plan-view panel item for this plugin
+    for (int i = _planViewPanelItems.size() - 1; i >= 0; --i) {
+        if (_planViewPanelItems[i].toMap()["name"].toString() == pluginName) {
+            _planViewPanelItems.removeAt(i);
+        }
+    }
+    emit planViewPanelItemsChanged();
 }
 
 void QGCPluginManager::unloadPlugin(const QString& pluginName)
@@ -385,6 +411,23 @@ void QGCPluginManager::_addLoadedPlugin(const PluginLoadInfo& loadInfo)
         _flyViewPanelItems.append(panelItem);
         emit flyViewPanelItemsChanged();
         qCDebug(QGCPluginManagerLog) << "Added fly-view panel for plugin:" << pluginName;
+    }
+
+    // Register plan-view panel item if this plugin provides one
+    QString planPanelUrl = plugin->planViewPanelUrl();
+    if (!planPanelUrl.isEmpty()) {
+        QPointF defaultPos = plugin->planViewPanelDefaultPosition();
+        QVariantMap panelItem;
+        panelItem["name"]             = pluginName;
+        panelItem["panelUrl"]         = planPanelUrl;
+        panelItem["dockUrl"]          = plugin->planViewPanelDockUrl();
+        panelItem["defaultWidth"]     = plugin->planViewPanelDefaultWidth();
+        panelItem["defaultHeight"]    = plugin->planViewPanelDefaultHeight();
+        panelItem["defaultXFraction"] = defaultPos.x();
+        panelItem["defaultYFraction"] = defaultPos.y();
+        _planViewPanelItems.append(panelItem);
+        emit planViewPanelItemsChanged();
+        qCDebug(QGCPluginManagerLog) << "Added plan-view panel for plugin:" << pluginName;
     }
 
     _recalcLoggingController();

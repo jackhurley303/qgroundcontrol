@@ -3,7 +3,10 @@
 # Mission planning view, editors, and map visuals
 # ============================================================================
 
-qt_add_library(PlanViewModule STATIC)
+qt_add_library(PlanViewModule STATIC
+    PlanViewActionContext.h
+    PlanViewActionContext.cc
+)
 
 qt_add_qml_module(PlanViewModule
     URI QGroundControl.PlanView
@@ -33,6 +36,8 @@ qt_add_qml_module(PlanViewModule
         PlanToolBarIndicators.qml
         PlanTreeView.qml
         PlanView.qml
+        PlanViewPluginButtonStrip.qml
+        PlanViewPluginPanel.qml
         PlanViewRightPanel.qml
         RallyPointEditorHeader.qml
         RallyPointItemEditor.qml
@@ -56,3 +61,4 @@ qt_add_qml_module(PlanViewModule
     NO_PLUGIN
 )
 
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
