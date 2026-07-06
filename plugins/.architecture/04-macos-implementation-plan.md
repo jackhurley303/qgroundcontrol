@@ -322,9 +322,25 @@ When the table is empty: flip manifest to `tier: "sdk"`, `apiVersion: 2` — QDr
 
 - **Workflow entry:** Stage 1 can run as a `/feature-change` (additive gate beside unchanged linkage). Stages 2–3 are an **`/architecture-change`** (the linkage cutover deletes the old model per D1/D6/D7 — carrying both shapes past Stage 2 is failure). One unit per fresh chat; this document is the grounded blueprint both profiles start from.
 - **Run settings per unit:** most units are Sonnet-fit with `/code-review` as the gate (mechanical moves, CMake, QML page work: U1.4–U1.6, U2.5, U2.7, U3.2). Use **Opus** for the ABI-sensitive design units (U2.1–U2.4 service/vtable decisions), the loader state machine (U1.2/U1.3), and trust logic (U3.3/U3.4).
-- **Spike results ledger** (fill in as spikes run):
-  - S1: _pending_
-  - S2m: _pending_
-  - S3: _pending_
-  - S4: _pending_
-  - S6m matrix: _pending_
+- **Spike results ledger** — all five run **2026-07-06** on Intel x86_64, macOS 26.5.1, Qt 6.10.0, as throwaway harnesses (session scratchpad, deleted). Every exit criterion met; no design changes needed, three implementation notes captured below.
+
+  - **S1 — PASS.** `QPluginLoader::metaData()` returned the full `configure_file`-generated manifest with **zero code execution**: a static-initializer tripwire and a constructor tripwire both stayed silent on `metaData()` and both fired on `instance()`. Fat (x86_64+arm64) dylib works (host slice picked). Wrong-arch-only dylib: `metaData()` returns empty `{}` — the legible "wrong architecture" message comes from `errorString()`, so **U1.2's gate must surface `errorString()` whenever metadata comes back empty**. Envelope keys: `IID`, `className`, `MetaData`, `debug`, `version`, `archlevel`.
+
+  - **S2m — PASS.** A plugin MODULE linking only a trial SDK dylib + Qt (no `dynamic_lookup`; default two-level linking, so any unresolved symbol would have failed the build), carrying **zero LC_RPATHs of its own**, loaded from `~/Library/Application Support/…/plugins` into a bundle-geometry host: `@rpath/libTrialSdk.2.dylib` resolved via the **main executable's** `LC_RPATH @executable_path/../Frameworks` — even in a host variant that did not itself link the SDK. Negative control (SDK removed from Frameworks): clean, legible dlopen error through `QPluginLoader::errorString()`. Hidden visibility + export macro confined the SDK's export surface to exactly the API (`nm -gU`); plugin undefineds were SDK/Qt/system only. **Plugin authors need zero rpath configuration; D3's host-provided-dylib rule confirmed.**
+
+  - **S3 — PASS, and the negative control is vivid.** A frozen plugin binary survived: d-pointer `Private` layout shifted (fields prepended), SDK impl changed, host-internal class gained a vtable + members — output showed the old binary calling the new SDK impl. Negative control: adding **one** virtual to the shipped base class → frozen plugin **SIGSEGV (exit 139) with zero output, no load error** — the silent vtable corruption 01 §3.1 predicted. Validates the append-only rule, the golden-plugin CI (Stage 5), and the crash sentinel (U3.4) as load-bearing. The real-QGC leg (plugin@commit-A vs host@commit-B) re-runs after U2.4 as planned.
+
+  - **S4 — PASS, no import-path adjustments needed.** A package dir (manifest + QML + asset, **no binary**) consumed manifest-first: panel URL resolved package-relative to a `file://` document that loaded READY; `import QGroundControl` (a compiled-in `qt_add_qml_module`, QGC's exact registration style) resolved from the file-origin document; the C++ singleton's property + invokable evaluated correctly; a QML component from inside the module instantiated; a package-relative `Image` loaded; and the panel **rendered** offscreen (300×200 grab, background pixel exactly `#4682b4`). The spike table's fallback (per-package import paths) was not needed.
+
+  - **S6m matrix — measured** (Intel; arm64 noted where it differs):
+
+    | Host executable signature | Plugin state | Result |
+    |---|---|---|
+    | ad-hoc + hardened runtime, **no entitlement** | — | **Fails at launch**: dyld rejects the app's *own* ad-hoc SDK dylib and re-signed QtCore copy — "different Team IDs" (ad-hoc = no team, so nothing non-Apple ever matches) |
+    | ad-hoc + runtime + `disable-library-validation` | ad-hoc | **Loads** |
+    | same | unsigned | **Loads** (Intel leniency; arm64 requires at least ad-hoc) |
+    | same | ad-hoc + quarantine xattr | **Blocked** — "library load disallowed by system policy" (Gatekeeper), clean `errorString()`, plus the user-facing "could not verify … malware" dialog |
+    | unsigned host (dev loop) | quarantined | **Blocked** — quarantine gates independently of host signing |
+    | entitled host | quarantine **stripped** (`removexattr`) | **Loads** |
+
+    Consequences: **D9/U3.5 is mandatory, not belt-and-braces** — a hardened-runtime build without the entitlement can't load *any* non-same-team library, which is also why SignMacBundle's re-sign-everything approach works today and why the release entitlements change is the single gate for third-party plugins. The U3.2 in-process-unzip + consent-gated quarantine strip is required for any plugin dylib that arrived via browser, on every host signing configuration. Not measured (needs real Developer ID certs): same-team plugin under a no-entitlement host — fold into U3.5's verify step.
