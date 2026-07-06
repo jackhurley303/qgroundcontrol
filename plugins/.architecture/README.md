@@ -21,6 +21,7 @@ Three changes convert it into a true runtime plugin system:
 | [01-current-state.md](01-current-state.md) | Inventory of everything implemented: components, extension points, build/link model, load flow, per-platform status — plus specific defects found during review |
 | [02-target-architecture.md](02-target-architecture.md) | What should be implemented: lessons taken from VS Code and ATAK, design principles, the tier model, manifest schema, SDK design rules, per-platform distribution |
 | [03-implementation-plan.md](03-implementation-plan.md) | How to implement it: five phases, concrete file-level steps, the upstream PR series, migration path for the example and QDrive plugins, risks and spikes |
+| [04-macos-implementation-plan.md](04-macos-implementation-plan.md) | Detailed macOS execution plan: platform mechanics (dyld/rpath, hardened runtime, Gatekeeper), locked design decisions, spikes, and commit-sized units for phases 0–3 with tests. Windows/Android deferred |
 
 ## How to read this if you only have five minutes
 

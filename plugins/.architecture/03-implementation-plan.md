@@ -1,5 +1,7 @@
 # Implementation Plan — How to Get There
 
+> **Execution detail:** the macOS build-out of phases 0–3 is decomposed into commit-sized units in [04-macos-implementation-plan.md](04-macos-implementation-plan.md) — start there when executing. This document remains the platform-spanning overview and upstream-PR map.
+
 Five phases, ordered so each ships standalone value, keeps QDrive working throughout, and maps onto a reviewable upstream PR series. Risk is front-loaded into spikes (phase 0). Phases 1–2 are the substance; 3–5 extend distribution and trust.
 
 When execution starts, run it through the **`/architecture-change`** workflow (phases 2's SDK cutover reshapes the existing linkage model and deletes the old one); phase 1 alone could ship as a `/feature-change`.
