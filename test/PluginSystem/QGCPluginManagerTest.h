@@ -16,4 +16,5 @@ private slots:
     void _setPluginEnabledPersistsAndReconciles_test();
     void _reloadUnknownId_test();
     void _reloadKeepsIdentityOnFailedInspect_test();
+    void _knownPluginsReflectsRecords_test();
 };

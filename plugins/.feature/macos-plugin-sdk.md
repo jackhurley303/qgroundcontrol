@@ -27,15 +27,19 @@
   - API: `unloadPlugin`/`reloadPlugin(name)` → `setPluginEnabled(id, bool)` (writes Fact + reconciles activation, idempotent/reentrancy-safe) + `reloadPlugin(id)` (stored path only, scan fallback deleted; refuses id-change-on-disk to keep settings keys coherent). QML page minimally updated (full revamp = U1.4). Contribution maps carry `pluginId` (identity) + `name` (display, from manifest).
   - Tests: `test/PluginSystem/QGCPluginManagerTest` (9 cases; fixtures use nonexistent paths so wrongful activation is detectable as Failed-instead-of-Disabled). Full Unit suite green except 3 pre-existing keychain-timeout tests (environmental). `/code-review` high: 7 findings — 4 fixed (reload id-drift, name-keyed default, unsorted scan, static loader), 3 plausible-skipped (latent record-pointer reentrancy; same-display-name QML panel-key collision (pre-existing, U2.2 reworks consumption); stale Fact label after same-id reload (U1.4 reads names from records)).
 
-- U1.4–U1.6: not started.
+- **U1.4 — Settings page shows the contract** — DONE (2026-07-10).
+  - `QGCPluginManager` gained `knownPlugins()` (`Q_PROPERTY`, NOTIFY reuses `loadedPluginsChanged` — every `_records` mutation site already emits it) returning every record's id/name/version/vendor/description/state (raw enum name, for QML color-coding)/statusText (composed human line: "Active", "Disabled", "Incompatible: <reason>", "Failed to load: <reason>", "Quarantined: <reason>").
+  - `PluginSettings.qml` Repeater now iterates `knownPlugins` instead of `registeredPluginIds`: each row shows name/version/vendor (read from the record, not `fact.label`) + the enable toggle + a colored status line beneath (green/red/default by state). Absorbed both U1.3 review leftovers: display name no longer goes stale after a reload, and Incompatible/Failed rows now show why they aren't running instead of just an ambiguous toggle. Empty-state check switched from `loadedPlugins` to `knownPlugins`.
+  - Tests: `_knownPluginsReflectsRecords_test` added to `QGCPluginManagerTest` (Active + Incompatible fixtures, verifies map shape and composed statusText). Full suite green except the 3 pre-existing keychain-timeout tests (environmental, same as U1.3). `/code-review low`: no findings.
+  - Next: U1.5 (loader hygiene + docs truth) in a fresh chat.
+
+- U1.5–U1.6: not started.
 
 ### Stage 2–5
 
-Not started — blocked on Stage 1 completing (U1.4–U1.6).
+Not started — blocked on Stage 1 completing (U1.5–U1.6).
 
-## Notes for the next unit (U1.4)
+## Notes for the next unit (U1.5)
 
-- U1.4 = settings page consumes a richer model from `QGCPluginManager::knownPlugins()` (`QVariantList` of id/name/version/vendor/description/state/reason) — **that method does not exist yet**; U1.3 kept the legacy `loadedPlugins()` shape. Derive it from `_records` (manifest + `PluginState` + `errorString` are all there).
-- Page: per-plugin row = name + version + vendor, toggle, status line ("Active", "Disabled", "Incompatible: needs QGC ≥ 5.1", "Failed to load: <dlopen error>"). Verify = screenshot loop (build + deploy, `.screenshots/`).
-- Two U1.3 review leftovers U1.4 naturally absorbs: display name should come from the record (not the Fact label, which can go stale on reload), and Incompatible/Failed rows need their reason shown (the toggle alone looks like "on" for a plugin that never runs).
-- Run settings for the U1.4 chat: Sonnet, thinking off is fine (QML page work; per plan §11) — escalate only if manager model work turns out deeper than expected.
+- U1.5 = loader hygiene + docs truth (plan §4, U1.5): warn on second replay-extension registration (first still wins); rewrite `plugins/README.md` and `src/PluginSystem/README.md` for manifest requirement, real linkage model, actual init-order semantics, tier table as roadmap. No tests (docs + one `qCWarning`).
+- Run settings: Sonnet, thinking off (docs + one warning; per plan §11).

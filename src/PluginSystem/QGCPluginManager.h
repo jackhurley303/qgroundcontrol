@@ -34,6 +34,7 @@ class QGCPluginManager : public QObject
     Q_OBJECT
     QML_UNCREATABLE("")
     Q_PROPERTY(QVariantList         loadedPlugins    READ loadedPlugins    NOTIFY loadedPluginsChanged)
+    Q_PROPERTY(QVariantList         knownPlugins     READ knownPlugins     NOTIFY loadedPluginsChanged)
     Q_PROPERTY(QVariantList         toolMenuItems    READ toolMenuItems    NOTIFY toolMenuItemsChanged)
     Q_PROPERTY(QGCReplayExtension*  replayExtension  READ replayExtension  NOTIFY replayExtensionChanged)
     Q_PROPERTY(QVariantList         flyViewPanelItems  READ flyViewPanelItems  NOTIFY flyViewPanelItemsChanged)
@@ -55,6 +56,13 @@ public:
     /// Get the list of loaded plugins (for QML)
     /// @return A list of loaded plugin info as QVariantList
     QVariantList loadedPlugins() const;
+
+    /// Get every discovered plugin, in any state, for QML display (e.g. the Plugins
+    /// settings page). Each item is a QVariantMap with keys: id, name, version, vendor,
+    /// description, state (raw PluginState name, for UI color-coding), statusText
+    /// (human-readable status line).
+    /// @return A list of known plugin info as QVariantList
+    QVariantList knownPlugins() const;
 
     /// Get the list of tool menu items from all loaded plugins
     /// @return A list of tool menu items
@@ -114,6 +122,7 @@ private:
     void _recalcReplayExtension();
     void _recalcLoggingController();
     PluginLoadInfo* _findRecord(const QString& pluginId);
+    QString _statusText(const PluginLoadInfo& record) const;
 
     QVariantList _toolMenuItems;           // List of tool menu items (from plugins)
     QVariantList _flyViewPanelItems;       // List of fly-view panel items (from plugins)

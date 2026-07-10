@@ -203,4 +203,37 @@ void QGCPluginManagerTest::_reloadKeepsIdentityOnFailedInspect_test()
     QVERIFY(manager._findRecord(id) != nullptr);
 }
 
+void QGCPluginManagerTest::_knownPluginsReflectsRecords_test()
+{
+    const QString activeId = QStringLiteral("org.test.active");
+    const QString incompatibleId = QStringLiteral("org.test.knownincompatible");
+
+    PluginLoadInfo activeFixture = discoveredFixture(activeId, QStringLiteral("Active Plugin"));
+    activeFixture.state = PluginState::Active;
+    activeFixture.manifest.description = QStringLiteral("Does things");
+
+    PluginLoadInfo incompatibleFixture = discoveredFixture(incompatibleId, QStringLiteral("Incompatible Plugin"));
+    incompatibleFixture.state = PluginState::Incompatible;
+    incompatibleFixture.errorString = QStringLiteral("requires host version >= 9.9");
+
+    QGCPluginManager manager;
+    manager._records = {activeFixture, incompatibleFixture};
+
+    const QVariantList known = manager.knownPlugins();
+    QCOMPARE(known.size(), 2);
+
+    const QVariantMap activeInfo = known[0].toMap();
+    QCOMPARE(activeInfo["id"].toString(), activeId);
+    QCOMPARE(activeInfo["name"].toString(), QStringLiteral("Active Plugin"));
+    QCOMPARE(activeInfo["version"].toString(), QStringLiteral("1.0.0"));
+    QCOMPARE(activeInfo["vendor"].toString(), QStringLiteral("Test Org"));
+    QCOMPARE(activeInfo["description"].toString(), QStringLiteral("Does things"));
+    QCOMPARE(activeInfo["state"].toString(), QStringLiteral("Active"));
+    QCOMPARE(activeInfo["statusText"].toString(), QStringLiteral("Active"));
+
+    const QVariantMap incompatibleInfo = known[1].toMap();
+    QCOMPARE(incompatibleInfo["state"].toString(), QStringLiteral("Incompatible"));
+    QVERIFY(incompatibleInfo["statusText"].toString().contains(QStringLiteral("requires host version >= 9.9")));
+}
+
 UT_REGISTER_TEST(QGCPluginManagerTest, TestLabel::Unit)

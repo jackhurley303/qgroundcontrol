@@ -19,6 +19,29 @@
 
 QGC_LOGGING_CATEGORY(QGCPluginManagerLog, "PluginSystem.QGCPluginManager");
 
+namespace {
+
+QString pluginStateName(PluginState state)
+{
+    switch (state) {
+    case PluginState::Discovered:
+        return QStringLiteral("Discovered");
+    case PluginState::Incompatible:
+        return QStringLiteral("Incompatible");
+    case PluginState::Disabled:
+        return QStringLiteral("Disabled");
+    case PluginState::Active:
+        return QStringLiteral("Active");
+    case PluginState::Failed:
+        return QStringLiteral("Failed");
+    case PluginState::Quarantined:
+        return QStringLiteral("Quarantined");
+    }
+    return QStringLiteral("Failed");
+}
+
+} // namespace
+
 Q_APPLICATION_STATIC(QGCPluginManager, _qgcPluginManagerInstance);
 
 QGCPluginManager::QGCPluginManager(QObject *parent)
@@ -112,6 +135,42 @@ QVariantList QGCPluginManager::loadedPlugins() const
         }
     }
     return pluginList;
+}
+
+QVariantList QGCPluginManager::knownPlugins() const
+{
+    QVariantList pluginList;
+    for (const PluginLoadInfo& record : _records) {
+        QVariantMap info;
+        info["id"]          = record.manifest.id;
+        info["name"]        = record.manifest.name;
+        info["version"]     = record.manifest.version.toString();
+        info["vendor"]      = record.manifest.vendor;
+        info["description"] = record.manifest.description;
+        info["state"]       = pluginStateName(record.state);
+        info["statusText"]  = _statusText(record);
+        pluginList.append(info);
+    }
+    return pluginList;
+}
+
+QString QGCPluginManager::_statusText(const PluginLoadInfo& record) const
+{
+    switch (record.state) {
+    case PluginState::Active:
+        return tr("Active");
+    case PluginState::Disabled:
+        return tr("Disabled");
+    case PluginState::Incompatible:
+        return tr("Incompatible: %1").arg(record.errorString);
+    case PluginState::Failed:
+        return tr("Failed to load: %1").arg(record.errorString);
+    case PluginState::Quarantined:
+        return tr("Quarantined: %1").arg(record.errorString);
+    case PluginState::Discovered:
+        return tr("Pending");
+    }
+    return tr("Unknown");
 }
 
 void QGCPluginManager::addToolMenuItem(const QVariantMap& item)
