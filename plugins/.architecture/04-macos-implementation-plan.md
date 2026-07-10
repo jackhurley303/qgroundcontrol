@@ -4,6 +4,10 @@
 **Scope:** Execution-level plan for building the target architecture ([02-target-architecture.md](02-target-architecture.md)) on **macOS only**. Windows and Android are deferred (§10) but every decision here is checked against "does this paint Windows/Android into a corner" — none does.
 **Relationship to [03-implementation-plan.md](03-implementation-plan.md):** 03 remains the platform-spanning overview and upstream-PR map. This document decomposes its Phases 0–3 (+ the macOS slice of Phase 5) into commit-sized units with concrete files, mechanisms, and tests, grounded in the code as of `plugin-infrastructure-with-qdrive`.
 
+## Status — current position
+
+Tracked in [plugins/.feature/macos-plugin-sdk.md](../.feature/macos-plugin-sdk.md) (per-unit ledger + notes for the next unit). Spike results live in §11 below.
+
 ## Definition of done (macOS)
 
 1. A **Tier B** plugin built on a *different machine* against the published SDK zip + Qt 6.10.3 — never cloning QGC — loads into a QGC built at a *different commit*, and all its contributions work.

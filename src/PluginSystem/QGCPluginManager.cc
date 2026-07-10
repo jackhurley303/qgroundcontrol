@@ -9,10 +9,10 @@
 
 #include "QGCPluginManager.h"
 #include "QGCPlugin.h"
-#include "QGCPluginLoader.h"
 #include "QGCLoggingCategory.h"
 #include "SettingsManager.h"
 #include "PluginSettings.h"
+#include "Fact.h"
 
 #include <QtCore/QApplicationStatic>
 #include <QtQml/qqml.h>
@@ -51,13 +51,13 @@ void QGCPluginManager::init()
 void QGCPluginManager::cleanup()
 {
     // Clean up plugins
-    for (const PluginInfo& info : _loadedPluginInfos) {
-        if (info.plugin) {
-            info.plugin->cleanup();
-            delete info.plugin;
+    for (const PluginLoadInfo& record : _records) {
+        if (record.plugin) {
+            record.plugin->cleanup();
+            delete record.plugin;
         }
     }
-    _loadedPluginInfos.clear();
+    _records.clear();
     _toolMenuItems.clear();
     if (_replayExtension) {
         _replayExtension = nullptr;
@@ -75,8 +75,8 @@ void QGCPluginManager::cleanup()
 void QGCPluginManager::_recalcLoggingController()
 {
     bool found = false;
-    for (const PluginInfo& pi : _loadedPluginInfos) {
-        if (pi.plugin && pi.plugin->controlsTelemetryLogging()) {
+    for (const PluginLoadInfo& record : _records) {
+        if (record.plugin && record.plugin->controlsTelemetryLogging()) {
             found = true;
             break;
         }
@@ -84,13 +84,30 @@ void QGCPluginManager::_recalcLoggingController()
     _hasLoggingController = found;
 }
 
+void QGCPluginManager::_recalcReplayExtension()
+{
+    QGCReplayExtension* newExt = nullptr;
+    for (const PluginLoadInfo& record : _records) {
+        if (record.plugin) {
+            newExt = record.plugin->replayExtension();
+            if (newExt) {
+                break;
+            }
+        }
+    }
+    if (_replayExtension != newExt) {
+        _replayExtension = newExt;
+        emit replayExtensionChanged();
+    }
+}
+
 QVariantList QGCPluginManager::loadedPlugins() const
 {
     QVariantList pluginList;
-    for (const PluginInfo& info : _loadedPluginInfos) {
-        if (info.plugin) {
+    for (const PluginLoadInfo& record : _records) {
+        if (record.state == PluginState::Active) {
             QVariantMap pluginInfo;
-            pluginInfo["name"] = info.name;
+            pluginInfo["name"] = record.manifest.name;
             pluginList.append(pluginInfo);
         }
     }
@@ -103,279 +120,85 @@ void QGCPluginManager::addToolMenuItem(const QVariantMap& item)
     emit toolMenuItemsChanged();
 }
 
+PluginLoadInfo* QGCPluginManager::_findRecord(const QString& pluginId)
+{
+    for (PluginLoadInfo& record : _records) {
+        if (record.manifest.id == pluginId) {
+            return &record;
+        }
+    }
+    return nullptr;
+}
+
 void QGCPluginManager::_loadPlugins()
 {
     qCDebug(QGCPluginManagerLog) << "=== Plugin Loading Start ===";
 
-    QGCPluginLoader loader(this);
-
-    // Get default plugin search paths
-    QStringList pluginPaths = QGCPluginLoader::defaultPluginPaths();
-    
+    const QStringList pluginPaths = QGCPluginLoader::defaultPluginPaths();
     qCDebug(QGCPluginManagerLog) << "Plugin search paths:" << pluginPaths;
 
-    // Load plugins from all search paths
-    loader.loadPlugins(pluginPaths);
+    _processInspected(QGCPluginLoader::inspectDirectories(pluginPaths));
 
-    // Store loaded plugins with their info
-    QList<PluginLoadInfo> pluginInfos = loader.loadedPluginInfos();
-    
-    qCDebug(QGCPluginManagerLog) << "Loaded" << pluginInfos.size() << "plugin(s)";
+    qCDebug(QGCPluginManagerLog) << "=== Plugin Loading Complete:" << loadedPlugins().size() << "plugin(s) active ===";
+}
 
-    // Get plugin settings to register plugins
+void QGCPluginManager::_processInspected(const QList<PluginLoadInfo>& infos)
+{
     PluginSettings* pluginSettings = SettingsManager::instance()->pluginSettings();
 
-    // Initialize all plugins and add their tool menu items
-    for (const PluginLoadInfo& loadInfo : pluginInfos) {
-        QGCPlugin* plugin = loadInfo.plugin;
-        QString pluginName = plugin->name();
-        qCDebug(QGCPluginManagerLog) << "Processing plugin:" << pluginName << "from" << loadInfo.filePath;
-        
-        // Register plugin with settings system using name as identifier
-        pluginSettings->registerPlugin(pluginName);
-        
-        // Check if plugin is enabled
-        bool isEnabled = pluginSettings->isPluginEnabled(pluginName);
-        qCDebug(QGCPluginManagerLog) << "  - Enabled:" << isEnabled;
-        
-        if (isEnabled) {
-            // Create plugin info structure
-            PluginInfo info;
-            info.plugin = plugin;
-            info.name = pluginName;
-            info.path = loadInfo.filePath;  // Store the actual file path
-            
-            _loadedPluginInfos.append(info);
-            
-            // Initialize the plugin
-            plugin->init();
+    for (const PluginLoadInfo& info : infos) {
+        PluginLoadInfo record = info;
+        const QString pluginId = record.manifest.id;
+        qCDebug(QGCPluginManagerLog) << "Processing plugin:" << pluginId << "from" << record.filePath;
 
-            // Register replay extension if this plugin provides one and none is set yet
-            if (!_replayExtension) {
-                QGCReplayExtension* ext = plugin->replayExtension();
-                if (ext) {
-                    _replayExtension = ext;
-                    emit replayExtensionChanged();
-                }
-            }
+        if (!pluginId.isEmpty() && _findRecord(pluginId)) {
+            record.state = PluginState::Failed;
+            record.errorString = QStringLiteral("duplicate plugin id: %1").arg(pluginId);
+            qCWarning(QGCPluginManagerLog) << "  -" << record.errorString << "(" << record.filePath << ")";
+            _records.append(record);
+            continue;
+        }
 
-            // Get plugin's tool menu item and add it
-            QVariantMap menuItem = plugin->toolMenuItem();
-            if (!menuItem.isEmpty()) {
-                qCDebug(QGCPluginManagerLog) << "  - Provides menu item:" << menuItem["title"];
+        // Failed records without a readable manifest have no id to key settings by
+        if (!pluginId.isEmpty()) {
+            // Interim default until the trust model lands: the Example plugin is
+            // disabled by default, everything else is enabled
+            const bool defaultEnabled = (pluginId != QStringLiteral("org.qgroundcontrol.example"));
+            pluginSettings->registerPlugin(pluginId, record.manifest.name, defaultEnabled);
+        }
 
-                // Store the plugin name with the menu item so we can check enabled state dynamically
-                menuItem["pluginName"] = pluginName;
-
-                addToolMenuItem(menuItem);
+        if (record.state == PluginState::Discovered) {
+            if (pluginSettings->isPluginEnabled(pluginId)) {
+                _activateRecord(record);
             } else {
-                qCDebug(QGCPluginManagerLog) << "  - No menu item provided";
-            }
-
-            // Register fly-view panel item if this plugin provides one
-            QString panelUrl = plugin->flyViewPanelUrl();
-            if (!panelUrl.isEmpty()) {
-                QPointF defaultPos = plugin->flyViewPanelDefaultPosition();
-                QVariantMap panelItem;
-                panelItem["name"]             = pluginName;
-                panelItem["panelUrl"]         = panelUrl;
-                panelItem["dockUrl"]          = plugin->flyViewPanelDockUrl();
-                panelItem["defaultWidth"]     = plugin->flyViewPanelDefaultWidth();
-                panelItem["defaultHeight"]    = plugin->flyViewPanelDefaultHeight();
-                panelItem["defaultXFraction"] = defaultPos.x();
-                panelItem["defaultYFraction"] = defaultPos.y();
-                _flyViewPanelItems.append(panelItem);
-                emit flyViewPanelItemsChanged();
-                qCDebug(QGCPluginManagerLog) << "  - Provides fly-view panel:" << panelUrl;
-            }
-
-            // Register plan-view panel item if this plugin provides one
-            QString planPanelUrl = plugin->planViewPanelUrl();
-            if (!planPanelUrl.isEmpty()) {
-                QPointF defaultPos = plugin->planViewPanelDefaultPosition();
-                QVariantMap panelItem;
-                panelItem["name"]             = pluginName;
-                panelItem["panelUrl"]         = planPanelUrl;
-                panelItem["dockUrl"]          = plugin->planViewPanelDockUrl();
-                panelItem["defaultWidth"]     = plugin->planViewPanelDefaultWidth();
-                panelItem["defaultHeight"]    = plugin->planViewPanelDefaultHeight();
-                panelItem["defaultXFraction"] = defaultPos.x();
-                panelItem["defaultYFraction"] = defaultPos.y();
-                _planViewPanelItems.append(panelItem);
-                emit planViewPanelItemsChanged();
-                qCDebug(QGCPluginManagerLog) << "  - Provides plan-view panel:" << planPanelUrl;
+                // Never activated: the plugin's code does not run
+                qCDebug(QGCPluginManagerLog) << "  - Skipping disabled plugin";
+                record.state = PluginState::Disabled;
             }
         } else {
-            // Plugin is disabled, don't load it
-            qCDebug(QGCPluginManagerLog) << "  - Skipping disabled plugin";
-            delete plugin; // Clean up since we're not loading it
+            qCWarning(QGCPluginManagerLog) << "  - Not activating:" << record.errorString;
         }
+
+        _records.append(record);
     }
 
     _recalcLoggingController();
     emit loadedPluginsChanged();
-    qCDebug(QGCPluginManagerLog) << "=== Plugin Loading Complete:" << _loadedPluginInfos.size() << "plugin(s) active ===";
 }
 
-void QGCPluginManager::_removeToolMenuItemsForPlugin(const QString& pluginName)
+void QGCPluginManager::_activateRecord(PluginLoadInfo& record)
 {
-    // Remove all tool menu items for this plugin
-    for (int i = _toolMenuItems.size() - 1; i >= 0; --i) {
-        QVariantMap item = _toolMenuItems[i].toMap();
-        if (item["pluginName"].toString() == pluginName) {
-            _toolMenuItems.removeAt(i);
-        }
-    }
-    emit toolMenuItemsChanged();
+    QGCPluginLoader::activate(record);
 
-    // Remove fly-view panel item for this plugin
-    for (int i = _flyViewPanelItems.size() - 1; i >= 0; --i) {
-        if (_flyViewPanelItems[i].toMap()["name"].toString() == pluginName) {
-            _flyViewPanelItems.removeAt(i);
-        }
+    if (record.state != PluginState::Active) {
+        qCWarning(QGCPluginManagerLog) << "Failed to activate plugin:" << record.filePath << "-" << record.errorString;
+        return;
     }
-    emit flyViewPanelItemsChanged();
 
-    // Remove plan-view panel item for this plugin
-    for (int i = _planViewPanelItems.size() - 1; i >= 0; --i) {
-        if (_planViewPanelItems[i].toMap()["name"].toString() == pluginName) {
-            _planViewPanelItems.removeAt(i);
-        }
-    }
-    emit planViewPanelItemsChanged();
-}
+    QGCPlugin* plugin = record.plugin;
+    const QString pluginId = record.manifest.id;
+    const QString displayName = record.manifest.name;
 
-void QGCPluginManager::unloadPlugin(const QString& pluginName)
-{
-    qCDebug(QGCPluginManagerLog) << "Unloading plugin:" << pluginName;
-    
-    // Find and remove the plugin
-    for (int i = 0; i < _loadedPluginInfos.size(); ++i) {
-        if (_loadedPluginInfos[i].name == pluginName) {
-            PluginInfo info = _loadedPluginInfos[i];
-            
-            // Cleanup and delete the plugin
-            if (info.plugin) {
-                info.plugin->cleanup();
-                delete info.plugin;
-            }
-            
-            // Remove from list
-            _loadedPluginInfos.removeAt(i);
-
-            // Recalculate replay extension in case the unloaded plugin owned it
-            QGCReplayExtension* newExt = nullptr;
-            for (const PluginInfo& pi : _loadedPluginInfos) {
-                newExt = pi.plugin->replayExtension();
-                if (newExt) break;
-            }
-            if (_replayExtension != newExt) {
-                _replayExtension = newExt;
-                emit replayExtensionChanged();
-            }
-
-            // Remove associated menu items
-            _removeToolMenuItemsForPlugin(pluginName);
-
-            _recalcLoggingController();
-            emit loadedPluginsChanged();
-            qCDebug(QGCPluginManagerLog) << "Plugin unloaded:" << pluginName;
-            return;
-        }
-    }
-    
-    qCWarning(QGCPluginManagerLog) << "Plugin not found for unload:" << pluginName;
-}
-
-void QGCPluginManager::reloadPlugin(const QString& pluginName)
-{
-    qCDebug(QGCPluginManagerLog) << "Reloading plugin:" << pluginName;
-    
-    // Find the plugin if currently loaded (to get its path)
-    QString pluginPath;
-    for (const PluginInfo& info : _loadedPluginInfos) {
-        if (info.name == pluginName) {
-            pluginPath = info.path;
-            qCDebug(QGCPluginManagerLog) << "Found plugin path:" << pluginPath;
-            // Unload it now
-            unloadPlugin(pluginName);
-            break;
-        }
-    }
-    
-    // If we have a specific path, load directly from it
-    // Otherwise fall back to scanning all directories (for newly added plugins)
-    QGCPluginLoader loader(this);
-    
-    if (!pluginPath.isEmpty()) {
-        qCDebug(QGCPluginManagerLog) << "Loading plugin from stored path:" << pluginPath;
-        PluginLoadInfo loadInfo = loader.loadPlugin(pluginPath);
-        
-        if (loadInfo.plugin && loadInfo.plugin->name() == pluginName) {
-            _addLoadedPlugin(loadInfo);
-            qCDebug(QGCPluginManagerLog) << "Plugin reloaded successfully from path:" << pluginName;
-            return;
-        } else {
-            qCWarning(QGCPluginManagerLog) << "Failed to reload plugin from stored path:" << pluginPath;
-        }
-    }
-    
-    // Fall back to scanning all directories
-    qCDebug(QGCPluginManagerLog) << "Scanning all plugin directories for:" << pluginName;
-    QStringList pluginPaths = QGCPluginLoader::defaultPluginPaths();
-    loader.loadPlugins(pluginPaths);
-    
-    QList<PluginLoadInfo> pluginInfos = loader.loadedPluginInfos();
-    
-    // Find the plugin we want to reload
-    for (const PluginLoadInfo& loadInfo : pluginInfos) {
-        if (loadInfo.plugin->name() == pluginName) {
-            qCDebug(QGCPluginManagerLog) << "Found plugin in scan:" << pluginName;
-            _addLoadedPlugin(loadInfo);
-            
-            // Cleanup other plugins we don't want
-            for (const PluginLoadInfo& otherInfo : pluginInfos) {
-                if (otherInfo.plugin != loadInfo.plugin) {
-                    otherInfo.plugin->cleanup();
-                    delete otherInfo.plugin;
-                }
-            }
-            
-            qCDebug(QGCPluginManagerLog) << "Plugin reloaded successfully from scan:" << pluginName;
-            return;
-        }
-    }
-    
-    // Cleanup all plugins since we didn't find what we wanted
-    for (const PluginLoadInfo& info : pluginInfos) {
-        info.plugin->cleanup();
-        delete info.plugin;
-    }
-    
-    qCWarning(QGCPluginManagerLog) << "Failed to reload plugin - not found in scan:" << pluginName;
-}
-
-void QGCPluginManager::_addLoadedPlugin(const PluginLoadInfo& loadInfo)
-{
-    QGCPlugin* plugin = loadInfo.plugin;
-    QString pluginName = plugin->name();
-    
-    // Check if already loaded (defensive)
-    for (const PluginInfo& info : _loadedPluginInfos) {
-        if (info.name == pluginName) {
-            qCWarning(QGCPluginManagerLog) << "Plugin already loaded:" << pluginName;
-            return;
-        }
-    }
-    
-    // Create plugin info structure
-    PluginInfo info;
-    info.plugin = plugin;
-    info.name = pluginName;
-    info.path = loadInfo.filePath;
-    
-    _loadedPluginInfos.append(info);
-    
     // Initialize the plugin
     plugin->init();
 
@@ -388,12 +211,12 @@ void QGCPluginManager::_addLoadedPlugin(const PluginLoadInfo& loadInfo)
         }
     }
 
-    // Add tool menu item
+    // Get plugin's tool menu item and add it
     QVariantMap menuItem = plugin->toolMenuItem();
     if (!menuItem.isEmpty()) {
-        menuItem["pluginName"] = pluginName;
+        qCDebug(QGCPluginManagerLog) << "  - Provides menu item:" << menuItem["title"];
+        menuItem["pluginId"] = pluginId;
         addToolMenuItem(menuItem);
-        qCDebug(QGCPluginManagerLog) << "Added menu item for plugin:" << menuItem["title"];
     }
 
     // Register fly-view panel item if this plugin provides one
@@ -401,7 +224,8 @@ void QGCPluginManager::_addLoadedPlugin(const PluginLoadInfo& loadInfo)
     if (!panelUrl.isEmpty()) {
         QPointF defaultPos = plugin->flyViewPanelDefaultPosition();
         QVariantMap panelItem;
-        panelItem["name"]             = pluginName;
+        panelItem["pluginId"]         = pluginId;
+        panelItem["name"]             = displayName;
         panelItem["panelUrl"]         = panelUrl;
         panelItem["dockUrl"]          = plugin->flyViewPanelDockUrl();
         panelItem["defaultWidth"]     = plugin->flyViewPanelDefaultWidth();
@@ -410,7 +234,7 @@ void QGCPluginManager::_addLoadedPlugin(const PluginLoadInfo& loadInfo)
         panelItem["defaultYFraction"] = defaultPos.y();
         _flyViewPanelItems.append(panelItem);
         emit flyViewPanelItemsChanged();
-        qCDebug(QGCPluginManagerLog) << "Added fly-view panel for plugin:" << pluginName;
+        qCDebug(QGCPluginManagerLog) << "  - Provides fly-view panel:" << panelUrl;
     }
 
     // Register plan-view panel item if this plugin provides one
@@ -418,7 +242,8 @@ void QGCPluginManager::_addLoadedPlugin(const PluginLoadInfo& loadInfo)
     if (!planPanelUrl.isEmpty()) {
         QPointF defaultPos = plugin->planViewPanelDefaultPosition();
         QVariantMap panelItem;
-        panelItem["name"]             = pluginName;
+        panelItem["pluginId"]         = pluginId;
+        panelItem["name"]             = displayName;
         panelItem["panelUrl"]         = planPanelUrl;
         panelItem["dockUrl"]          = plugin->planViewPanelDockUrl();
         panelItem["defaultWidth"]     = plugin->planViewPanelDefaultWidth();
@@ -427,7 +252,124 @@ void QGCPluginManager::_addLoadedPlugin(const PluginLoadInfo& loadInfo)
         panelItem["defaultYFraction"] = defaultPos.y();
         _planViewPanelItems.append(panelItem);
         emit planViewPanelItemsChanged();
-        qCDebug(QGCPluginManagerLog) << "Added plan-view panel for plugin:" << pluginName;
+        qCDebug(QGCPluginManagerLog) << "  - Provides plan-view panel:" << planPanelUrl;
+    }
+}
+
+void QGCPluginManager::_deactivateRecord(PluginLoadInfo& record)
+{
+    if (record.plugin) {
+        record.plugin->cleanup();
+        delete record.plugin;
+        record.plugin = nullptr;
+    }
+
+    // The library mapping stays; a full drop happens on restart
+    record.state = PluginState::Disabled;
+
+    _removeContributionsForPlugin(record.manifest.id);
+    _recalcReplayExtension();
+    _recalcLoggingController();
+    emit loadedPluginsChanged();
+}
+
+void QGCPluginManager::_removeContributionsForPlugin(const QString& pluginId)
+{
+    // Remove all tool menu items for this plugin
+    for (int i = _toolMenuItems.size() - 1; i >= 0; --i) {
+        if (_toolMenuItems[i].toMap()["pluginId"].toString() == pluginId) {
+            _toolMenuItems.removeAt(i);
+        }
+    }
+    emit toolMenuItemsChanged();
+
+    // Remove fly-view panel item for this plugin
+    for (int i = _flyViewPanelItems.size() - 1; i >= 0; --i) {
+        if (_flyViewPanelItems[i].toMap()["pluginId"].toString() == pluginId) {
+            _flyViewPanelItems.removeAt(i);
+        }
+    }
+    emit flyViewPanelItemsChanged();
+
+    // Remove plan-view panel item for this plugin
+    for (int i = _planViewPanelItems.size() - 1; i >= 0; --i) {
+        if (_planViewPanelItems[i].toMap()["pluginId"].toString() == pluginId) {
+            _planViewPanelItems.removeAt(i);
+        }
+    }
+    emit planViewPanelItemsChanged();
+}
+
+void QGCPluginManager::setPluginEnabled(const QString& pluginId, bool enabled)
+{
+    PluginLoadInfo* record = _findRecord(pluginId);
+    if (!record) {
+        qCWarning(QGCPluginManagerLog) << "Plugin not found:" << pluginId;
+        return;
+    }
+
+    // Persist the setting; QML sliders may already have written it, which is fine
+    PluginSettings* pluginSettings = SettingsManager::instance()->pluginSettings();
+    Fact* fact = pluginSettings->pluginEnabledFact(pluginId);
+    if (fact && fact->rawValue().toBool() != enabled) {
+        fact->setRawValue(enabled);
+    }
+
+    if (enabled) {
+        if (record->state == PluginState::Disabled || record->state == PluginState::Discovered) {
+            qCDebug(QGCPluginManagerLog) << "Enabling plugin:" << pluginId;
+            _activateRecord(*record);
+            _recalcLoggingController();
+            emit loadedPluginsChanged();
+        }
+    } else {
+        if (record->state == PluginState::Active) {
+            qCDebug(QGCPluginManagerLog) << "Disabling plugin:" << pluginId;
+            _deactivateRecord(*record);
+        } else if (record->state == PluginState::Discovered) {
+            record->state = PluginState::Disabled;
+        }
+    }
+}
+
+void QGCPluginManager::reloadPlugin(const QString& pluginId)
+{
+    qCDebug(QGCPluginManagerLog) << "Reloading plugin:" << pluginId;
+
+    PluginLoadInfo* record = _findRecord(pluginId);
+    if (!record) {
+        qCWarning(QGCPluginManagerLog) << "Plugin not found for reload:" << pluginId;
+        return;
+    }
+
+    if (record->state == PluginState::Active) {
+        _deactivateRecord(*record);
+    }
+
+    // Re-inspect the stored path only: the manifest may have changed on disk
+    PluginLoadInfo fresh = QGCPluginLoader::inspect(record->filePath);
+    fresh.plugin = nullptr;
+
+    if (fresh.manifest.id != pluginId) {
+        // The file no longer declares this plugin (id changed or manifest unreadable).
+        // Keep the record's identity so the settings key and id lookups stay coherent;
+        // a plugin with a new id is picked up on restart.
+        record->state = PluginState::Failed;
+        record->errorString = fresh.manifest.id.isEmpty()
+            ? fresh.errorString
+            : QStringLiteral("plugin id changed on disk (now %1); restart to load it").arg(fresh.manifest.id);
+        qCWarning(QGCPluginManagerLog) << "Reload inspection failed:" << record->filePath << "-" << record->errorString;
+    } else {
+        if (fresh.state == PluginState::Discovered) {
+            if (SettingsManager::instance()->pluginSettings()->isPluginEnabled(pluginId)) {
+                _activateRecord(fresh);
+            } else {
+                fresh.state = PluginState::Disabled;
+            }
+        } else {
+            qCWarning(QGCPluginManagerLog) << "Reload inspection failed:" << record->filePath << "-" << fresh.errorString;
+        }
+        *record = fresh;
     }
 
     _recalcLoggingController();

@@ -210,6 +210,7 @@ add_qgc_test(TransectStyleComplexItemTest LABELS Unit MissionManager RESOURCE_LO
 # ----------------------------------------------------------------------------
 add_subdirectory(PluginSystem)
 add_qgc_test(PluginManifestTest LABELS Unit)
+add_qgc_test(QGCPluginManagerTest LABELS Unit)
 
 # ----------------------------------------------------------------------------
 # QtLocationPlugin

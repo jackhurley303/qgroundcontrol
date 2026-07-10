@@ -12,7 +12,6 @@
 #include "PluginManifest.h"
 
 #include <QtCore/QLoggingCategory>
-#include <QtCore/QObject>
 #include <QtCore/QList>
 #include <QtCore/QString>
 
@@ -40,40 +39,28 @@ struct PluginLoadInfo {
     QString errorString;            ///< Reason for Incompatible/Failed states
 };
 
-/// @brief Discovers and loads QGC plugins at runtime
-/// Scans specified directories for plugin libraries and loads them dynamically
-class QGCPluginLoader : public QObject
+/// @brief Stateless inspect/activate mechanism for QGC plugin libraries
+/// Inspection reads and validates metadata without executing plugin code; activation
+/// instantiates a plugin that passed inspection. Policy (enabled state, consent) and
+/// record keeping live in QGCPluginManager.
+class QGCPluginLoader
 {
-    Q_OBJECT
-
 public:
-    explicit QGCPluginLoader(QObject* parent = nullptr);
-    ~QGCPluginLoader();
+    QGCPluginLoader() = delete;
 
-    /// @brief Load all plugins from the specified directory
-    /// @param pluginDir Absolute path to directory containing plugin libraries
-    void loadPlugins(const QString& pluginDir);
-
-    /// @brief Load all plugins from multiple directories
-    /// @param pluginDirs List of absolute paths to directories containing plugins
-    void loadPlugins(const QStringList& pluginDirs);
-
-    /// @brief Load a single plugin from a specific file path
+    /// @brief Read and validate a plugin's metadata without executing plugin code
     /// @param filePath Absolute path to plugin library file
-    /// @return PluginLoadInfo with plugin instance and path, or nullptr plugin on failure
-    PluginLoadInfo loadPlugin(const QString& filePath);
+    /// @return PluginLoadInfo in state Discovered, Incompatible, or Failed
+    static PluginLoadInfo inspect(const QString& filePath);
 
-    /// @brief Get list of successfully loaded plugins
-    /// @return List of QGCPlugin instances
-    QList<QGCPlugin*> loadedPlugins() const;
+    /// @brief Inspect every plugin library found in the given directories
+    /// @param pluginDirs List of absolute paths to directories containing plugins
+    /// @return One PluginLoadInfo per discovered file; none are activated
+    static QList<PluginLoadInfo> inspectDirectories(const QStringList& pluginDirs);
 
-    /// @brief Get list of active plugins with their file paths
-    /// @return List of PluginLoadInfo structs with state == Active
-    QList<PluginLoadInfo> loadedPluginInfos() const;
-
-    /// @brief Get all discovered plugins, including those that failed inspection or activation
-    /// @return List of PluginLoadInfo structs in any state
-    QList<PluginLoadInfo> knownPluginInfos() const { return _pluginInfos; }
+    /// @brief Instantiate a plugin that passed inspection
+    /// @param info Inspection result in state Discovered; updated to Active or Failed
+    static void activate(PluginLoadInfo& info);
 
     /// @brief Get default plugin search paths for the current platform
     /// @return List of directories where plugins should be searched
@@ -81,31 +68,4 @@ public:
 
     /// @brief Identity/compatibility facts of the running host, used to validate manifests
     static HostInfo hostInfo();
-
-signals:
-    /// @brief Emitted when a plugin is successfully loaded
-    /// @param pluginName Name of the loaded plugin
-    void pluginLoaded(const QString& pluginName);
-
-    /// @brief Emitted when a plugin fails to load
-    /// @param filePath Path to the plugin file that failed
-    /// @param errorString Description of the error
-    void pluginLoadFailed(const QString& filePath, const QString& errorString);
-
-private:
-    /// @brief Phase 1: read and validate the plugin's metadata without executing plugin code
-    /// @param filePath Absolute path to plugin library file
-    /// @return PluginLoadInfo in state Discovered, Incompatible, or Failed
-    PluginLoadInfo _inspect(const QString& filePath);
-
-    /// @brief Phase 2: instantiate a plugin that passed inspection
-    /// @param info Inspection result in state Discovered; updated to Active or Failed
-    void _activate(PluginLoadInfo& info);
-
-    /// @brief Inspect, activate, record, and signal a single plugin file
-    /// @param filePath Absolute path to plugin library file
-    /// @return The recorded PluginLoadInfo
-    PluginLoadInfo _loadPlugin(const QString& filePath);
-
-    QList<PluginLoadInfo> _pluginInfos;  ///< All discovered plugins, any state
 };

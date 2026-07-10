@@ -21,46 +21,11 @@
 
 QGC_LOGGING_CATEGORY(QGCPluginLoaderLog, "PluginSystem.QGCPluginLoader")
 
-QGCPluginLoader::QGCPluginLoader(QObject* parent)
-    : QObject(parent)
+QList<PluginLoadInfo> QGCPluginLoader::inspectDirectories(const QStringList& pluginDirs)
 {
-}
+    qCDebug(QGCPluginLoaderLog) << "Inspecting plugins in" << pluginDirs.size() << "directories";
 
-QGCPluginLoader::~QGCPluginLoader()
-{
-    // Plugins are owned by QGCApplication, don't delete here
-}
-
-QList<QGCPlugin*> QGCPluginLoader::loadedPlugins() const
-{
-    QList<QGCPlugin*> plugins;
-    for (const PluginLoadInfo& info : _pluginInfos) {
-        if (info.state == PluginState::Active) {
-            plugins.append(info.plugin);
-        }
-    }
-    return plugins;
-}
-
-QList<PluginLoadInfo> QGCPluginLoader::loadedPluginInfos() const
-{
     QList<PluginLoadInfo> infos;
-    for (const PluginLoadInfo& info : _pluginInfos) {
-        if (info.state == PluginState::Active) {
-            infos.append(info);
-        }
-    }
-    return infos;
-}
-
-void QGCPluginLoader::loadPlugins(const QString& pluginDir)
-{
-    loadPlugins(QStringList() << pluginDir);
-}
-
-void QGCPluginLoader::loadPlugins(const QStringList& pluginDirs)
-{
-    qCDebug(QGCPluginLoaderLog) << "Loading plugins from" << pluginDirs.size() << "directories";
 
     for (const QString& dirPath : pluginDirs) {
         QDir dir(dirPath);
@@ -81,45 +46,19 @@ void QGCPluginLoader::loadPlugins(const QStringList& pluginDirs)
         filters << "*.so";
 #endif
 
-        const QFileInfoList entries = dir.entryInfoList(filters, QDir::Files);
+        // Sorted so duplicate-id resolution in the manager is deterministic across runs
+        const QFileInfoList entries = dir.entryInfoList(filters, QDir::Files, QDir::Name);
         qCDebug(QGCPluginLoaderLog) << "Found" << entries.size() << "potential plugin files";
 
         for (const QFileInfo& fileInfo : entries) {
-            _loadPlugin(fileInfo.absoluteFilePath());
+            infos.append(inspect(fileInfo.absoluteFilePath()));
         }
     }
 
-    qCDebug(QGCPluginLoaderLog) << "Plugin loading complete." << loadedPluginInfos().size() << "plugins loaded";
+    return infos;
 }
 
-PluginLoadInfo QGCPluginLoader::loadPlugin(const QString& filePath)
-{
-    return _loadPlugin(filePath);
-}
-
-PluginLoadInfo QGCPluginLoader::_loadPlugin(const QString& filePath)
-{
-    qCDebug(QGCPluginLoaderLog) << "Attempting to load plugin:" << filePath;
-
-    PluginLoadInfo info = _inspect(filePath);
-    if (info.state == PluginState::Discovered) {
-        _activate(info);
-    }
-
-    _pluginInfos.append(info);
-
-    if (info.state == PluginState::Active) {
-        emit pluginLoaded(QFileInfo(filePath).fileName());
-        qCDebug(QGCPluginLoaderLog) << "Successfully loaded plugin:" << filePath;
-    } else {
-        qCWarning(QGCPluginLoaderLog) << "Failed to load plugin:" << filePath << "-" << info.errorString;
-        emit pluginLoadFailed(filePath, info.errorString);
-    }
-
-    return info;
-}
-
-PluginLoadInfo QGCPluginLoader::_inspect(const QString& filePath)
+PluginLoadInfo QGCPluginLoader::inspect(const QString& filePath)
 {
     PluginLoadInfo info;
     info.filePath = filePath;
@@ -158,7 +97,7 @@ PluginLoadInfo QGCPluginLoader::_inspect(const QString& filePath)
     return info;
 }
 
-void QGCPluginLoader::_activate(PluginLoadInfo& info)
+void QGCPluginLoader::activate(PluginLoadInfo& info)
 {
     QPluginLoader loader(info.filePath);
     QObject* pluginObject = loader.instance();

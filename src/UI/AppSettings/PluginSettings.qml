@@ -37,26 +37,20 @@ SettingsPage {
         }
 
         Repeater {
-            model: _pluginSettings.registeredPluginNames
+            model: _pluginSettings.registeredPluginIds
 
             FactCheckBoxSlider {
                 Layout.fillWidth:   true
-                text:               modelData + qsTr(" Plugin")
+                text:               (fact ? fact.label : modelData) + qsTr(" Plugin")
                 fact:               _pluginSettings.pluginEnabledFact(modelData)
                 visible:            fact !== null
-                
+
                 Connections {
                     target: fact
                     enabled: _supportsRuntimeReload  // Only hook up reload on supported platforms
-                    
+
                     function onValueChanged() {
-                        if (fact.value) {
-                            // Plugin was enabled - reload it
-                            QGroundControl.pluginManager.reloadPlugin(modelData)
-                        } else {
-                            // Plugin was disabled - unload it
-                            QGroundControl.pluginManager.unloadPlugin(modelData)
-                        }
+                        QGroundControl.pluginManager.setPluginEnabled(modelData, fact.value)
                     }
                 }
             }

@@ -20,14 +20,22 @@
   - Both plugins stamp `Q_PLUGIN_METADATA(IID QGCPluginInterface_iid FILE "qgcplugin.json")` with `qgcplugin.json.in` configured per plugin (example: `org.qgroundcontrol.example`; qdrive: `org.qdrive.plugin` — ids still cheap to change until U1.3 keys settings by them). QDrive changes are a separate commit in its nested repo.
   - Verified: 18 PluginManifestTest cases green; live boot logs "Validated <name> (internal, build <hash>) before load" for both plugins; wrong-IID dylib rejected legibly without crash. `/code-review` medium: 8 findings, 6 fixed (incl. null-host-version rejecting all plugins on tagless checkouts — range check now skipped when host version unparseable), 2 skipped (git-less "0000000" build-id sentinel match; inspect→activate TOCTOU — closed later by U3.3's file-hash consent).
 
-- U1.3–U1.6: not started.
+- **U1.3 — Manager: id-keyed records, no execution of disabled plugins** — DONE (2026-07-10).
+  - `QGCPluginManager` now keeps `QList<PluginLoadInfo> _records` (one per discovered plugin, any state) — the plan's `PluginRecord` realized by reusing U1.2's `PluginLoadInfo` rather than a parallel struct. Flow: `inspectDirectories` → `_processInspected` (register id with settings → duplicate-id guard → skip disabled **without ever calling `instance()`** → `_activateRecord`). The 01 §3.5 defect (disabled plugins executing code) is dead.
+  - `QGCPluginLoader` became a fully **static, stateless** inspect/activate utility (no QObject, no `_pluginInfos`, `loadPlugins`/`loadedPluginInfos`/`knownPluginInfos`/signals deleted; directory scan sorted by name for deterministic duplicate resolution).
+  - `PluginSettings` keys Facts by manifest id (D5, no shim): `registerPlugin(id, displayName, defaultEnabled)`, `registeredPluginIds`. Interim default rule (Example off by id `org.qgroundcontrol.example`, rest on) lives in the manager, awaiting D10/U3.3.
+  - API: `unloadPlugin`/`reloadPlugin(name)` → `setPluginEnabled(id, bool)` (writes Fact + reconciles activation, idempotent/reentrancy-safe) + `reloadPlugin(id)` (stored path only, scan fallback deleted; refuses id-change-on-disk to keep settings keys coherent). QML page minimally updated (full revamp = U1.4). Contribution maps carry `pluginId` (identity) + `name` (display, from manifest).
+  - Tests: `test/PluginSystem/QGCPluginManagerTest` (9 cases; fixtures use nonexistent paths so wrongful activation is detectable as Failed-instead-of-Disabled). Full Unit suite green except 3 pre-existing keychain-timeout tests (environmental). `/code-review` high: 7 findings — 4 fixed (reload id-drift, name-keyed default, unsorted scan, static loader), 3 plausible-skipped (latent record-pointer reentrancy; same-display-name QML panel-key collision (pre-existing, U2.2 reworks consumption); stale Fact label after same-id reload (U1.4 reads names from records)).
+
+- U1.4–U1.6: not started.
 
 ### Stage 2–5
 
-Not started — blocked on Stage 1 completing (U1.3–U1.6).
+Not started — blocked on Stage 1 completing (U1.4–U1.6).
 
-## Notes for the next unit (U1.3)
+## Notes for the next unit (U1.4)
 
-- Loader now exposes `knownPluginInfos()` (all states) — the manager's `PluginRecord` list consumes this instead of `loadedPluginInfos()`; to stop executing disabled plugins the manager must drive `_inspect`/`_activate` separately, so U1.3 likely promotes them to public `inspect()`/`activate()` on the loader (plan U1.2 framing: "inspects and activates on request").
-- Latent sharp edge to kill in U1.3: `QGCPluginManager::_loadPlugins` deletes disabled plugins *after* activation (the 01 §3.5 defect this unit deliberately left), and the local loader's `_pluginInfos` then briefly holds a dangling `plugin` pointer still marked Active (unreachable today — loader is function-local — but don't carry the shape forward).
-- `reloadPlugin`'s scan-everything fallback gets deleted per plan U1.3; `PluginSettings` re-keys Facts by manifest id (D5, no migration shim).
+- U1.4 = settings page consumes a richer model from `QGCPluginManager::knownPlugins()` (`QVariantList` of id/name/version/vendor/description/state/reason) — **that method does not exist yet**; U1.3 kept the legacy `loadedPlugins()` shape. Derive it from `_records` (manifest + `PluginState` + `errorString` are all there).
+- Page: per-plugin row = name + version + vendor, toggle, status line ("Active", "Disabled", "Incompatible: needs QGC ≥ 5.1", "Failed to load: <dlopen error>"). Verify = screenshot loop (build + deploy, `.screenshots/`).
+- Two U1.3 review leftovers U1.4 naturally absorbs: display name should come from the record (not the Fact label, which can go stale on reload), and Incompatible/Failed rows need their reason shown (the toggle alone looks like "on" for a plugin that never runs).
+- Run settings for the U1.4 chat: Sonnet, thinking off is fine (QML page work; per plan §11) — escalate only if manager model work turns out deeper than expected.

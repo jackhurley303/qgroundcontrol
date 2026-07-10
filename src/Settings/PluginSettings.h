@@ -19,13 +19,13 @@ Q_DECLARE_LOGGING_CATEGORY(PluginSettingsLog)
 
 class QGCPlugin;
 
-/// Plugin Settings - Manages enabled/disabled state for plugins
+/// Plugin Settings - Manages enabled/disabled state for plugins, keyed by manifest id
 class PluginSettings : public SettingsGroup
 {
     Q_OBJECT
     QML_ELEMENT
     QML_UNCREATABLE("")
-    Q_PROPERTY(QStringList registeredPluginNames READ registeredPluginNames NOTIFY registeredPluginsChanged)
+    Q_PROPERTY(QStringList registeredPluginIds READ registeredPluginIds NOTIFY registeredPluginsChanged)
 
 public:
     PluginSettings(QObject* parent = nullptr);
@@ -33,20 +33,23 @@ public:
     DEFINE_SETTING_NAME_GROUP()
 
     /// Register a plugin and create its enabled Fact
-    Q_INVOKABLE void registerPlugin(const QString& pluginName);
+    /// @param pluginId Manifest id (reverse-DNS), used as the Fact key
+    /// @param displayName Human-readable name shown in UI
+    /// @param defaultEnabled Whether the plugin is enabled before the user ever toggles it
+    void registerPlugin(const QString& pluginId, const QString& displayName, bool defaultEnabled);
 
     /// Get the enabled Fact for a plugin
-    Q_INVOKABLE Fact* pluginEnabledFact(const QString& pluginName);
+    Q_INVOKABLE Fact* pluginEnabledFact(const QString& pluginId);
 
     /// Check if a plugin is enabled
-    Q_INVOKABLE bool isPluginEnabled(const QString& pluginName);
+    Q_INVOKABLE bool isPluginEnabled(const QString& pluginId);
 
-    /// Get list of all registered plugin names
-    QStringList registeredPluginNames() const;
+    /// Get list of all registered plugin ids
+    QStringList registeredPluginIds() const;
 
 signals:
     void registeredPluginsChanged();
 
 private:
-    QMap<QString, SettingsFact*> _pluginFacts;  ///< Map of plugin name to enabled Fact
+    QMap<QString, SettingsFact*> _pluginFacts;  ///< Map of plugin id to enabled Fact
 };

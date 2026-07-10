@@ -14,10 +14,8 @@
 #include <QtCore/QVariantList>
 #include <QtQmlIntegration/QtQmlIntegration>
 
+#include "QGCPluginLoader.h"
 #include "QGCReplayExtension.h"
-
-class QGCPlugin;
-struct PluginLoadInfo;
 
 Q_DECLARE_LOGGING_CATEGORY(QGCPluginManagerLog)
 
@@ -25,10 +23,11 @@ Q_DECLARE_LOGGING_CATEGORY(QGCPluginManagerLog)
  * @class QGCPluginManager
  * @brief Manages runtime-loaded QGroundControl plugins
  *
- * This singleton class is responsible for discovering, loading, and managing
- * runtime plugins independently from the core QGC functionality. It provides
- * a clean separation between core plugin behavior (QGCCorePlugin) and runtime
- * plugin management.
+ * This singleton owns one record per discovered plugin — in any state — and the
+ * policy decisions around them: which plugins are enabled (settings keyed by
+ * manifest id), which get activated, and what contributions they expose to QML.
+ * Disabled and incompatible plugins are recorded from their manifest alone;
+ * their code never executes.
  */
 class QGCPluginManager : public QObject
 {
@@ -80,13 +79,15 @@ public:
     /// @param item QVariantMap with keys: title, icon, source, visible
     void addToolMenuItem(const QVariantMap& item);
 
-    /// Unload a specific plugin by name
-    /// @param pluginName The name of the plugin to unload
-    Q_INVOKABLE void unloadPlugin(const QString& pluginName);
+    /// Enable or disable a plugin: persists the setting and activates or
+    /// deactivates the plugin to match. Idempotent.
+    /// @param pluginId The manifest id of the plugin
+    Q_INVOKABLE void setPluginEnabled(const QString& pluginId, bool enabled);
 
-    /// Reload a specific plugin by name
-    /// @param pluginName The name of the plugin to reload
-    Q_INVOKABLE void reloadPlugin(const QString& pluginName);
+    /// Reload a plugin from its stored path: deactivate if active, re-inspect
+    /// the file, and activate again if the plugin is enabled.
+    /// @param pluginId The manifest id of the plugin
+    Q_INVOKABLE void reloadPlugin(const QString& pluginId);
 
 signals:
     /// Emitted when the tool menu items list changes
@@ -106,21 +107,20 @@ signals:
 
 private:
     void _loadPlugins();
-    void _removeToolMenuItemsForPlugin(const QString& pluginName);
-    void _addLoadedPlugin(const PluginLoadInfo& loadInfo);
-
-    struct PluginInfo {
-        QGCPlugin* plugin;
-        QString path;
-        QString name;
-    };
-
+    void _processInspected(const QList<PluginLoadInfo>& infos);
+    void _activateRecord(PluginLoadInfo& record);
+    void _deactivateRecord(PluginLoadInfo& record);
+    void _removeContributionsForPlugin(const QString& pluginId);
+    void _recalcReplayExtension();
     void _recalcLoggingController();
+    PluginLoadInfo* _findRecord(const QString& pluginId);
 
     QVariantList _toolMenuItems;           // List of tool menu items (from plugins)
     QVariantList _flyViewPanelItems;       // List of fly-view panel items (from plugins)
     QVariantList _planViewPanelItems;      // List of plan-view panel items (from plugins)
-    QList<PluginInfo> _loadedPluginInfos; // List of loaded plugins with their info
-    QGCReplayExtension* _replayExtension = nullptr; // First replay extension found across loaded plugins
+    QList<PluginLoadInfo> _records;        // One record per discovered plugin, any state
+    QGCReplayExtension* _replayExtension = nullptr; // First replay extension found across active plugins
     bool _hasLoggingController = false;   // True if any active plugin claims telemetry-logging control
+
+    friend class QGCPluginManagerTest;
 };
