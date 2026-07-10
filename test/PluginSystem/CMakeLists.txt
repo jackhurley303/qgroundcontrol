@@ -1,0 +1,12 @@
+# ============================================================================
+# PluginSystem Unit Tests
+# Tests for plugin manifest parsing and host-compatibility validation
+# ============================================================================
+
+target_sources(${CMAKE_PROJECT_NAME}
+    PRIVATE
+        PluginManifestTest.cc
+        PluginManifestTest.h
+)
+
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

@@ -206,6 +206,12 @@ add_qgc_test(SurveyComplexItemTest LABELS Unit MissionManager RESOURCE_LOCK Plan
 add_qgc_test(TransectStyleComplexItemTest LABELS Unit MissionManager RESOURCE_LOCK PlanViewSettings)
 
 # ----------------------------------------------------------------------------
+# PluginSystem
+# ----------------------------------------------------------------------------
+add_subdirectory(PluginSystem)
+add_qgc_test(PluginManifestTest LABELS Unit)
+
+# ----------------------------------------------------------------------------
 # QtLocationPlugin
 # ----------------------------------------------------------------------------
 add_subdirectory(QtLocationPlugin)
