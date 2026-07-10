@@ -33,13 +33,19 @@
   - Tests: `_knownPluginsReflectsRecords_test` added to `QGCPluginManagerTest` (Active + Incompatible fixtures, verifies map shape and composed statusText). Full suite green except the 3 pre-existing keychain-timeout tests (environmental, same as U1.3). `/code-review low`: no findings.
   - Next: U1.5 (loader hygiene + docs truth) in a fresh chat.
 
-- U1.5–U1.6: not started.
+- **U1.5 — Loader hygiene + docs truth** — DONE (2026-07-10).
+  - `QGCPluginManager::_activateRecord` ([QGCPluginManager.cc](../../src/PluginSystem/QGCPluginManager.cc)): second plugin to report a replay extension now logs `qCWarning(QGCPluginManagerLog)` naming the plugin id and states first-registration-wins; behavior unchanged (still first wins), just no longer silent.
+  - `plugins/README.md` and `src/PluginSystem/README.md` fully rewritten — both were describing a submodule/git-distributed, name-keyed, `pluginInterfaceVersion()`-checked plugin model that predated U1.1–U1.4 entirely. Now describe: manifest schema + fields actually validated, two-phase inspect/activate, id-keyed `PluginSettings`, real search paths (from `QGCPluginLoader::defaultPluginPaths()`), real linkage (`-undefined dynamic_lookup`/`-Wl,--allow-shlib-undefined`, no `qgc_add_plugin()` yet — that's U1.6), and a tier table framed as roadmap (`internal` is the only tier that works today; `sdk`/`qml` are Stage 2/3 targets, not present features).
+  - Also removed a stray gitignored `plugins/example/build/` directory (leftover manual build, not part of the commit either way — `plugins/.gitignore` already excludes `build/`).
+  - No tests (docs + one `qCWarning`, per plan). `/code-review low`: no findings.
+  - Next: U1.6 (`qgc_add_plugin()` becomes the single path) in a fresh chat.
 
 ### Stage 2–5
 
-Not started — blocked on Stage 1 completing (U1.5–U1.6).
+Not started — blocked on Stage 1 completing (U1.6).
 
-## Notes for the next unit (U1.5)
+## Notes for the next unit (U1.6)
 
-- U1.5 = loader hygiene + docs truth (plan §4, U1.5): warn on second replay-extension registration (first still wins); rewrite `plugins/README.md` and `src/PluginSystem/README.md` for manifest requirement, real linkage model, actual init-order semantics, tier table as roadmap. No tests (docs + one `qCWarning`).
-- Run settings: Sonnet, thinking off (docs + one warning; per plan §11).
+- U1.6 = `qgc_add_plugin()` becomes the single path (plan §4, U1.6): rewrite `cmake/modules/PluginHelpers.cmake` to absorb what both `plugins/example/CMakeLists.txt` and QDrive's plugin CMakeLists hand-roll today — MODULE/AUTOMOC/AUTORCC/C++20, output dir, manifest `configure_file` plumbing, platform suffix, undefined-symbol link options (internal tier), auto-deploy dir computed from `QGC_ORG_NAME`/`QGC_APP_NAME` (today it's hardcoded to "QGroundControl Daily" in example's CMakeLists — confirm at start of that unit whether this is still accurate). Both plugins' CMakeLists collapse to a `qgc_add_plugin(...)` call.
+- Verify: clean build, both plugins produced + deployed; check whether `plugins/example/build.sh` still exists/is referenced (plan says "still works or is deleted in favor of the in-tree build" — needs re-grounding at unit start).
+- Run settings: Sonnet + `/code-review low` per plan §11 (mechanical CMake move, not ABI/state-machine work).

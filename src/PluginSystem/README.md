@@ -4,292 +4,139 @@ This directory contains the core plugin system architecture for QGroundControl.
 
 ## Architecture Overview
 
-QGroundControl uses a clear separation between the **Core Plugin** (singleton managing core app behavior) and **Runtime Plugins** (dynamically loaded extensions managed by the Plugin Manager).
+QGroundControl separates the **Core Plugin** (singleton managing core app behavior) from
+**Runtime Plugins** (dynamically loaded extensions managed by `QGCPluginManager`).
 
 ### Core Components
 
-#### `QGCCorePlugin` - Core Application Manager (Singleton)
-- **Purpose**: Singleton that manages core QGC functionality
-- **Responsibilities**:
-  - Manages application-wide settings and options
-  - Provides default analyze pages and toolbar indicators
-  - Handles MAVLink message routing
-  - Manages custom map items and video receivers
-- **Key Properties**:
-  - `analyzePages` - Application analyze pages
-  - `options` - Global QGC options
-  - `toolbarIndicators` - Custom toolbar indicator components
+#### `QGCCorePlugin` — Core Application Manager (Singleton)
+Manages application-wide settings/options, default analyze pages, toolbar indicators,
+MAVLink message routing, and custom map items/video receivers.
 
-#### `QGCPluginManager` - Runtime Plugin Manager (Singleton)
-- **Purpose**: Manages the lifecycle of runtime plugins
-- **Responsibilities**:
-  - Load runtime plugins from disk
-  - Initialize and cleanup plugins
-  - Aggregate tool menu items from all plugins
-  - Register plugins with PluginSettings
-- **Key Properties**:
-  - `toolMenuItems` - Aggregated list of all plugin tool menu items
-  - `loadedPlugins` - List of currently loaded runtime plugins
-- **Key Methods**:
-  - `init()` - Load and initialize all plugins
-  - `cleanup()` - Cleanup and delete all plugins
+#### `PluginManifest` — Declared Identity/Compatibility ([PluginManifest.h](PluginManifest.h))
+A pure value type parsed from a plugin's `qgcplugin.json`: `id` (reverse-DNS identity),
+`name`, `version`, `vendor`, `description`, `tier` (`Qml`/`Sdk`/`Internal`), `apiVersion`,
+`hostVersionMin`/`hostVersionMax` (half-open range, empty max = unbounded), `hostBuildId`
+(checked only for `Internal` tier), and `contributes` (reserved, not yet consumed —
+contributions are still `QGCPlugin` virtual overrides, see below).
+`PluginManifest::fromJson()`/`fromMetaData()` and `validateForHost()` are pure functions:
+no plugin code runs to produce or check a manifest.
 
-#### `QGCPlugin` - Runtime Plugin Base Class
-- **Purpose**: Base class for dynamically loaded runtime plugins
-- **Responsibilities**:
-  - Provide tool menu items to extend the Tools menu
-  - Initialize plugin-specific functionality
-  - Clean up on plugin unload
-- **Key Methods**:
-  - `name()` - Human-readable plugin name
-  - `toolMenuItem()` - Single menu item this plugin contributes
-  - `init()` / `cleanup()` - Lifecycle management
+#### `QGCPluginLoader` — Stateless Inspect/Activate Mechanism ([QGCPluginLoader.h](QGCPluginLoader.h))
+A static utility, not a QObject — it holds no state between calls:
+- `inspect(filePath)` reads `QPluginLoader::metaData()`, checks the IID, parses the
+  embedded manifest, and validates it against the host — **without instantiating the
+  plugin**. Returns a `PluginLoadInfo` in state `Discovered`, `Incompatible`, or `Failed`.
+- `inspectDirectories(dirs)` runs `inspect()` over every plugin file found under the
+  given directories (sorted by filename for deterministic duplicate-id resolution).
+- `activate(info)` instantiates a plugin that passed inspection (`Discovered` →
+  `Active`/`Failed`).
+- `defaultPluginPaths()` returns the platform's search directories.
+- `hostInfo()` returns the running host's `HostInfo` (version from `QGC_APP_VERSION_STR`,
+  `apiVersion` from `QGCPluginApiVersion`, build id from `QGC_GIT_HASH`), used to validate
+  manifests.
 
-#### `QGCPluginInterface` - Plugin Loading Interface
-- **Purpose**: Qt Plugin Interface for loading runtime plugins
-- **Current Version**: 1.0
-- **Methods**:
-  - `pluginInterfaceVersion()` - Must return 1
-  - `createPlugin()` - Factory method returning `QGCPlugin*`
+Policy (which plugins are enabled, which get activated, record-keeping) is **not** the
+loader's job — that's `QGCPluginManager`.
 
-#### `QGCPluginLoader` - Plugin Discovery & Loading
-- **Purpose**: Discovers and loads plugins from filesystem
-- **Features**:
-  - Scans multiple plugin directories
-  - Platform-specific library loading (.dll, .dylib, .so)
-  - Version compatibility checking
-  - Plugin validation
-- **Default Search Paths**:
-  - Application directory: `<app>/plugins/`
-  - macOS: `<app.app>/Contents/PlugIns/`
-  - User data: `~/.local/share/QGroundControl/plugins/` (Linux)
+#### `PluginState` and `PluginLoadInfo`
+```cpp
+enum class PluginState {
+    Discovered,     // Manifest read and validated; code has not run
+    Incompatible,   // Manifest valid but rejected for this host (see errorString)
+    Disabled,       // Valid but disabled by settings; never activated
+    Active,         // Instantiated and running
+    Failed,         // Metadata unreadable/invalid, or activation failed (see errorString)
+    Quarantined,    // Skipped after a crash during a previous load attempt
+};
+
+struct PluginLoadInfo {
+    QGCPlugin* plugin = nullptr;   // non-null only when state == Active
+    QString filePath;
+    PluginManifest manifest;       // valid unless state == Failed
+    PluginState state = PluginState::Failed;
+    QString errorString;           // reason for Incompatible/Failed/Quarantined
+};
+```
+
+#### `QGCPluginManager` — Runtime Plugin Manager (Singleton) ([QGCPluginManager.h](QGCPluginManager.h))
+Owns **one `PluginLoadInfo` record per discovered plugin, in any state** — not just the
+active ones — plus the policy decisions: which get activated, and what each contributes
+to QML (`toolMenuItems`, `flyViewPanelItems`, `planViewPanelItems`, `replayExtension`,
+`hasLoggingController`). A disabled or incompatible plugin's record is populated entirely
+from its manifest; its code never executes.
+
+Key surface:
+- `loadedPlugins()` — only `Active` records, minimal shape (`name`), for existing QML
+  consumers.
+- `knownPlugins()` — every record regardless of state, richer shape (`id`, `name`,
+  `version`, `vendor`, `description`, `state`, `statusText`) for the Plugins settings page.
+- `setPluginEnabled(id, bool)` — persists the setting (keyed by manifest `id`, via
+  `PluginSettings`) and activates/deactivates immediately to match. Idempotent.
+- `reloadPlugin(id)` — deactivate if active, re-`inspect()` the stored file path,
+  activate again if enabled. No directory rescan (unlike the old "reload = rescan
+  everything" behavior, since dropped — a stale scan could silently pick up an unrelated
+  file at the same path).
+
+#### `QGCPlugin` — Runtime Plugin Base Class ([QGCPlugin.h](QGCPlugin.h))
+Base class for the loaded plugin instance itself: `init()`/`cleanup()` lifecycle,
+`name()`, `toolMenuItem()`, `replayExtension()`, `controlsTelemetryLogging()`, and the
+fly-view/plan-view panel virtuals (`*PanelUrl()`, `*PanelDockUrl()`,
+`*PanelDefaultWidth/Height()`, `*PanelDefaultPosition()`). These are **still C++ virtual
+overrides today** — moving them into the manifest's `contributes` object (so a plugin's
+UI surface is declared as data, not code) is a later architectural step, not yet done.
+
+#### `QGCPluginInterface` — Qt Plugin Factory Interface ([QGCPluginInterface.h](QGCPluginInterface.h))
+```cpp
+#define QGCPluginInterface_iid "org.qgroundcontrol.QGCPluginInterface/1.0"
+inline constexpr int QGCPluginApiVersion = 1;
+```
+`pluginInterfaceVersion()` is a belt-and-braces runtime check; the manifest's
+`apiVersion` (checked during `inspect()`, before any code runs) is authoritative.
 
 ## Plugin Lifecycle
 
 ```
-1. Application Startup
-   ├── QGCCorePlugin::init()
+1. Application Startup (before the QML engine exists — QGCApplication.cc)
    └── QGCPluginManager::init()
        └── QGCPluginManager::_loadPlugins()
-           ├── QGCPluginLoader scans plugin directories
-           ├── Loads .so/.dylib/.dll files
-           ├── Validates QGCPluginInterface version 1
-           └── Creates QGCPlugin instances
+           ├── QGCPluginLoader::defaultPluginPaths()
+           ├── QGCPluginLoader::inspectDirectories() — reads manifests, zero code run
+           └── _processInspected():
+               ├── Registers each valid plugin's id with PluginSettings
+               ├── Duplicate id → Failed, recorded, never activated
+               ├── Disabled by settings → recorded as Disabled, _activateRecord()
+               │   is never called (its code never runs)
+               └── Otherwise → _activateRecord():
+                   ├── QGCPluginLoader::activate() — instance()/qobject_cast/createPlugin()
+                   ├── plugin->init()
+                   ├── First plugin to report a replay extension wins; a second
+                   │   is logged (qCWarning) and ignored
+                   └── Collects toolMenuItem()/flyViewPanel*()/planViewPanel*()
 
-2. Plugin Initialization
-   └── QGCPluginManager::_loadPlugins() (continued)
-       ├── Registers each plugin with PluginSettings
-       ├── Calls plugin->init() on all plugins (always, regardless of enabled state)
-       ├── Collects plugin->toolMenuItem()
-       ├── Adds pluginName property to menu item
-       └── Aggregates items to QGCPluginManager::_toolMenuItems
+2. Runtime
+   ├── User toggles a plugin → QGCPluginManager::setPluginEnabled(id, bool)
+   │   ├── Enabling: re-inspect the stored path, activate if still valid
+   │   └── Disabling: cleanup() + delete the instance; contributions removed;
+   │       the library mapping itself stays until process restart
+   └── QGCPluginManager::reloadPlugin(id) — same deactivate/re-inspect/activate
+       flow, using the stored file path (no directory rescan)
 
-3. Runtime
-   └── Dynamic Load/Unload (Desktop Platforms):
-       ├── User toggles plugin in settings
-       ├── QGCPluginManager::unloadPlugin() - removes from memory
-       ├── QGCPluginManager::reloadPlugin() - loads from disk
-       ├── Tool menu items update automatically
-       └── Note: Plugin code changes still require rebuilding the app
-
-   └── Static Load (Android):
-       ├── Plugin enabled state saved to settings
-       ├── Changes require APK rebuild (plugins compiled into APK)
-       └── Initial load respects enabled state
-
-4. Application Shutdown
-   ├── QGCCorePlugin::cleanup()
-   └── QGCPluginManager::cleanup()
-       ├── Calls plugin->cleanup() on each plugin
-       └── Deletes plugin instances
+3. Application Shutdown
+   └── QGCPluginManager::cleanup() — plugin->cleanup() + delete on every Active record
 ```
+
+Android has no dynamic load/unload: plugins compile into the APK; the enabled toggle
+only controls which ones activate at startup.
 
 ## Creating a Plugin
 
-### 1. Plugin Structure
-
-```cpp
-// MyPlugin.h
-#include "PluginSystem/QGCPlugin.h"
-#include "PluginSystem/QGCPluginInterface.h"
-
-// Factory (implements Qt Plugin Interface)
-class MyPlugin : public QObject, public QGCPluginInterface
-{
-    Q_OBJECT
-    Q_PLUGIN_METADATA(IID "org.mavlink.qgroundcontrol.QGCPluginInterface")
-    Q_INTERFACES(QGCPluginInterface)
-
-public:
-    int pluginInterfaceVersion() const override { return 1; }
-    QGCPlugin* createPlugin(QObject* parent) override;
-};
-
-// Runtime Plugin (your actual plugin logic)
-class MyRuntimePlugin : public QGCPlugin
-{
-    Q_OBJECT
-    QML_ELEMENT
-
-public:
-    explicit MyRuntimePlugin(QObject* parent = nullptr);
-    
-    // QGCPlugin interface
-    QString name() const override { return "MyPlugin"; }
-    QVariantMap toolMenuItem() const override;
-
-private:
-    QVariantMap _toolMenuItem;
-};
-```
-
-### 2. Implementation
-
-```cpp
-// MyPlugin.cc
-#include "MyPlugin.h"
-
-QGCPlugin* MyPlugin::createPlugin(QObject* parent) {
-    return new MyRuntimePlugin(parent);
-}
-
-MyRuntimePlugin::MyRuntimePlugin(QObject* parent)
-    : QGCPlugin(parent)
-{
-    // Create tool menu item
-    _toolMenuItem["title"] = "My Plugin";
-    _toolMenuItem["icon"] = "/res/icon.svg";
-    _toolMenuItem["source"] = "qrc:/qml/MyPluginView.qml";
-    _toolMenuItem["visible"] = true;
-}
-
-QVariantMap MyRuntimePlugin::toolMenuItem() const {
-    return _toolMenuItem;
-}
-```
-
-### 3. CMakeLists.txt
-
-```cmake
-add_library(MyPlugin SHARED
-    MyPlugin.h
-    MyPlugin.cc
-    # QML resources
-    MyPlugin.qrc
-)
-
-target_link_libraries(MyPlugin
-    PRIVATE
-        Qt6::Core
-        Qt6::Quick
-        QGroundControl  # Link to main app for API access
-)
-
-install(TARGETS MyPlugin
-    LIBRARY DESTINATION plugins
-)
-```
-
-## Tool Menu Item
-
-Each plugin provides a single tool menu item as a QVariantMap with the following keys:
-
-| Key | Type | Required | Description |
-|-----|------|----------|-------------|
-| `title` | String | Yes | Display name in Tools menu |
-| `icon` | String | No | Path to icon resource |
-| `source` | String | Yes | QML file path (qrc:/qml/...) |
-| `toolbarSource` | String | No | Custom toolbar QML |
-| `pluginName` | String | Auto | Plugin name (added automatically by system) |
-
-**Note**: The `pluginName` property is automatically added by the plugin loading system and is used to bind menu item visibility to the plugin's enabled state in PluginSettings.
-
-## Settings Integration
-
-Plugins are automatically integrated with the `PluginSettings` system by `QGCPluginManager`, which provides:
-
-**Automatic Registration:**
-- Each plugin is registered using its `name()` as the identifier
-- A Fact is created for the plugin's enabled state
-- Settings persist across application restarts
-
-**User Control:**
-- Users enable/disable plugins in Application Settings → Plugins
-- **Desktop Platforms**: Changes take effect immediately (runtime unload/reload from memory)
-- **Android**: Toggle controls which plugins load at startup; plugin binaries remain in APK. To add/remove plugins from the APK, rebuild is required.
-- **Important**: Plugin code changes require rebuilding the entire application
-
-**Implementation:**
-```cpp
-// Plugins don't need to check enabled state
-MyRuntimePlugin::MyRuntimePlugin(QObject* parent)
-    : QGCPlugin(parent)
-{
-    // Just provide menu item - visibility is automatic
-    _toolMenuItem["title"] = "My Plugin";
-    _toolMenuItem["source"] = "qrc:/qml/MyView.qml";
-}
-```
-
-**Default States:**
-- Example plugin: Disabled by default
-- All other plugins: Enabled by default
-
-**Technical Details:**
-- Settings stored in `Plugins` group with plugin name as key
-- Uses Fact system for type-safety and validation
-- QML binds menu visibility directly to Fact values
-
-## QML Integration
-
-Plugins can:
-- Register QML types: `qmlRegisterType<MyType>("QGroundControl.MyPlugin", 1, 0, "MyType")`
-- Register singletons: `qmlRegisterSingletonType<MySingleton>(...)`
-- Provide QML views via `source` in tool menu items
-- Access QGC globals via `QGroundControl` singleton
-
-## Architecture
-
-**Current Design** (Version 1):
-- Core Plugin: `QGCCorePlugin` (singleton, manages core application behavior)
-- Plugin Manager: `QGCPluginManager` (singleton, manages runtime plugins)
-- Runtime Plugins: `QGCPlugin` (individual loaded plugins)
-- Interface: `QGCPluginInterface` (returns `QGCPlugin*`)
-- Clear separation: core app behavior vs runtime plugin management
-
-**Key Responsibilities:**
-- `QGCCorePlugin`: Core app settings, custom builds, analyze pages
-- `QGCPluginManager`: Load, initialize, and manage runtime plugins
-- `QGCPlugin`: Individual plugin logic and tool menu items
-
-## Runtime Plugin Management
-
-Plugins can be enabled/disabled at runtime through Application Settings → Plugins:
-
-**Desktop Platforms (macOS/Linux/Windows):**
-- Toggle plugins on/off to load/unload from memory
-- Changes take effect immediately (no restart required)
-- Reduces memory footprint by unloading unused plugins
-- **Note**: Plugin code changes still require rebuilding the entire application
-
-**Android:**
-- Plugins are compiled into the APK at build time as `.so` files
-- Toggle controls which plugins load at startup (saves memory by not loading)
-- Plugin `.so` files remain in the APK even when disabled
-- To actually add/remove plugins from the APK, you must rebuild it
-- Cannot load plugins from external files due to Android security model
-
-**Use Cases:**
-- Users can disable plugins they don't need to save memory (desktop: disk + memory; Android: memory only)
-- Developers can test plugin enable/disable behavior
-- System integrators can provide plugin-specific builds
-
-**Important Limitation:**
-Plugin code changes (C++ or QML) require rebuilding the entire application. The enable/disable feature manages which plugins are loaded in memory, not development hot-reload.
+See [plugins/README.md](../../plugins/README.md) for the plugin-author's-eye view
+(manifest schema, CMake pattern, search paths, settings behavior). This document is the
+architecture reference for the loader/manager internals themselves.
 
 ## Examples
 
-See `/plugins/` directory for complete examples:
-- `example/` - Minimal plugin with tool menu item
-- `qdrive/` - Full-featured plugin with AWS integration
-
+See `/plugins/` for complete examples:
+- `example/` — minimal plugin with a tool menu item
+- `qdrive/` — full-featured plugin with AWS integration

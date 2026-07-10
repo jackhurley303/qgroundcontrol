@@ -4,245 +4,170 @@ This directory contains QGC runtime plugins that extend core functionality.
 
 ## Plugin Architecture
 
-QGC uses a dynamic plugin system managed by `QGCPluginManager` that loads custom functionality at runtime:
+QGC uses a dynamic plugin system managed by `QGCPluginManager`:
 
-- **Plugins are built in-tree** with QGC (access to full API)
-- **Maintained as separate repos** (vendor independence)
-- **Integrated via git submodules** (guaranteed compatibility)
-- **Loaded at runtime** by `QGCPluginManager` via Qt's plugin system
-- **Extend functionality** via tool menus and plugin interface
-- **Cross-platform** support (macOS, Linux, Windows)
+- Each plugin is a Qt `MODULE` library declaring a **manifest** (`qgcplugin.json`) that
+  states its identity, compatibility range, and (eventually) its contributions.
+- `QGCPluginManager::init()` runs before the QML engine exists
+  ([QGCApplication.cc](../src/QGCApplication.cc)), so a plugin's contributions must be
+  knowable from data, not from running its code.
+- Loading is two-phase: **inspect** reads and validates the manifest without executing
+  any plugin code; **activate** instantiates the plugin only if it's valid *and* enabled.
+  A disabled or incompatible plugin's code never runs.
+- Plugins are built **in-tree** today (see [Tier roadmap](#tier-roadmap) below for where
+  this is headed).
 
-See [plugin architecture documentation](../src/API/README.md) for detailed API reference.
+See [src/PluginSystem/README.md](../src/PluginSystem/README.md) for the architecture in
+detail (manifest schema, loader states, manager internals).
+
+## The Manifest
+
+Every plugin ships a `qgcplugin.json` (usually generated from a `qgcplugin.json.in` via
+CMake's `configure_file`, so `hostBuildId` can be stamped with the host's build hash):
+
+```json
+{
+    "id": "org.example.qgc.example",
+    "name": "Example",
+    "version": "1.0.0",
+    "vendor": "Example Org",
+    "description": "Demonstrates the QGC plugin system",
+    "tier": "internal",
+    "apiVersion": 1,
+    "hostVersion": { "min": "5.0", "max": "" },
+    "hostBuildId": "@QGC_GIT_HASH@",
+    "contributes": { }
+}
+```
+
+- **`id`** — reverse-DNS, stable identity. This is the key used for the plugin's
+  enabled/disabled setting (`PluginSettings`), *not* its display name.
+- **`tier`** — `internal` (today's only working tier: full access to QGC internals,
+  gated to a matching `hostBuildId`), `sdk`, or `qml` (see [Tier roadmap](#tier-roadmap)).
+- **`apiVersion`** — must equal the host's supported major version
+  (`QGCPluginApiVersion` in [QGCPluginInterface.h](../src/PluginSystem/QGCPluginInterface.h)).
+- **`hostVersion.min`/`.max`** — half-open range `[min, max)`; empty `max` means unbounded.
+- **`hostBuildId`** — required and checked for `tier: "internal"` only; a mismatch means
+  "built for another QGC build."
+- **`contributes`** — reserved for declaring panels/menu items as data instead of C++
+  virtuals; not yet consumed (contributions are still `QGCPlugin` virtual overrides today
+  — see [QGCPlugin.h](../src/PluginSystem/QGCPlugin.h)).
 
 ## Creating a New Plugin
 
-### Recommended: Separate Repository + Submodule
+There is no `qgc_add_plugin()` helper yet (each plugin currently hand-rolls its
+CMakeLists) — copy the structure of `example/`:
 
-This is the preferred approach for vendor/third-party plugins:
-
-```bash
-# 1. Create your plugin in its own repository
-mkdir qgc-myplugin
-cd qgc-myplugin
-git init
-
-# 2. Copy example plugin as template
-cp -r /path/to/qgroundcontrol/plugins/example/* .
-# Rename files: ExamplePlugin* → MyPlugin*
-
-# 3. Commit to your repo
-git add .
-git commit -m "Initial plugin structure"
-git remote add origin https://github.com/yourorg/qgc-myplugin.git
-git push -u origin main
-
-# 4. Add as submodule to QGC fork
-cd /path/to/your-qgc-fork
-git submodule add https://github.com/yourorg/qgc-myplugin.git plugins/myplugin
-git commit -m "Add myplugin submodule"
-
-# 5. Build with QGC
-cmake --build build --target MyPlugin
-```
-
-**Benefits:**
-- ✅ Your plugin lives in your own repository
-- ✅ Independent versioning and releases
-- ✅ Still builds with QGC for compatibility
-- ✅ Full access to QGC internals
-- ✅ No SDK maintenance needed
-
-### Alternative: In-Tree Development
-
-For rapid prototyping or internal plugins:
-
-1. Create directory: `plugins/yourplugin/`
-2. Copy structure from `example/`
-3. Modify files for your use case
-4. Build: `cmake --build build --target YourPlugin`
-
-The build system auto-discovers plugins in subdirectories.
-
-## Building Plugins
-
-### Build All Plugins
-
-```bash
-# From QGC root
-cmake --build build --config Debug
-```
-
-Plugins are automatically discovered and built.
-
-### Build Specific Plugin
-
-```bash
-cmake --build build --config Debug --target ExamplePlugin
-```
-
-### Plugin Locations After Build
-
-- **macOS**: `build/Debug/plugins/` (or `build/Qt_*_for_macOS-Debug/Debug/plugins/`)
-- **Linux**: `build/Debug/plugins/`
-- **Windows**: `build\Debug\plugins\`
-
-## Plugin Discovery
-
-QGC searches for plugins in:
-
-**macOS**:
-- `QGroundControl.app/Contents/PlugIns/`
-- `~/Library/Application Support/QGroundControl/QGroundControl Daily/plugins/`
-
-**Linux**:
-- `/path/to/qgroundcontrol/plugins/`
-- `~/.local/share/QGroundControl/plugins/`
-
-**Windows**:
-- `C:\Program Files\QGroundControl\plugins\`
-- `%LOCALAPPDATA%\QGroundControl\plugins\`
-
-## Plugin Interface
-
-All plugins must implement:
+1. Create `plugins/yourplugin/` with a `.h`/`.cc`/`.qrc`, a `qgcplugin.json.in`, and a
+   `CMakeLists.txt` modeled on [`plugins/example/CMakeLists.txt`](example/CMakeLists.txt).
+2. Implement `QGCPluginInterface` (factory) and a `QGCPlugin` subclass:
 
 ```cpp
 class MyPlugin : public QObject, public QGCPluginInterface {
     Q_OBJECT
-    Q_PLUGIN_METADATA(IID "org.mavlink.qgroundcontrol.QGCPluginInterface")
+    Q_PLUGIN_METADATA(IID QGCPluginInterface_iid FILE "qgcplugin.json")
     Q_INTERFACES(QGCPluginInterface)
-    
+
 public:
-    int pluginInterfaceVersion() const override { return 1; }
+    int pluginInterfaceVersion() const override { return QGCPluginApiVersion; }
     QGCPlugin* createPlugin(QObject* parent) override;
 };
 
 class MyRuntimePlugin : public QGCPlugin {
     Q_OBJECT
-    
+
 public:
     QString name() const override { return "MyPlugin"; }
     QVariantMap toolMenuItem() const override;
 };
 ```
 
-**Note**: Current interface version is 1.
+Note the `FILE "qgcplugin.json"` reference — Qt embeds that file's contents as the
+plugin's metadata, which is what `QGCPluginLoader::inspect()` reads without running any
+code. The manifest's own `id`/`apiVersion`/etc. are what's actually validated; the
+`Q_PLUGIN_METADATA` IID only has to match `QGCPluginInterface_iid`.
+
+3. **Real linkage** (macOS/Linux today): the plugin links Qt only, *not* the
+   `QGroundControl` target. Undefined symbols (QGC internals) are resolved at `dlopen`
+   time from the running executable, via `-undefined dynamic_lookup` (macOS) or
+   `-Wl,--allow-shlib-undefined` (Linux) — see `plugins/example/CMakeLists.txt` for the
+   exact flags. This only works because the app is built with `-Wl,-export_dynamic`
+   today; that's temporary scaffolding for Tier C plugins, not something a real SDK
+   consumer should rely on.
+4. Build: `cmake --build build --target MyPlugin`. The plugin auto-deploys (via a
+   `POST_BUILD` copy step) to the platform's user plugins directory for local iteration.
+
+## Plugin Discovery
+
+`QGCPluginLoader::defaultPluginPaths()` returns, per platform:
+
+**macOS**:
+- `QGroundControl.app/Contents/PlugIns/`
+- `<app bundle>/plugins/`
+- `~/Library/Application Support/QGroundControl/plugins/`
+
+**Linux**:
+- `<app dir>/plugins/`
+- `<app dir>/../lib/qgroundcontrol/plugins/`
+- `~/.local/share/QGroundControl/plugins/`
+
+**Windows**:
+- `<app dir>/plugins/`
+- `%APPDATA%/QGroundControl/plugins/`
+
+Every plugin file found in these directories is **inspected** (manifest read,
+validated) at startup; only valid **and** enabled ones are **activated**.
 
 ## Plugin Settings
 
-Plugins are automatically registered with the `PluginSettings` system by `QGCPluginManager`, which provides:
+- Plugins are registered with `PluginSettings` **by manifest `id`**, not display name —
+  renaming a plugin's `name` doesn't lose its enabled/disabled state.
+- Users toggle plugins in Application Settings → Plugins; the page shows each plugin's
+  name/version/vendor and a status line ("Active", "Disabled", "Incompatible: <reason>",
+  "Failed to load: <reason>", "Quarantined: <reason>").
+- Toggling calls `QGCPluginManager::setPluginEnabled(id, bool)`, which activates or
+  deactivates the plugin **immediately**, in memory — no restart.
+- **Default state**: interim rule until the trust model (manifest-driven, source-dir
+  based) lands — the Example plugin defaults off, every other plugin defaults on.
+- Plugin **code** changes (C++ or QML compiled into the binary) still require rebuilding
+  the plugin; the enable/disable toggle only controls whether the already-built library
+  is loaded.
 
-- **Enable/Disable Control**: Users can toggle plugins on/off in Application Settings → Plugins
-- **Persistent State**: Settings are stored as Facts (type-safe, validated)
-- **Runtime Unload/Reload** (macOS/Linux/Windows): Plugins unload/reload from memory immediately, reducing memory footprint
-- **Android Behavior**: Plugins are compiled into APK; toggle controls which plugins load at startup (plugin binaries remain in APK). To change which plugins are included, rebuild the APK.
-- **Default State**: Example plugin is disabled by default; all others enabled
+## Tier Roadmap
 
-**Important**: Plugin code changes (C++ or QML) require rebuilding the entire application. The enable/disable feature is for managing which plugins are loaded in memory, not for development hot-reload.
+`tier` in the manifest is forward-looking; only `internal` actually works today:
 
-Plugins simply provide their menu items - visibility is controlled automatically:
-
-```cpp
-MyRuntimePlugin::MyRuntimePlugin(QObject* parent)
-    : QGCPlugin(parent)
-{
-    _toolMenuItem["title"] = "My Plugin";
-    _toolMenuItem["icon"] = "/res/icon.svg";
-    _toolMenuItem["source"] = "qrc:/qml/MyPluginView.qml";
-    // Visibility is automatically controlled by PluginSettings
-}
-```
-
-**No manual settings code needed** - the plugin system handles it automatically.
+| Tier | Status | Description |
+|---|---|---|
+| `internal` | **Working today** | Full access to QGC internals, gated by matching `hostBuildId` (rebuilds together with the host). Both `example` and `qdrive` are this tier. |
+| `sdk` | Not yet built | Links only a stable `QGCPluginAPI` shared library + Qt; loads into any host build within its declared version range. |
+| `qml` | Not yet built | No compiled binary at all — pure manifest + QML, installed at runtime. |
 
 ## Example Plugin
 
-See `example/` directory for a minimal working plugin that:
-- Adds "Example Plugin" to Tools menu
-- Shows custom QML view
-- Demonstrates resource bundling
-- Includes build scripts for rapid iteration
-
-## Development Workflow
-
-### For Submodule Plugins
-
-1. **Clone QGC with submodules**:
-   ```bash
-   git clone --recurse-submodules https://github.com/yourorg/qgroundcontrol.git
-   # Or if already cloned:
-   git submodule update --init --recursive
-   ```
-
-2. **Make changes in plugin submodule**:
-   ```bash
-   cd plugins/yourplugin
-   # Make changes, commit to plugin repo
-   git add .
-   git commit -m "Add feature"
-   git push
-   ```
-
-3. **Update submodule reference in QGC**:
-   ```bash
-   cd ../..  # Back to QGC root
-   git add plugins/yourplugin
-   git commit -m "Update yourplugin to latest"
-   ```
-
-4. **Build and test**:
-   ```bash
-   cmake --build build --target YourPlugin
-   # Or rebuild all
-   cmake --build build
-   ```
-
-### For In-Tree Plugins
-
-**Standard Development Workflow:**
-1. **Make changes** directly in `plugins/yourplugin/`
-2. **Rebuild QGC**: `cmake --build build`
-3. **Run** the updated application
-4. **Test** your plugin changes
-
-**Note**: Plugin code changes require rebuilding the entire application. The plugin enable/disable feature is for managing memory usage, not for development iteration.
-
-## Tips
-
-- **Submodules**: Use separate repos for vendor plugins (independence + compatibility)
-- **Memory management**: Disable unused plugins to reduce memory footprint
-- **Full API access**: Plugins have complete access to QGC internals
-- **Debugging**: Set `QGC_LOG_VERBOSE=1` to see plugin loading messages
-- **Interface versioning**: Keep interface version stable, breaking changes affect all plugins
-- **Cross-platform**: Test on macOS, Linux, and Windows (symbol resolution differs)
-- **Submodule updates**: Remember to commit submodule reference changes in main repo
+See `example/` for a minimal working plugin: adds "Example Plugin" to the Tools menu,
+shows a custom QML view, demonstrates resource bundling.
 
 ## Troubleshooting
 
 **Plugin not loading:**
-- Check logs for errors: `qCDebug(QGCPluginLoaderLog)`
-- Verify interface version is `1`
-- Ensure plugin file has correct extension (.dylib/.so/.dll)
-- Check plugin is in search paths
+- Check logs: `qCDebug(QGCPluginLoaderLog)` / `qCDebug(QGCPluginManagerLog)`.
+- Look for "Validated `<name>` (internal, build `<hash>`) before load" — if it's missing,
+  inspection rejected the manifest (check `errorString` in the log).
+- Confirm the plugin is in one of the search paths above and has the right extension
+  (`.dylib`/`.so`/`.dll`).
 
-**Plugin menu item not visible:**
-- Go to Application Settings → Plugins
-- Check if plugin is enabled (toggle to enable)
-- Toggling unloads/reloads the plugin from memory immediately
-**Build errors:**
-- Verify CMakeLists.txt includes all source files
-- Check include paths point to `${CMAKE_SOURCE_DIR}/src/API`
-- Ensure `AUTOMOC` and `AUTORCC` are enabled
+**Plugin menu item / panel not visible:**
+- Application Settings → Plugins — confirm the plugin's status is "Active", not
+  "Disabled"/"Incompatible"/"Failed".
 
 **Runtime crashes:**
-- Don't access `activeVehicle()` without null-check
-- Wait for `parametersReady` before accessing Facts
-- Use defensive coding patterns (see coding guidelines)
+- Don't access `activeVehicle()` without a null-check.
+- Wait for `parametersReady` before accessing Facts.
 
 ## Resources
 
-- [QGC Plugin API](../src/API/)
+- [src/PluginSystem/README.md](../src/PluginSystem/README.md) — architecture detail
 - [Example Plugin](example/)
-- [QGC Coding Standards](../.github/copilot-instructions.md)
+- [QGC Coding Standards](../CODING_STYLE.md)
 - [Qt Plugin Documentation](https://doc.qt.io/qt-6/plugins-howto.html)

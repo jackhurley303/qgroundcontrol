@@ -268,6 +268,10 @@ void QGCPluginManager::_activateRecord(PluginLoadInfo& record)
             _replayExtension = ext;
             emit replayExtensionChanged();
         }
+    } else if (plugin->replayExtension()) {
+        qCWarning(QGCPluginManagerLog) << "Plugin" << pluginId
+            << "provides a replay extension, but one is already registered by another plugin"
+            << "- ignoring (first registration wins)";
     }
 
     // Get plugin's tool menu item and add it
