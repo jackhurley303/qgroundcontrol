@@ -5,6 +5,11 @@ project(ExamplePlugin VERSION 1.0.0 LANGUAGES CXX)
 # This plugin builds as part of the QGC build system
 # It has access to all QGC headers and can link against QGC object files
 
+# Plugin manifest, embedded into the library via Q_PLUGIN_METADATA(... FILE "qgcplugin.json").
+# Configured into the binary dir so hostBuildId matches the host build; the binary dir
+# joins the include path below so moc can resolve the FILE reference.
+configure_file(qgcplugin.json.in "${CMAKE_CURRENT_BINARY_DIR}/qgcplugin.json" @ONLY)
+
 # Plugin sources
 add_library(ExamplePlugin MODULE
     ExamplePlugin.h
@@ -28,6 +33,7 @@ target_link_libraries(ExamplePlugin
 # Include QGC headers (parent project already configured these)
 target_include_directories(ExamplePlugin
     PRIVATE
+        ${CMAKE_CURRENT_BINARY_DIR}
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/src/API
         ${CMAKE_SOURCE_DIR}/src/UI

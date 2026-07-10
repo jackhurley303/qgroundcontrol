@@ -158,6 +158,29 @@ PluginManifest PluginManifest::fromJson(const QJsonObject &json, QString *errorO
     return manifest;
 }
 
+PluginManifest PluginManifest::fromMetaData(const QJsonObject &envelope, const QString &expectedIid, QString *errorOut)
+{
+    const QString iid = envelope.value(QStringLiteral("IID")).toString();
+    if (iid != expectedIid) {
+        if (errorOut) {
+            *errorOut = QStringLiteral("plugin IID '%1' does not match expected IID '%2'").arg(iid, expectedIid);
+        }
+        return PluginManifest();
+    }
+
+    // Qt may emit the MetaData key as an empty object when Q_PLUGIN_METADATA has no
+    // FILE argument, so treat empty the same as absent to keep the diagnostic accurate.
+    const QJsonValue metaDataValue = envelope.value(QStringLiteral("MetaData"));
+    if (!metaDataValue.isObject() || metaDataValue.toObject().isEmpty()) {
+        if (errorOut) {
+            *errorOut = QStringLiteral("no embedded qgcplugin.json manifest (Q_PLUGIN_METADATA missing FILE argument?)");
+        }
+        return PluginManifest();
+    }
+
+    return fromJson(metaDataValue.toObject(), errorOut);
+}
+
 bool PluginManifest::validateForHost(const HostInfo &host, QString *reasonOut) const
 {
     if (apiVersion != host.apiVersion) {
@@ -167,18 +190,22 @@ bool PluginManifest::validateForHost(const HostInfo &host, QString *reasonOut) c
         return false;
     }
 
-    if (host.version < hostVersionMin) {
-        if (reasonOut) {
-            *reasonOut = QStringLiteral("requires QGC >= %1, host is %2").arg(hostVersionMin.toString(), host.version.toString());
+    // A host built from a tagless checkout has no parseable version (git describe yields a
+    // bare hash), making the range unenforceable — validate what we can rather than reject all.
+    if (!host.version.isNull()) {
+        if (host.version < hostVersionMin) {
+            if (reasonOut) {
+                *reasonOut = QStringLiteral("requires QGC >= %1, host is %2").arg(hostVersionMin.toString(), host.version.toString());
+            }
+            return false;
         }
-        return false;
-    }
 
-    if (!hostVersionMax.isNull() && host.version >= hostVersionMax) {
-        if (reasonOut) {
-            *reasonOut = QStringLiteral("requires QGC < %1, host is %2").arg(hostVersionMax.toString(), host.version.toString());
+        if (!hostVersionMax.isNull() && host.version >= hostVersionMax) {
+            if (reasonOut) {
+                *reasonOut = QStringLiteral("requires QGC < %1, host is %2").arg(hostVersionMax.toString(), host.version.toString());
+            }
+            return false;
         }
-        return false;
     }
 
     if (tier == Tier::Internal && hostBuildId != host.buildId) {

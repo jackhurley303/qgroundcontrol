@@ -4,6 +4,8 @@
 #include <QtCore/QJsonObject>
 
 #include "PluginManifest.h"
+#include "QGCPluginInterface.h"
+#include "QGCPluginLoader.h"
 
 namespace {
 
@@ -24,6 +26,16 @@ QJsonObject validInternalManifestJson()
     json[QStringLiteral("hostBuildId")] = QStringLiteral("abc1234");
     json[QStringLiteral("contributes")] = QJsonObject();
     return json;
+}
+
+// Mirrors the QPluginLoader::metaData() envelope shape: {IID, className, MetaData, ...}
+QJsonObject validMetaDataEnvelope()
+{
+    QJsonObject envelope;
+    envelope[QStringLiteral("IID")] = QStringLiteral(QGCPluginInterface_iid);
+    envelope[QStringLiteral("className")] = QStringLiteral("ExamplePlugin");
+    envelope[QStringLiteral("MetaData")] = validInternalManifestJson();
+    return envelope;
 }
 
 } // namespace
@@ -142,6 +154,23 @@ void PluginManifestTest::_hostVersionBelowMinRejected_test()
     QVERIFY(!reason.isEmpty());
 }
 
+void PluginManifestTest::_nullHostVersionSkipsRangeCheck_test()
+{
+    const PluginManifest manifest = PluginManifest::fromJson(validInternalManifestJson());
+    QVERIFY(!manifest.id.isEmpty());
+
+    // Tagless checkout: git describe yields a bare hash, which parses to a null version
+    HostInfo host;
+    host.version = QVersionNumber::fromString(QStringLiteral("a1b2c3d"));
+    host.apiVersion = 1;
+    host.buildId = QStringLiteral("abc1234");
+    QVERIFY(host.version.isNull());
+
+    QString reason;
+    QVERIFY(manifest.validateForHost(host, &reason));
+    QVERIFY(reason.isEmpty());
+}
+
 void PluginManifestTest::_internalTierHashMatch_test()
 {
     const PluginManifest manifest = PluginManifest::fromJson(validInternalManifestJson());
@@ -195,6 +224,66 @@ void PluginManifestTest::_apiVersionMismatch_test()
     QString reason;
     QVERIFY(!manifest.validateForHost(host, &reason));
     QVERIFY(reason.contains(QStringLiteral("apiVersion")));
+}
+
+void PluginManifestTest::_metaDataEnvelope_test()
+{
+    QString error;
+    const PluginManifest manifest = PluginManifest::fromMetaData(validMetaDataEnvelope(), QStringLiteral(QGCPluginInterface_iid), &error);
+    QVERIFY2(!manifest.id.isEmpty(), qPrintable(error));
+    QCOMPARE(manifest.id, QStringLiteral("org.example.qgc.example"));
+    QCOMPARE(manifest.name, QStringLiteral("Example"));
+    QCOMPARE(manifest.tier, PluginManifest::Tier::Internal);
+}
+
+void PluginManifestTest::_metaDataIidMismatch_test()
+{
+    QJsonObject envelope = validMetaDataEnvelope();
+    envelope[QStringLiteral("IID")] = QStringLiteral("org.mavlink.qgroundcontrol.QGCPluginInterface");
+
+    QString error;
+    const PluginManifest manifest = PluginManifest::fromMetaData(envelope, QStringLiteral(QGCPluginInterface_iid), &error);
+    QVERIFY(manifest.id.isEmpty());
+    QVERIFY(error.contains(QStringLiteral("IID")));
+}
+
+void PluginManifestTest::_metaDataMissingMetaData_test()
+{
+    QJsonObject envelope = validMetaDataEnvelope();
+    envelope.remove(QStringLiteral("MetaData"));
+
+    QString error;
+    const PluginManifest manifest = PluginManifest::fromMetaData(envelope, QStringLiteral(QGCPluginInterface_iid), &error);
+    QVERIFY(manifest.id.isEmpty());
+    QVERIFY(error.contains(QStringLiteral("FILE")));
+
+    // Qt emits MetaData as an empty object when Q_PLUGIN_METADATA has no FILE argument
+    error.clear();
+    envelope[QStringLiteral("MetaData")] = QJsonObject();
+    const PluginManifest emptyManifest = PluginManifest::fromMetaData(envelope, QStringLiteral(QGCPluginInterface_iid), &error);
+    QVERIFY(emptyManifest.id.isEmpty());
+    QVERIFY(error.contains(QStringLiteral("FILE")));
+}
+
+void PluginManifestTest::_metaDataInvalidManifest_test()
+{
+    QJsonObject invalidManifest = validInternalManifestJson();
+    invalidManifest.remove(QStringLiteral("id"));
+    QJsonObject envelope = validMetaDataEnvelope();
+    envelope[QStringLiteral("MetaData")] = invalidManifest;
+
+    QString error;
+    const PluginManifest manifest = PluginManifest::fromMetaData(envelope, QStringLiteral(QGCPluginInterface_iid), &error);
+    QVERIFY(manifest.id.isEmpty());
+    QVERIFY(error.contains(QStringLiteral("id")));
+}
+
+void PluginManifestTest::_hostInfo_test()
+{
+    const HostInfo host = QGCPluginLoader::hostInfo();
+    QVERIFY(!host.version.isNull());
+    QVERIFY(!host.buildId.isEmpty());
+    QCOMPARE(host.apiVersion, QGCPluginApiVersion);
 }
 
 UT_REGISTER_TEST(PluginManifestTest, TestLabel::Unit)

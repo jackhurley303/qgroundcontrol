@@ -14,8 +14,14 @@ private slots:
     void _hostVersionMaxEqualsHostRejected_test();
     void _hostVersionEmptyMaxUnbounded_test();
     void _hostVersionBelowMinRejected_test();
+    void _nullHostVersionSkipsRangeCheck_test();
     void _internalTierHashMatch_test();
     void _internalTierHashMismatch_test();
     void _internalTierMissingHashInvalid_test();
     void _apiVersionMismatch_test();
+    void _metaDataEnvelope_test();
+    void _metaDataIidMismatch_test();
+    void _metaDataMissingMetaData_test();
+    void _metaDataInvalidManifest_test();
+    void _hostInfo_test();
 };

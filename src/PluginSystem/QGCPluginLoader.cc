@@ -10,11 +10,12 @@
 #include "QGCPluginLoader.h"
 #include "QGCPlugin.h"
 #include "QGCPluginInterface.h"
-#include "QGCApplication.h"
 #include "QGCLoggingCategory.h"
+#include "qgc_version.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
+#include <QtCore/QJsonObject>
 #include <QtCore/QPluginLoader>
 #include <QtCore/QStandardPaths>
 
@@ -33,10 +34,23 @@ QGCPluginLoader::~QGCPluginLoader()
 QList<QGCPlugin*> QGCPluginLoader::loadedPlugins() const
 {
     QList<QGCPlugin*> plugins;
-    for (const PluginLoadInfo& info : _loadedPluginInfos) {
-        plugins.append(info.plugin);
+    for (const PluginLoadInfo& info : _pluginInfos) {
+        if (info.state == PluginState::Active) {
+            plugins.append(info.plugin);
+        }
     }
     return plugins;
+}
+
+QList<PluginLoadInfo> QGCPluginLoader::loadedPluginInfos() const
+{
+    QList<PluginLoadInfo> infos;
+    for (const PluginLoadInfo& info : _pluginInfos) {
+        if (info.state == PluginState::Active) {
+            infos.append(info);
+        }
+    }
+    return infos;
 }
 
 void QGCPluginLoader::loadPlugins(const QString& pluginDir)
@@ -71,111 +85,135 @@ void QGCPluginLoader::loadPlugins(const QStringList& pluginDirs)
         qCDebug(QGCPluginLoaderLog) << "Found" << entries.size() << "potential plugin files";
 
         for (const QFileInfo& fileInfo : entries) {
-            const QString filePath = fileInfo.absoluteFilePath();
-            qCDebug(QGCPluginLoaderLog) << "Attempting to load plugin:" << filePath;
-
-            PluginLoadInfo info = _loadPlugin(filePath);
-            if (info.plugin) {
-                _loadedPluginInfos.append(info);
-                emit pluginLoaded(fileInfo.fileName());
-                qCDebug(QGCPluginLoaderLog) << "Successfully loaded plugin:" << filePath;
-            }
+            _loadPlugin(fileInfo.absoluteFilePath());
         }
     }
 
-    qCDebug(QGCPluginLoaderLog) << "Plugin loading complete." << _loadedPluginInfos.size() << "plugins loaded";
+    qCDebug(QGCPluginLoaderLog) << "Plugin loading complete." << loadedPluginInfos().size() << "plugins loaded";
 }
 
 PluginLoadInfo QGCPluginLoader::loadPlugin(const QString& filePath)
 {
-    qCDebug(QGCPluginLoaderLog) << "Loading plugin from:" << filePath;
-    
-    PluginLoadInfo info = _loadPlugin(filePath);
-    if (info.plugin) {
-        _loadedPluginInfos.append(info);
-        emit pluginLoaded(QFileInfo(filePath).fileName());
-        qCDebug(QGCPluginLoaderLog) << "Successfully loaded plugin:" << filePath;
-    }
-    
-    return info;
+    return _loadPlugin(filePath);
 }
 
 PluginLoadInfo QGCPluginLoader::_loadPlugin(const QString& filePath)
 {
+    qCDebug(QGCPluginLoaderLog) << "Attempting to load plugin:" << filePath;
+
+    PluginLoadInfo info = _inspect(filePath);
+    if (info.state == PluginState::Discovered) {
+        _activate(info);
+    }
+
+    _pluginInfos.append(info);
+
+    if (info.state == PluginState::Active) {
+        emit pluginLoaded(QFileInfo(filePath).fileName());
+        qCDebug(QGCPluginLoaderLog) << "Successfully loaded plugin:" << filePath;
+    } else {
+        qCWarning(QGCPluginLoaderLog) << "Failed to load plugin:" << filePath << "-" << info.errorString;
+        emit pluginLoadFailed(filePath, info.errorString);
+    }
+
+    return info;
+}
+
+PluginLoadInfo QGCPluginLoader::_inspect(const QString& filePath)
+{
     PluginLoadInfo info;
-    info.plugin = nullptr;
     info.filePath = filePath;
-    
+
     QPluginLoader loader(filePath);
+    const QJsonObject envelope = loader.metaData();
+
+    // An empty envelope means Qt couldn't read the library at all (wrong architecture,
+    // not a Qt plugin, ...) — the legible reason is in errorString(), not the metadata.
+    if (envelope.isEmpty()) {
+        const QString loaderError = loader.errorString();
+        info.state = PluginState::Failed;
+        info.errorString = loaderError.isEmpty() ? QStringLiteral("no plugin metadata found") : loaderError;
+        return info;
+    }
+
+    QString error;
+    info.manifest = PluginManifest::fromMetaData(envelope, QStringLiteral(QGCPluginInterface_iid), &error);
+    if (info.manifest.id.isEmpty()) {
+        info.state = PluginState::Failed;
+        info.errorString = error;
+        return info;
+    }
+
+    QString reason;
+    if (!info.manifest.validateForHost(hostInfo(), &reason)) {
+        info.state = PluginState::Incompatible;
+        info.errorString = reason;
+        return info;
+    }
+
+    info.state = PluginState::Discovered;
+    qCDebug(QGCPluginLoaderLog) << "Validated" << info.manifest.name
+                                << "(" << PluginManifest::tierToString(info.manifest.tier)
+                                << ", build" << info.manifest.hostBuildId << ") before load";
+    return info;
+}
+
+void QGCPluginLoader::_activate(PluginLoadInfo& info)
+{
+    QPluginLoader loader(info.filePath);
     QObject* pluginObject = loader.instance();
 
     if (!pluginObject) {
-        const QString errorString = loader.errorString();
-        qCWarning(QGCPluginLoaderLog) << "Failed to load plugin:" << filePath << "-" << errorString;
-        emit pluginLoadFailed(filePath, errorString);
-        return info;
+        info.state = PluginState::Failed;
+        info.errorString = loader.errorString();
+        return;
     }
 
-    // Check if plugin implements our interface
     auto* pluginInterface = qobject_cast<QGCPluginInterface*>(pluginObject);
     if (!pluginInterface) {
-        qCWarning(QGCPluginLoaderLog) << "Plugin does not implement QGCPluginInterface:" << filePath;
-        emit pluginLoadFailed(filePath, "Plugin does not implement QGCPluginInterface");
+        info.state = PluginState::Failed;
+        info.errorString = QStringLiteral("plugin does not implement QGCPluginInterface");
         loader.unload();
-        return info;
+        return;
     }
 
-    // Check interface version
-    if (pluginInterface->pluginInterfaceVersion() != 1) {
-        qCWarning(QGCPluginLoaderLog) << "Plugin has incompatible interface version:" << filePath
-                                      << "- Expected 1, got" << pluginInterface->pluginInterfaceVersion();
-        emit pluginLoadFailed(filePath, QString("Incompatible interface version: %1").arg(pluginInterface->pluginInterfaceVersion()));
+    // Belt-and-braces runtime check; the manifest apiVersion gate is authoritative
+    if (pluginInterface->pluginInterfaceVersion() != QGCPluginApiVersion) {
+        info.state = PluginState::Failed;
+        info.errorString = QStringLiteral("incompatible interface version: expected %1, got %2").arg(QGCPluginApiVersion).arg(pluginInterface->pluginInterfaceVersion());
         loader.unload();
-        return info;
+        return;
     }
 
-    // Create plugin instance
     // Note: We pass nullptr as parent because plugins are owned by QGCApplication
     // If we pass 'this' as parent, the plugins would be deleted when the loader is destroyed
     QGCPlugin* plugin = pluginInterface->createPlugin(nullptr);
     if (!plugin) {
-        qCWarning(QGCPluginLoaderLog) << "Plugin failed to create instance:" << filePath;
-        emit pluginLoadFailed(filePath, "Failed to create plugin instance");
+        info.state = PluginState::Failed;
+        info.errorString = QStringLiteral("failed to create plugin instance");
         loader.unload();
-        return info;
-    }
-
-    // Validate plugin
-    if (!_validatePlugin(plugin)) {
-        qCWarning(QGCPluginLoaderLog) << "Plugin validation failed:" << filePath;
-        emit pluginLoadFailed(filePath, "Plugin validation failed");
-        delete plugin;
-        loader.unload();
-        return info;
+        return;
     }
 
     info.plugin = plugin;
-    return info;
+    info.state = PluginState::Active;
 }
 
-bool QGCPluginLoader::_validatePlugin(QGCPlugin* plugin)
+HostInfo QGCPluginLoader::hostInfo()
 {
-    if (!plugin) {
-        return false;
+    HostInfo host;
+
+    // QGC_APP_VERSION_STR is a git describe string, e.g. "v5.0.3-1040-gabc1234"
+    QString versionStr = QStringLiteral(QGC_APP_VERSION_STR);
+    if (versionStr.startsWith(u'v')) {
+        versionStr.remove(0, 1);
     }
+    qsizetype suffixIndex = 0;
+    host.version = QVersionNumber::fromString(versionStr, &suffixIndex);
 
-    // Basic validation - plugin must be valid QObject
-    if (plugin->metaObject() == nullptr) {
-        qCWarning(QGCPluginLoaderLog) << "Plugin has invalid metaobject";
-        return false;
-    }
-
-    // Additional validation can be added here
-    // - Check minimum QGC version requirements
-    // - Validate plugin metadata
-    // - Check dependencies
-
-    return true;
+    host.apiVersion = QGCPluginApiVersion;
+    host.buildId = QStringLiteral(QGC_GIT_HASH);
+    return host;
 }
 
 QStringList QGCPluginLoader::defaultPluginPaths()

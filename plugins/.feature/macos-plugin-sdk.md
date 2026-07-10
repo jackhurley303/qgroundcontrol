@@ -14,14 +14,20 @@
   - Pure logic, no libraries loaded — matches the plan's test description exactly.
   - Next: U1.2 (loader gate: metadata before code) in a fresh chat.
 
-- U1.2–U1.6: not started.
+- **U1.2 — Loader gate: metadata before code** — DONE (2026-07-09).
+  - `QGCPluginLoader::_loadPlugin` split into `_inspect(filePath)` (metaData → IID → `PluginManifest::fromMetaData` → `validateForHost`, zero code execution) + `_activate(info)` (instance/cast/createPlugin). `PluginLoadInfo` grew `manifest`/`state` (full `PluginState` enum incl. not-yet-used `Disabled`/`Quarantined`)/`errorString`; loader stores all inspected results, `loadedPluginInfos()` stays Active-only so `QGCPluginManager` is untouched; new `knownPluginInfos()` exposes everything for U1.3/U1.4.
+  - `PluginManifest::fromMetaData(envelope, expectedIid)` added (pure, tested); host identity via `QGCPluginLoader::hostInfo()` from `QGC_APP_VERSION_STR` + new `QGC_GIT_HASH` in `qgc_version.h.in`; `inline constexpr QGCPluginApiVersion = 1` in `QGCPluginInterface.h` (U2.1 bumps this one place).
+  - Both plugins stamp `Q_PLUGIN_METADATA(IID QGCPluginInterface_iid FILE "qgcplugin.json")` with `qgcplugin.json.in` configured per plugin (example: `org.qgroundcontrol.example`; qdrive: `org.qdrive.plugin` — ids still cheap to change until U1.3 keys settings by them). QDrive changes are a separate commit in its nested repo.
+  - Verified: 18 PluginManifestTest cases green; live boot logs "Validated <name> (internal, build <hash>) before load" for both plugins; wrong-IID dylib rejected legibly without crash. `/code-review` medium: 8 findings, 6 fixed (incl. null-host-version rejecting all plugins on tagless checkouts — range check now skipped when host version unparseable), 2 skipped (git-less "0000000" build-id sentinel match; inspect→activate TOCTOU — closed later by U3.3's file-hash consent).
+
+- U1.3–U1.6: not started.
 
 ### Stage 2–5
 
-Not started — blocked on Stage 1 completing (U1.2–U1.6).
+Not started — blocked on Stage 1 completing (U1.3–U1.6).
 
-## Notes for the next unit (U1.2)
+## Notes for the next unit (U1.3)
 
-- `HostInfo{version, apiVersion, buildId}` already exists in `PluginManifest.h` — U1.2 constructs one from `QGC_APP_VERSION_STR`/`QGC_GIT_HASH` compile definitions (not yet wired as compile defs for PluginSystem sources; U1.2 must add that).
-- `apiVersion` constant is `1` until Stage 2 bumps it (D6) — U1.2's loader gate should reference a single named constant, not a magic number, so U2.1 has one place to bump.
-- `PluginManifest::fromJson` surfaces `errorOut` for malformed/invalid manifests; U1.2's `inspect()` phase should also surface `QPluginLoader::errorString()` when `metaData()` comes back empty (S1's wrong-arch finding, plan §11).
+- Loader now exposes `knownPluginInfos()` (all states) — the manager's `PluginRecord` list consumes this instead of `loadedPluginInfos()`; to stop executing disabled plugins the manager must drive `_inspect`/`_activate` separately, so U1.3 likely promotes them to public `inspect()`/`activate()` on the loader (plan U1.2 framing: "inspects and activates on request").
+- Latent sharp edge to kill in U1.3: `QGCPluginManager::_loadPlugins` deletes disabled plugins *after* activation (the 01 §3.5 defect this unit deliberately left), and the local loader's `_pluginInfos` then briefly holds a dangling `plugin` pointer still marked Active (unreachable today — loader is function-local — but don't carry the shape forward).
+- `reloadPlugin`'s scan-everything fallback gets deleted per plan U1.3; `PluginSettings` re-keys Facts by manifest id (D5, no migration shim).

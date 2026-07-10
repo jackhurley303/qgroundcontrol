@@ -50,6 +50,11 @@ public:
     /// PluginManifest and, if errorOut is non-null, a human-readable reason.
     static PluginManifest fromJson(const QJsonObject &json, QString *errorOut = nullptr);
 
+    /// Parses a manifest from a QPluginLoader::metaData() envelope ({IID, className,
+    /// MetaData, ...}) after checking the declared IID against expectedIid. On failure
+    /// returns a default-constructed PluginManifest and a reason via errorOut.
+    static PluginManifest fromMetaData(const QJsonObject &envelope, const QString &expectedIid, QString *errorOut = nullptr);
+
     /// Checks this manifest's declared compatibility range against the running host.
     /// Returns true if the plugin may be activated; otherwise, if reasonOut is non-null,
     /// a human-readable reason is written and false is returned.

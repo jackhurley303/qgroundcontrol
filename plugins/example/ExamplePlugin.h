@@ -18,7 +18,7 @@ Q_DECLARE_LOGGING_CATEGORY(ExamplePluginLog)
 class ExamplePlugin : public QObject, public QGCPluginInterface
 {
     Q_OBJECT
-    Q_PLUGIN_METADATA(IID "org.mavlink.qgroundcontrol.QGCPluginInterface")
+    Q_PLUGIN_METADATA(IID QGCPluginInterface_iid FILE "qgcplugin.json")
     Q_INTERFACES(QGCPluginInterface)
 
 public:

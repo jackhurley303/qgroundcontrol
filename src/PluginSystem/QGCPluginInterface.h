@@ -37,4 +37,9 @@ public:
 
 #define QGCPluginInterface_iid "org.qgroundcontrol.QGCPluginInterface/1.0"
 
+/// Plugin API major version supported by this host. A plugin manifest's 'apiVersion'
+/// must match this value exactly. Bump together with QGCPluginInterface_iid when the
+/// interface changes.
+inline constexpr int QGCPluginApiVersion = 1;
+
 Q_DECLARE_INTERFACE(QGCPluginInterface, QGCPluginInterface_iid)
