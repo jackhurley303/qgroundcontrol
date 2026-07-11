@@ -1,7 +1,7 @@
 #pragma once
 
-#include "PluginSystem/QGCPlugin.h"
-#include "PluginSystem/QGCPluginInterface.h"
+#include "PluginAPI/QGCPlugin.h"
+#include "PluginAPI/QGCPluginInterface.h"
 
 #include <QtCore/QLoggingCategory>
 #include <QtCore/QObject>
@@ -26,7 +26,7 @@ public:
     ~ExamplePlugin() override = default;
 
     // QGCPluginInterface interface
-    int pluginInterfaceVersion() const override { return 1; }
+    int pluginInterfaceVersion() const override { return QGCPluginApiVersion; }
     QGCPlugin* createPlugin(QObject* parent) override;
 };
 

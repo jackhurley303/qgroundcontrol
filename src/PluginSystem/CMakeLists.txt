@@ -1,21 +1,19 @@
 # ============================================================================
 # Plugin System Module
-# Runtime plugin loading, management, and interface
+# Host-side runtime plugin loading and management, built on the QGCPluginAPI
+# SDK boundary (src/PluginAPI/)
 # ============================================================================
 
 target_sources(${CMAKE_PROJECT_NAME}
     PRIVATE
         PluginManifest.cc
         PluginManifest.h
-        QGCPlugin.cc
-        QGCPlugin.h
-        QGCPluginInterface.h
         QGCPluginLoader.cc
         QGCPluginLoader.h
         QGCPluginManager.cc
         QGCPluginManager.h
-        QGCReplayExtension.cc
-        QGCReplayExtension.h
 )
+
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE QGCPluginAPI)
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

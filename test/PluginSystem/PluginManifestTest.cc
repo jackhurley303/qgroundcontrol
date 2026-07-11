@@ -18,7 +18,7 @@ QJsonObject validInternalManifestJson()
     json[QStringLiteral("vendor")] = QStringLiteral("Example Org");
     json[QStringLiteral("description")] = QStringLiteral("Demonstrates the QGC plugin system");
     json[QStringLiteral("tier")] = QStringLiteral("internal");
-    json[QStringLiteral("apiVersion")] = 1;
+    json[QStringLiteral("apiVersion")] = QGCPluginApiVersion;
     QJsonObject hostVersion;
     hostVersion[QStringLiteral("min")] = QStringLiteral("5.0");
     hostVersion[QStringLiteral("max")] = QString();
@@ -95,7 +95,7 @@ void PluginManifestTest::_hostVersionMinEqualsHost_test()
 
     HostInfo host;
     host.version = QVersionNumber::fromString(QStringLiteral("5.0"));
-    host.apiVersion = 1;
+    host.apiVersion = QGCPluginApiVersion;
     host.buildId = QStringLiteral("abc1234");
 
     QString reason;
@@ -115,7 +115,7 @@ void PluginManifestTest::_hostVersionMaxEqualsHostRejected_test()
 
     HostInfo host;
     host.version = QVersionNumber::fromString(QStringLiteral("6.0"));
-    host.apiVersion = 1;
+    host.apiVersion = QGCPluginApiVersion;
     host.buildId = QStringLiteral("abc1234");
 
     QString reason;
@@ -131,7 +131,7 @@ void PluginManifestTest::_hostVersionEmptyMaxUnbounded_test()
 
     HostInfo host;
     host.version = QVersionNumber::fromString(QStringLiteral("99.0"));
-    host.apiVersion = 1;
+    host.apiVersion = QGCPluginApiVersion;
     host.buildId = QStringLiteral("abc1234");
 
     QString reason;
@@ -146,7 +146,7 @@ void PluginManifestTest::_hostVersionBelowMinRejected_test()
 
     HostInfo host;
     host.version = QVersionNumber::fromString(QStringLiteral("4.9"));
-    host.apiVersion = 1;
+    host.apiVersion = QGCPluginApiVersion;
     host.buildId = QStringLiteral("abc1234");
 
     QString reason;
@@ -162,7 +162,7 @@ void PluginManifestTest::_nullHostVersionSkipsRangeCheck_test()
     // Tagless checkout: git describe yields a bare hash, which parses to a null version
     HostInfo host;
     host.version = QVersionNumber::fromString(QStringLiteral("a1b2c3d"));
-    host.apiVersion = 1;
+    host.apiVersion = QGCPluginApiVersion;
     host.buildId = QStringLiteral("abc1234");
     QVERIFY(host.version.isNull());
 
@@ -179,7 +179,7 @@ void PluginManifestTest::_internalTierHashMatch_test()
 
     HostInfo host;
     host.version = QVersionNumber::fromString(QStringLiteral("5.0"));
-    host.apiVersion = 1;
+    host.apiVersion = QGCPluginApiVersion;
     host.buildId = QStringLiteral("abc1234");
 
     QVERIFY(manifest.validateForHost(host));
@@ -192,7 +192,7 @@ void PluginManifestTest::_internalTierHashMismatch_test()
 
     HostInfo host;
     host.version = QVersionNumber::fromString(QStringLiteral("5.0"));
-    host.apiVersion = 1;
+    host.apiVersion = QGCPluginApiVersion;
     host.buildId = QStringLiteral("def5678");
 
     QString reason;
@@ -218,7 +218,7 @@ void PluginManifestTest::_apiVersionMismatch_test()
 
     HostInfo host;
     host.version = QVersionNumber::fromString(QStringLiteral("5.0"));
-    host.apiVersion = 2;
+    host.apiVersion = QGCPluginApiVersion + 1;
     host.buildId = QStringLiteral("abc1234");
 
     QString reason;

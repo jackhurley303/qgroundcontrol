@@ -5,7 +5,7 @@
     "vendor": "QGroundControl",
     "description": "Demonstrates the QGC plugin system",
     "tier": "internal",
-    "apiVersion": 1,
+    "apiVersion": 2,
     "hostVersion": { "min": "5.0", "max": "" },
     "hostBuildId": "@QGC_GIT_HASH@",
     "contributes": { }

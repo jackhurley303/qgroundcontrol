@@ -33,7 +33,7 @@ CMake's `configure_file`, so `hostBuildId` can be stamped with the host's build 
     "vendor": "Example Org",
     "description": "Demonstrates the QGC plugin system",
     "tier": "internal",
-    "apiVersion": 1,
+    "apiVersion": 2,
     "hostVersion": { "min": "5.0", "max": "" },
     "hostBuildId": "@QGC_GIT_HASH@",
     "contributes": { }
@@ -45,13 +45,13 @@ CMake's `configure_file`, so `hostBuildId` can be stamped with the host's build 
 - **`tier`** — `internal` (today's only working tier: full access to QGC internals,
   gated to a matching `hostBuildId`), `sdk`, or `qml` (see [Tier roadmap](#tier-roadmap)).
 - **`apiVersion`** — must equal the host's supported major version
-  (`QGCPluginApiVersion` in [QGCPluginInterface.h](../src/PluginSystem/QGCPluginInterface.h)).
+  (`QGCPluginApiVersion` in [QGCPluginInterface.h](../src/PluginAPI/QGCPluginInterface.h)).
 - **`hostVersion.min`/`.max`** — half-open range `[min, max)`; empty `max` means unbounded.
 - **`hostBuildId`** — required and checked for `tier: "internal"` only; a mismatch means
   "built for another QGC build."
 - **`contributes`** — reserved for declaring panels/menu items as data instead of C++
   virtuals; not yet consumed (contributions are still `QGCPlugin` virtual overrides today
-  — see [QGCPlugin.h](../src/PluginSystem/QGCPlugin.h)).
+  — see [QGCPlugin.h](../src/PluginAPI/QGCPlugin.h)).
 
 ## Creating a New Plugin
 

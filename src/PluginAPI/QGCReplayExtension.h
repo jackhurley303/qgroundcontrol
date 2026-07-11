@@ -13,6 +13,8 @@
 #include <QtCore/QString>
 #include <QtQmlIntegration/QtQmlIntegration>
 
+#include "qgc_plugin_api_global.h"
+
 /**
  * @class QGCReplayExtension
  * @brief Abstract interface for plugin-provided flight replay functionality.
@@ -25,8 +27,12 @@
  *
  * This interface intentionally uses QObject* for flight entry parameters so
  * the core has no dependency on plugin-specific model types.
+ *
+ * @warning This vtable is frozen: it ships across the SDK boundary, so adding,
+ * removing, or reordering virtuals breaks every built plugin silently.
+ * Additions go to a new "QGCReplayExtension2"-style interface, never here.
  */
-class QGCReplayExtension : public QObject
+class QGCPLUGINAPI_EXPORT QGCReplayExtension : public QObject
 {
     Q_OBJECT
     QML_UNCREATABLE("QGCReplayExtension is an abstract interface")

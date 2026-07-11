@@ -1,6 +1,11 @@
 # QGroundControl Plugin Architecture
 
-This directory contains the core plugin system architecture for QGroundControl.
+This directory contains the **host side** of the plugin system: loader, manager, and
+settings glue. The **plugin-facing types** (`QGCPlugin`, `QGCPluginInterface`,
+`QGCReplayExtension`, `QGCHostServices`) live in [src/PluginAPI/](../PluginAPI/) — the
+`QGCPluginAPI` shared library that forms the SDK boundary. Dependency arrows:
+app → `QGCPluginAPI` ← plugins; nothing in `PluginAPI` includes anything from `src/`
+outside itself.
 
 ## Architecture Overview
 
@@ -78,18 +83,18 @@ Key surface:
   everything" behavior, since dropped — a stale scan could silently pick up an unrelated
   file at the same path).
 
-#### `QGCPlugin` — Runtime Plugin Base Class ([QGCPlugin.h](QGCPlugin.h))
-Base class for the loaded plugin instance itself: `init()`/`cleanup()` lifecycle,
+#### `QGCPlugin` — Runtime Plugin Base Class ([QGCPlugin.h](../PluginAPI/QGCPlugin.h))
+Base class for the loaded plugin instance itself: `init(QGCHostServices*)`/`cleanup()` lifecycle,
 `name()`, `toolMenuItem()`, `replayExtension()`, `controlsTelemetryLogging()`, and the
 fly-view/plan-view panel virtuals (`*PanelUrl()`, `*PanelDockUrl()`,
 `*PanelDefaultWidth/Height()`, `*PanelDefaultPosition()`). These are **still C++ virtual
 overrides today** — moving them into the manifest's `contributes` object (so a plugin's
 UI surface is declared as data, not code) is a later architectural step, not yet done.
 
-#### `QGCPluginInterface` — Qt Plugin Factory Interface ([QGCPluginInterface.h](QGCPluginInterface.h))
+#### `QGCPluginInterface` — Qt Plugin Factory Interface ([QGCPluginInterface.h](../PluginAPI/QGCPluginInterface.h))
 ```cpp
-#define QGCPluginInterface_iid "org.qgroundcontrol.QGCPluginInterface/1.0"
-inline constexpr int QGCPluginApiVersion = 1;
+#define QGCPluginInterface_iid "org.qgroundcontrol.QGCPluginAPI/2.0"
+inline constexpr int QGCPluginApiVersion = 2;
 ```
 `pluginInterfaceVersion()` is a belt-and-braces runtime check; the manifest's
 `apiVersion` (checked during `inspect()`, before any code runs) is authoritative.
@@ -109,7 +114,7 @@ inline constexpr int QGCPluginApiVersion = 1;
                │   is never called (its code never runs)
                └── Otherwise → _activateRecord():
                    ├── QGCPluginLoader::activate() — instance()/qobject_cast/createPlugin()
-                   ├── plugin->init()
+                   ├── plugin->init(host)  // host services land with the service layer
                    ├── First plugin to report a replay extension wins; a second
                    │   is logged (qCWarning) and ignored
                    └── Collects toolMenuItem()/flyViewPanel*()/planViewPanel*()

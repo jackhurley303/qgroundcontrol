@@ -2,6 +2,7 @@
 
 #include "Fact.h"
 #include "PluginSettings.h"
+#include "QGCPluginInterface.h"
 #include "QGCPluginManager.h"
 #include "SettingsManager.h"
 
@@ -19,7 +20,7 @@ PluginLoadInfo discoveredFixture(const QString& id, const QString& name)
     info.manifest.version = QVersionNumber(1, 0, 0);
     info.manifest.vendor = QStringLiteral("Test Org");
     info.manifest.tier = PluginManifest::Tier::Internal;
-    info.manifest.apiVersion = 1;
+    info.manifest.apiVersion = QGCPluginApiVersion;
     return info;
 }
 

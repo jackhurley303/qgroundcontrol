@@ -16,7 +16,7 @@ class QGCPlugin;
 /// @brief Interface for QGC plugins
 /// Plugins must implement this interface to be loadable by QGCPluginLoader
 ///
-/// @note Interface Version 1
+/// @note Interface Version 2
 /// When making breaking changes, increment the version number and update
 /// all plugins accordingly. The loader validates version compatibility.
 class QGCPluginInterface
@@ -25,7 +25,7 @@ public:
     virtual ~QGCPluginInterface() = default;
 
     /// @brief Returns the plugin interface version
-    /// Must return 1 for this version of the interface
+    /// Must return the QGCPluginApiVersion this plugin was compiled against
     /// @note If you change the interface, increment this version and update the IID
     virtual int pluginInterfaceVersion() const = 0;
 
@@ -35,11 +35,17 @@ public:
     virtual QGCPlugin* createPlugin(QObject* parent) = 0;
 };
 
-#define QGCPluginInterface_iid "org.qgroundcontrol.QGCPluginInterface/1.0"
+/// Plugin API major version. The single owner of this fact: the interface IID and
+/// the host's manifest 'apiVersion' gate both derive from it. Bump it (only) here
+/// when the interface changes; all plugins rebuild in lockstep.
+#define QGC_PLUGIN_API_VERSION_MAJOR 2
+
+#define QGC_PLUGIN_API_STRINGIFY_2(x) #x
+#define QGC_PLUGIN_API_STRINGIFY(x) QGC_PLUGIN_API_STRINGIFY_2(x)
+#define QGCPluginInterface_iid "org.qgroundcontrol.QGCPluginAPI/" QGC_PLUGIN_API_STRINGIFY(QGC_PLUGIN_API_VERSION_MAJOR) ".0"
 
 /// Plugin API major version supported by this host. A plugin manifest's 'apiVersion'
-/// must match this value exactly. Bump together with QGCPluginInterface_iid when the
-/// interface changes.
-inline constexpr int QGCPluginApiVersion = 1;
+/// must match this value exactly.
+inline constexpr int QGCPluginApiVersion = QGC_PLUGIN_API_VERSION_MAJOR;
 
 Q_DECLARE_INTERFACE(QGCPluginInterface, QGCPluginInterface_iid)

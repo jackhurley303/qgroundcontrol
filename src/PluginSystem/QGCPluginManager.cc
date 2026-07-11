@@ -258,8 +258,9 @@ void QGCPluginManager::_activateRecord(PluginLoadInfo& record)
     const QString pluginId = record.manifest.id;
     const QString displayName = record.manifest.name;
 
-    // Initialize the plugin
-    plugin->init();
+    // Initialize the plugin. The host does not implement any services yet, so
+    // plugins receive a null services handle (allowed by the init() contract).
+    plugin->init(nullptr);
 
     // Register replay extension if this plugin provides one and none is set yet
     if (!_replayExtension) {

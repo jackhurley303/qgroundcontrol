@@ -9,14 +9,17 @@
 
 #pragma once
 
+#include <memory>
+
 #include <QtCore/QObject>
 #include <QtCore/QPointF>
 #include <QtCore/QVariantList>
-#include <QtQmlIntegration/QtQmlIntegration>
 
 #include "QGCReplayExtension.h"
+#include "qgc_plugin_api_global.h"
 
-Q_DECLARE_LOGGING_CATEGORY(QGCPluginLog)
+class QGCHostServices;
+class QGCPluginPrivate;
 
 /**
  * @class QGCPlugin
@@ -30,18 +33,20 @@ Q_DECLARE_LOGGING_CATEGORY(QGCPluginLog)
  * QGCPlugin instances represent individual runtime plugins loaded from
  * shared libraries.
  */
-class QGCPlugin : public QObject
+class QGCPLUGINAPI_EXPORT QGCPlugin : public QObject
 {
     Q_OBJECT
-    QML_UNCREATABLE("")
 
 public:
     explicit QGCPlugin(QObject *parent = nullptr);
     ~QGCPlugin() override;
 
     /// Initialize the plugin
-    /// Called after the plugin is loaded and before it's used
-    virtual void init() { }
+    /// Called once after the plugin is loaded and before it's used.
+    /// @param host The host's service registry, or nullptr when the host
+    /// provides no services. When non-null it stays valid for the plugin's
+    /// lifetime; plugins that need it later store the pointer themselves.
+    virtual void init(QGCHostServices* host) { Q_UNUSED(host); }
 
     /// Cleanup the plugin
     /// Called before the plugin is unloaded
@@ -111,4 +116,8 @@ public:
     /// @return Human-readable plugin name
     virtual QString name() const = 0;
 
+private:
+    // ABI headroom: future state lives behind this pointer, never as new
+    // data members of QGCPlugin itself.
+    const std::unique_ptr<QGCPluginPrivate> _d;
 };

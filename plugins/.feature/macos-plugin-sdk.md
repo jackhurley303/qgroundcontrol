@@ -49,13 +49,22 @@
   - No tests (pure CMake consolidation, no new logic, per plan). Verified: clean build of both plugin targets + full app; both `.dylib`s landed in the build output and were auto-deployed to the live runtime plugin dir; live app run confirmed QDrive plugin initialized and ran normally (log lines, no load errors); manifest content correct in both configured `qgcplugin.json` outputs. `/code-review low`: no findings.
   - Next: Stage 2, U2.1 (library skeleton + type moves) — first unit of the SDK boundary. Entered as an **`/architecture-change`** per the plan's Execution notes (§11): Stages 2–3 are a clean-cutover profile (linkage model reshapes, old model deleted), not additive. Fresh chat.
 
-### Stage 2–5
+### Stage 2 — The SDK boundary (`QGCPluginAPI`) — entered as `/architecture-change`
 
-Not started. **Stage 1 (the declared contract) is now fully complete** — U1.1 through U1.6 all DONE. Stage 2 (SDK boundary) is next, entered via `/architecture-change`.
+- **U2.1 — Library skeleton + type moves** — DONE (2026-07-10).
+  - New `qt_add_library(QGCPluginAPI SHARED)` target in `src/PluginAPI/` (D2/D3): `qgc_plugin_api_global.h` (`QGCPLUGINAPI_EXPORT`), moved `QGCPluginInterface.h` / `QGCPlugin.h/.cc` / `QGCReplayExtension.h/.cc` (verbatim + vtable-freeze warning + export macro), new abstract `QGCHostServices` (`service(id)`, `.cc` metaobject anchor). Hidden visibility + export macro → `nm -gU` shows exactly the API (37 symbols); `VERSION 2.0 SOVERSION 2` → install name `@rpath/libQGCPluginAPI.2.dylib` (matches S2m); PUBLIC include dir on the target is D2's include-isolation enforcement.
+  - `QGCPlugin`: gained empty d-pointer (`QGCPluginPrivate`, the S3-validated ABI headroom) and `init(QGCHostServices*)` (default no-op; **null host allowed by the documented contract** — manager passes `nullptr` until the service layer exists, U2.3). The 12 contribution virtuals stay verbatim; U2.2 deletes them. Dropped: inert `QML_UNCREATABLE` (never registered — no `QML_ELEMENT`; verified in `qgroundcontrol_qmltyperegistrations.cpp`) and the never-used `QGCPluginLog` category.
+  - **IID/apiVersion single-owner**: `QGC_PLUGIN_API_VERSION_MAJOR` in `QGCPluginInterface.h` derives BOTH the IID string (`org.qgroundcontrol.QGCPluginAPI/2.0`, via stringify macro — moc handles it, verified in the built dylibs' embedded metadata) and `QGCPluginApiVersion = 2` — the D6 drift class (IID vs constant divergence) is now unrepresentable. CMake `VERSION/SOVERSION` and per-plugin manifest `apiVersion` literals remain separate facts (per-dylib compat + per-plugin declaration).
+  - Host side: `src/PluginSystem/` kept loader/manager/manifest, links `QGCPluginAPI`; root `QGC_PLUGIN_INCLUDE_DIRECTORIES` gained `src/PluginAPI`. Both plugins: includes → `PluginAPI/…`, `pluginInterfaceVersion()` returns `QGCPluginApiVersion`, manifests `apiVersion: 2` (QDrive = separate commit in its nested repo, gitlink bump rides in the root commit). Docs updated (`plugins/README.md`, both module READMEs, stale `src/API/README.md` version lines).
+  - Verified: full build; Unit suite green except the 3 known environmental keychain-timeout tests; `otool -D/-L` + `nm -gU` checks; live offscreen boot — QDrive activated + initialized through the dylib-backed path (internal tier still `dynamic_lookup`, its `QGCPlugin` undefineds resolve from the host-loaded SDK dylib, as S2m predicted). `/code-review high` (8 finder angles): 4 confirmed findings fixed (init-doc promised non-null host while manager passes null; IID/constant two-encodings drift; `<memory>` include order; `Q_UNUSED` semicolon convention), QML-registration regression candidate REFUTED (type was never registered pre-move), rest refuted/deferred-by-design.
+  - Next: U2.2 (contributions move to the manifest, D1) in a fresh chat.
 
-## Notes for the next unit (U2.1)
+### Stage 2 remaining (U2.2–U2.7), Stages 3–5
 
-- U2.1 = library skeleton + type moves (plan §5, U2.1): new `QGCPluginAPI` target in `src/PluginAPI/` (D2/D3) — `qgc_plugin_api_global.h` (export macro), `QGCPluginInterface.h` (IID bump to `.../2.0`, `apiVersion` 2 per D6), `QGCPlugin.h/.cc` (d-pointer, only `init(QGCHostServices*)`/`cleanup()`/`replayExtension()` — U2.2 strips the rest per D1), `QGCHostServices.h/.cc` (abstract `service(id)`), `QGCReplayExtension.h/.cc` (moved verbatim, header comment freezes the vtable).
-- This is an ABI-sensitive design unit — plan §11 calls for **Opus**, not the Sonnet-default used for U1.x/U1.6.
-- Run S2m's lessons apply directly (already PASS'd 2026-07-06): host-provided `@rpath` dylib, hidden visibility + export macro, zero rpath config needed by plugin authors.
-- Verify: build-level (app links, unit suite green); `apiVersion` host constant becomes 2, manifest tests updated. S3 (cross-build survival) reruns after U2.4, not this unit.
+Not started.
+
+## Notes for the next unit (U2.2)
+
+- U2.2 = contributions → manifest (plan §5 U2.2): delete the 12 static-declaration virtuals from `QGCPlugin`; add `PluginContributions::fromManifest(manifest, urlResolver)` in `src/PluginSystem/`; manager synthesizes the **identical** legacy `QVariantMap` shapes (keys pinned by new `PluginContributionsTest`); `MAVLinkProtocol` check moves to manager's manifest-derived `hasLoggingController()`; both plugins' manifests gain real `contributes` blocks and their C++ overrides are deleted (QDrive = nested-repo commit).
+- Absorb the U1.3-review leftover: same-display-name QML panel-key collision (contribution maps are keyed/consumed per plugin — rework consumption while moving them).
+- ABI-sensitive design unit per plan §11 → Opus-class model, `/code-review high`.

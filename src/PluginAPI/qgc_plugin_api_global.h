@@ -1,22 +1,18 @@
 /****************************************************************************
  *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
+ * (c) 2009-2026 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
  *
  * QGroundControl is licensed according to the terms in the file
  * COPYING.md in the root of the source code directory.
  *
  ****************************************************************************/
 
-#include "QGCPlugin.h"
-#include "QGCLoggingCategory.h"
+#pragma once
 
-QGC_LOGGING_CATEGORY(QGCPluginLog, "PluginSystem.QGCPlugin")
+#include <QtCore/QtGlobal>
 
-QGCPlugin::QGCPlugin(QObject *parent)
-    : QObject(parent)
-{
-}
-
-QGCPlugin::~QGCPlugin()
-{
-}
+#if defined(QGCPLUGINAPI_LIBRARY)
+#define QGCPLUGINAPI_EXPORT Q_DECL_EXPORT
+#else
+#define QGCPLUGINAPI_EXPORT Q_DECL_IMPORT
+#endif

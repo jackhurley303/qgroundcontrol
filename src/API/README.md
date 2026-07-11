@@ -43,13 +43,13 @@ QGroundControl uses a clear separation between the **Core Plugin** (singleton ma
 - **Key Methods**:
   - `name()` - Human-readable plugin name
   - `toolMenuItem()` - Single menu item this plugin contributes
-  - `init()` / `cleanup()` - Lifecycle management
+  - `init(QGCHostServices*)` / `cleanup()` - Lifecycle management
 
 #### `QGCPluginInterface` - Plugin Loading Interface
 - **Purpose**: Qt Plugin Interface for loading runtime plugins
-- **Current Version**: 1.0
+- **Current Version**: 2.0
 - **Methods**:
-  - `pluginInterfaceVersion()` - Must return 1
+  - `pluginInterfaceVersion()` - Must return `QGCPluginApiVersion` (currently 2)
   - `createPlugin()` - Factory method returning `QGCPlugin*`
 
 #### `QGCPluginLoader` - Plugin Discovery & Loading
@@ -110,18 +110,18 @@ QGroundControl uses a clear separation between the **Core Plugin** (singleton ma
 
 ```cpp
 // MyPlugin.h
-#include "PluginSystem/QGCPlugin.h"
-#include "PluginSystem/QGCPluginInterface.h"
+#include "PluginAPI/QGCPlugin.h"
+#include "PluginAPI/QGCPluginInterface.h"
 
 // Factory (implements Qt Plugin Interface)
 class MyPlugin : public QObject, public QGCPluginInterface
 {
     Q_OBJECT
-    Q_PLUGIN_METADATA(IID "org.mavlink.qgroundcontrol.QGCPluginInterface")
+    Q_PLUGIN_METADATA(IID QGCPluginInterface_iid FILE "qgcplugin.json")
     Q_INTERFACES(QGCPluginInterface)
 
 public:
-    int pluginInterfaceVersion() const override { return 1; }
+    int pluginInterfaceVersion() const override { return QGCPluginApiVersion; }
     QGCPlugin* createPlugin(QObject* parent) override;
 };
 
