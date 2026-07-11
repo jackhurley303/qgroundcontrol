@@ -19,6 +19,8 @@
 
 Q_DECLARE_LOGGING_CATEGORY(QGCPluginManagerLog)
 
+class QGCHostServicesImpl;
+
 /**
  * @class QGCPluginManager
  * @brief Manages runtime-loaded QGroundControl plugins
@@ -112,6 +114,7 @@ signals:
 
 private:
     void _loadPlugins();
+    void _ensureHostServices();
     void _processInspected(const QList<PluginLoadInfo>& infos);
     void _activateRecord(PluginLoadInfo& record);
     void _deactivateRecord(PluginLoadInfo& record);
@@ -126,6 +129,7 @@ private:
     QVariantList _flyViewPanelItems;       // List of fly-view panel items (from plugins)
     QVariantList _planViewPanelItems;      // List of plan-view panel items (from plugins)
     QList<PluginLoadInfo> _records;        // One record per discovered plugin, any state
+    QGCHostServicesImpl* _hostServices = nullptr; // Service registry handed to every plugin's init()
     QGCReplayExtension* _replayExtension = nullptr; // First replay extension found across active plugins
     bool _hasLoggingController = false;   // True if any active plugin claims telemetry-logging control
 

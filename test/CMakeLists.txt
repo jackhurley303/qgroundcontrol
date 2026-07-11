@@ -209,6 +209,7 @@ add_qgc_test(TransectStyleComplexItemTest LABELS Unit MissionManager RESOURCE_LO
 # PluginSystem
 # ----------------------------------------------------------------------------
 add_subdirectory(PluginSystem)
+add_qgc_test(HostServicesTest LABELS Unit)
 add_qgc_test(PluginContributionsTest LABELS Unit)
 add_qgc_test(PluginManifestTest LABELS Unit)
 add_qgc_test(QGCPluginManagerTest LABELS Unit)

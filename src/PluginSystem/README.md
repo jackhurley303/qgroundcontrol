@@ -99,6 +99,21 @@ when the manifest declares `"replay": true`). Everything static — tool menu en
 panels, the telemetry-logging claim, the display name — is manifest data, never a
 virtual.
 
+#### Host Services ([HostServices/](HostServices/))
+The host side of the SDK's service seam. `QGCHostServicesImpl` is the id → `QObject`
+registry the manager constructs (lazily, on first plugin activation) and passes to every
+`QGCPlugin::init()`. Each service is a thin wrapper delegating to the internal owner:
+
+| Service id | SDK interface | Wraps |
+|---|---|---|
+| `qgc.replay/1` | [QGCReplayService.h](../PluginAPI/QGCReplayService.h) | `LinkManager::startLogReplay()` + the active `LogReplayLink`, `ParameterManager::registerReplayParamFile()`, `Vehicle::registerReplayPlanFile()` |
+| `qgc.telemetryLogging/1` | [QGCTelemetryLoggingService.h](../PluginAPI/QGCTelemetryLoggingService.h) | `MAVLinkProtocol`'s tlog recording surface |
+
+Plugins acquire a service with `host->service(id)` and `qobject_cast` to the SDK
+interface; an unknown id returns `nullptr` (plugins must tolerate absent services).
+Service ids are append-only: a breaking change ships as a new id (`qgc.replay/2`),
+never as a change to an existing interface.
+
 #### `QGCPluginInterface` — Qt Plugin Factory Interface ([QGCPluginInterface.h](../PluginAPI/QGCPluginInterface.h))
 ```cpp
 #define QGCPluginInterface_iid "org.qgroundcontrol.QGCPluginAPI/2.0"
@@ -123,7 +138,7 @@ inline constexpr int QGCPluginApiVersion = 2;
                │   is never called (its code never runs)
                └── Otherwise → _activateRecord():
                    ├── QGCPluginLoader::activate() — instance()/qobject_cast/createPlugin()
-                   ├── plugin->init(host)  // host services land with the service layer
+                   ├── plugin->init(host)  // host services registry (see Host Services)
                    ├── replayExtension() queried iff the manifest declares "replay";
                    │   first plugin wins, a second is logged (qCWarning) and ignored
                    └── Publishes the manifest-derived contributions to QML

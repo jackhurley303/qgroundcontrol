@@ -139,6 +139,29 @@ plugin's metadata, which is what `QGCPluginLoader::inspect()` reads without runn
 code. The manifest's own `id`/`apiVersion`/etc. are what's actually validated; the
 `Q_PLUGIN_METADATA` IID only has to match `QGCPluginInterface_iid`.
 
+`init(QGCHostServices* host)` receives the host's service registry (valid for the
+plugin's lifetime). Services are acquired by their versioned id and cast to the
+matching SDK interface; an unknown id returns `nullptr`, and plugins must tolerate
+absent services:
+
+```cpp
+void MyRuntimePlugin::init(QGCHostServices* host)
+{
+    auto* replay = host ? qobject_cast<QGCReplayService*>(host->service(QGCReplayServiceId)) : nullptr;
+    if (replay) {
+        // start/control tlog replay sessions, register param/plan sidecar files
+    }
+}
+```
+
+Services provided today (ids are append-only — a breaking change ships as a new id,
+never as a change to an existing interface):
+
+| Id | SDK interface | Purpose |
+|---|---|---|
+| `qgc.replay/1` | `QGCReplayService` | Tlog flight-replay sessions: start/stop, playback control, param/plan sidecar registration |
+| `qgc.telemetryLogging/1` | `QGCTelemetryLoggingService` | Tlog recording control: start/stop, pending-log save/discard |
+
 3. **Real linkage** (macOS/Linux today): the plugin links Qt only, *not* the
    `QGroundControl` target. Undefined symbols (QGC internals) are resolved at `dlopen`
    time from the running executable, via `-undefined dynamic_lookup` (macOS) or

@@ -13,6 +13,10 @@ qt_add_library(QGCPluginAPI SHARED
     QGCPluginInterface.h
     QGCReplayExtension.cc
     QGCReplayExtension.h
+    QGCReplayService.cc
+    QGCReplayService.h
+    QGCTelemetryLoggingService.cc
+    QGCTelemetryLoggingService.h
     qgc_plugin_api_global.h
 )
 

@@ -13,6 +13,9 @@
 #include "SettingsManager.h"
 #include "PluginSettings.h"
 #include "Fact.h"
+#include "HostServices/QGCHostServicesImpl.h"
+#include "HostServices/QGCReplayServiceImpl.h"
+#include "HostServices/QGCTelemetryLoggingServiceImpl.h"
 
 #include <QtCore/QApplicationStatic>
 #include <QtQml/qqml.h>
@@ -239,6 +242,22 @@ void QGCPluginManager::_processInspected(const QList<PluginLoadInfo>& infos)
     emit loadedPluginsChanged();
 }
 
+void QGCPluginManager::_ensureHostServices()
+{
+    if (_hostServices) {
+        return;
+    }
+
+    // Built on first activation (still before the QML engine exists) so paths
+    // that never activate a plugin — disabled sets, unit tests with manifest
+    // fixtures — don't touch the wrapped singletons.
+    _hostServices = new QGCHostServicesImpl(this);
+    _hostServices->registerService(QGCReplayServiceId, new QGCReplayServiceImpl(_hostServices));
+    _hostServices->registerService(QGCTelemetryLoggingServiceId, new QGCTelemetryLoggingServiceImpl(_hostServices));
+    qCDebug(QGCPluginManagerLog) << "Host services ready:"
+        << QGCReplayServiceId << QGCTelemetryLoggingServiceId;
+}
+
 void QGCPluginManager::_activateRecord(PluginLoadInfo& record)
 {
     QGCPluginLoader::activate(record);
@@ -251,9 +270,8 @@ void QGCPluginManager::_activateRecord(PluginLoadInfo& record)
     QGCPlugin* plugin = record.plugin;
     const QString pluginId = record.manifest.id;
 
-    // Initialize the plugin. The host does not implement any services yet, so
-    // plugins receive a null services handle (allowed by the init() contract).
-    plugin->init(nullptr);
+    _ensureHostServices();
+    plugin->init(_hostServices);
 
     // Register the replay extension when the manifest declares one; undeclared
     // extensions are never queried (the manifest is the contract)
