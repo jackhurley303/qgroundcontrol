@@ -6,8 +6,12 @@
 # ============================================================================
 
 qt_add_library(QGCPluginAPI SHARED
+    QGCAppService.cc
+    QGCAppService.h
     QGCHostServices.cc
     QGCHostServices.h
+    QGCMissionService.cc
+    QGCMissionService.h
     QGCPlugin.cc
     QGCPlugin.h
     QGCPluginInterface.h
@@ -17,6 +21,8 @@ qt_add_library(QGCPluginAPI SHARED
     QGCReplayService.h
     QGCTelemetryLoggingService.cc
     QGCTelemetryLoggingService.h
+    QGCVehicleService.cc
+    QGCVehicleService.h
     qgc_plugin_api_global.h
 )
 

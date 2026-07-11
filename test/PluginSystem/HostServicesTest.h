@@ -15,4 +15,7 @@ private slots:
     void _replayInactiveNoOps_test();
     void _replayRejectsEmptyPath_test();
     void _replayRegistriesSmoke_test();
+    void _appServiceDelegates_test();
+    void _appServiceRelaysSavePathsChanged_test();
+    void _vehicleAndMissionServicesNoVehicle_test();
 };

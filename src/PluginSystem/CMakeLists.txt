@@ -6,12 +6,18 @@
 
 target_sources(${CMAKE_PROJECT_NAME}
     PRIVATE
+        HostServices/QGCAppServiceImpl.cc
+        HostServices/QGCAppServiceImpl.h
         HostServices/QGCHostServicesImpl.cc
         HostServices/QGCHostServicesImpl.h
+        HostServices/QGCMissionServiceImpl.cc
+        HostServices/QGCMissionServiceImpl.h
         HostServices/QGCReplayServiceImpl.cc
         HostServices/QGCReplayServiceImpl.h
         HostServices/QGCTelemetryLoggingServiceImpl.cc
         HostServices/QGCTelemetryLoggingServiceImpl.h
+        HostServices/QGCVehicleServiceImpl.cc
+        HostServices/QGCVehicleServiceImpl.h
         PluginContributions.cc
         PluginContributions.h
         PluginJsonUtils.h

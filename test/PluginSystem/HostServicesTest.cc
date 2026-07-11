@@ -2,12 +2,20 @@
 
 #include <QtTest/QSignalSpy>
 
+#include "AppSettings.h"
+#include "HostServices/QGCAppServiceImpl.h"
 #include "HostServices/QGCHostServicesImpl.h"
+#include "HostServices/QGCMissionServiceImpl.h"
 #include "HostServices/QGCReplayServiceImpl.h"
 #include "HostServices/QGCTelemetryLoggingServiceImpl.h"
+#include "HostServices/QGCVehicleServiceImpl.h"
 #include "MAVLinkProtocol.h"
+#include "QGCAppService.h"
+#include "QGCMissionService.h"
 #include "QGCReplayService.h"
 #include "QGCTelemetryLoggingService.h"
+#include "QGCVehicleService.h"
+#include "SettingsManager.h"
 
 void HostServicesTest::_registryLookup_test()
 {
@@ -41,6 +49,9 @@ void HostServicesTest::_defaultServicesResolveAndCast_test()
     QGCHostServicesImpl services;
     services.registerService(QGCReplayServiceId, new QGCReplayServiceImpl(&services));
     services.registerService(QGCTelemetryLoggingServiceId, new QGCTelemetryLoggingServiceImpl(&services));
+    services.registerService(QGCVehicleServiceId, new QGCVehicleServiceImpl(&services));
+    services.registerService(QGCMissionServiceId, new QGCMissionServiceImpl(&services));
+    services.registerService(QGCAppServiceId, new QGCAppServiceImpl(&services));
 
     // Plugins acquire by id and qobject_cast to the SDK interface: the casts
     // succeeding pins the interfaces' metaobject anchors in the SDK library.
@@ -51,6 +62,18 @@ void HostServicesTest::_defaultServicesResolveAndCast_test()
     QObject* loggingObj = services.service(QGCTelemetryLoggingServiceId);
     QVERIFY(loggingObj);
     QVERIFY(qobject_cast<QGCTelemetryLoggingService*>(loggingObj));
+
+    QObject* vehicleObj = services.service(QGCVehicleServiceId);
+    QVERIFY(vehicleObj);
+    QVERIFY(qobject_cast<QGCVehicleService*>(vehicleObj));
+
+    QObject* missionObj = services.service(QGCMissionServiceId);
+    QVERIFY(missionObj);
+    QVERIFY(qobject_cast<QGCMissionService*>(missionObj));
+
+    QObject* appObj = services.service(QGCAppServiceId);
+    QVERIFY(appObj);
+    QVERIFY(qobject_cast<QGCAppService*>(appObj));
 
     QCOMPARE(services.service(QStringLiteral("qgc.bogus/1")), nullptr);
 }
@@ -122,6 +145,43 @@ void HostServicesTest::_replayRegistriesSmoke_test()
     service.registerReplayParamFile(1, QString());
     service.registerReplayPlanFile(1, QStringLiteral("/nonexistent/replay.plan"));
     service.registerReplayPlanFile(1, QString());
+}
+
+void HostServicesTest::_appServiceDelegates_test()
+{
+    QGCAppServiceImpl service;
+    AppSettings* appSettings = SettingsManager::instance()->appSettings();
+
+    QCOMPARE(service.applicationName(), QCoreApplication::applicationName());
+    QCOMPARE(service.organizationName(), QCoreApplication::organizationName());
+    QCOMPARE(service.versionString(), QCoreApplication::applicationVersion());
+    QCOMPARE(service.savePath(), appSettings->savePath()->rawValue().toString());
+    QCOMPARE(service.telemetrySavePath(), appSettings->telemetrySavePath());
+    QVERIFY(!service.telemetrySavePath().isEmpty());
+}
+
+void HostServicesTest::_appServiceRelaysSavePathsChanged_test()
+{
+    QGCAppServiceImpl service;
+    QSignalSpy pathsSpy(&service, &QGCAppService::savePathsChanged);
+
+    QVERIFY(QMetaObject::invokeMethod(SettingsManager::instance()->appSettings(), "savePathsChanged"));
+
+    QCOMPARE(pathsSpy.count(), 1);
+}
+
+void HostServicesTest::_vehicleAndMissionServicesNoVehicle_test()
+{
+    // No vehicle is connected in this fixture: the empty-world reads and the
+    // unknown-id refusals must hold. The connected-vehicle behavior lives in
+    // HostVehicleServicesTest.
+    QGCVehicleServiceImpl vehicleService;
+    QVERIFY(!vehicleService.activeVehicle());
+    QVERIFY(vehicleService.vehicles().isEmpty());
+
+    QGCMissionServiceImpl missionService;
+    QVERIFY(!missionService.missionReady(1));
+    QVERIFY(!missionService.saveVehicleMissionToFile(1, QStringLiteral("/nonexistent/out.plan")));
 }
 
 UT_REGISTER_TEST(HostServicesTest, TestLabel::Unit)

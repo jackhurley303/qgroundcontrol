@@ -7,6 +7,8 @@ target_sources(${CMAKE_PROJECT_NAME}
     PRIVATE
         HostServicesTest.cc
         HostServicesTest.h
+        HostVehicleServicesTest.cc
+        HostVehicleServicesTest.h
         PluginContributionsTest.cc
         PluginContributionsTest.h
         PluginManifestTest.cc

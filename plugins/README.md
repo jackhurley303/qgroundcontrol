@@ -161,6 +161,9 @@ never as a change to an existing interface):
 |---|---|---|
 | `qgc.replay/1` | `QGCReplayService` | Tlog flight-replay sessions: start/stop, playback control, param/plan sidecar registration |
 | `qgc.telemetryLogging/1` | `QGCTelemetryLoggingService` | Tlog recording control: start/stop, pending-log save/discard |
+| `qgc.vehicles/1` | `QGCVehicleService` | Connected vehicles as `QObject*` (meta-object surface): active vehicle, list, add/remove signals |
+| `qgc.missions/1` | `QGCMissionService` | Per-vehicle mission readiness + snapshot of a vehicle's current mission to a `.plan` file |
+| `qgc.app/1` | `QGCAppService` | Host identity (app/org name, version) and storage paths (save root, telemetry directory) |
 
 3. **Real linkage** (macOS/Linux today): the plugin links Qt only, *not* the
    `QGroundControl` target. Undefined symbols (QGC internals) are resolved at `dlopen`
