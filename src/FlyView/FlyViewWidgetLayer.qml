@@ -175,19 +175,19 @@ Item {
         property real topEdgeCenterInset: visible ? y + height : 0
     }
 
-    // Expanded state keyed by plugin name: { "PluginName": true } = floating panel visible
+    // Expanded state keyed by plugin id: { "org.example.plugin": true } = floating panel visible
     property var _panelExpanded: ({})
 
-    function _setPanelExpanded(name, val) {
+    function _setPanelExpanded(pluginId, val) {
         var s = Object.assign({}, _panelExpanded)
-        s[name] = val
+        s[pluginId] = val
         _panelExpanded = s
     }
 
     function _popOutPanel(panelItem, panelRef) {
-        var name   = panelItem.name
-        var loader = panelRef.contentLoader
-        _setPanelExpanded(name, "popped")   // hides floating panel AND dock row
+        var pluginId = panelItem.pluginId
+        var loader   = panelRef.contentLoader
+        _setPanelExpanded(pluginId, "popped")   // hides floating panel AND dock row
         var win = _windowedPluginPanel.createObject(_root)
         win.panelTitle    = panelItem.name
         win.closeCallback = function() {
@@ -195,7 +195,7 @@ Item {
             // Must clear anchors.fill first so the Layout can take over sizing again.
             loader.anchors.fill = undefined
             loader.parent       = panelRef.contentArea
-            _setPanelExpanded(name, false)
+            _setPanelExpanded(pluginId, false)
         }
         // Move the existing Loader into the window — state is preserved.
         loader.parent       = win.contentSlot
@@ -242,7 +242,7 @@ Item {
         expandedSet:       _panelExpanded
         onExpandPlugin:    function(idx) {
             var item = QGroundControl.pluginManager.flyViewPanelItems[idx]
-            if (item) _setPanelExpanded(item.name, true)
+            if (item) _setPanelExpanded(item.pluginId, true)
         }
     }
 
@@ -253,8 +253,8 @@ Item {
             id:          _thisPanel
             panelItem:   modelData
             panelIndex:  index
-            expanded:    _panelExpanded[modelData.name] === true
-            onMinimized: _setPanelExpanded(modelData.name, false)
+            expanded:    _panelExpanded[modelData.pluginId] === true
+            onMinimized: _setPanelExpanded(modelData.pluginId, false)
             onPoppedOut: _popOutPanel(modelData, _thisPanel)
         }
     }

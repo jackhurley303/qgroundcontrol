@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "PluginContributions.h"
 #include "PluginManifest.h"
 
 #include <QtCore/QLoggingCategory>
@@ -32,11 +33,12 @@ enum class PluginState {
 /// @brief Information about a discovered plugin
 /// The manifest and state are populated by inspection, before any plugin code runs.
 struct PluginLoadInfo {
-    QGCPlugin* plugin = nullptr;    ///< Plugin instance, non-null only when state == Active
-    QString filePath;               ///< Absolute path to plugin file
-    PluginManifest manifest;        ///< Declared identity/compatibility (valid unless state == Failed)
+    QGCPlugin* plugin = nullptr;        ///< Plugin instance, non-null only when state == Active
+    QString filePath;                   ///< Absolute path to plugin file
+    PluginManifest manifest;            ///< Declared identity/compatibility (valid unless state == Failed)
+    PluginContributions contributions;  ///< Declared contributions (valid unless state == Failed)
     PluginState state = PluginState::Failed;
-    QString errorString;            ///< Reason for Incompatible/Failed states
+    QString errorString;                ///< Reason for Incompatible/Failed states
 };
 
 /// @brief Stateless inspect/activate mechanism for QGC plugin libraries

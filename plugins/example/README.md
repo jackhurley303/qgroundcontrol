@@ -56,16 +56,15 @@ Or manually copy from:
 
 ## Custom Toolbar Feature
 
-This plugin demonstrates the custom toolbar capability for plugins. Plugins can provide their own toolbar UI by specifying a `toolbarSource` in their `toolMenuItems`:
+This plugin demonstrates the custom toolbar capability for plugins. Plugins can provide their own toolbar UI by declaring a `toolbarSource` in their manifest's `toolMenu` contribution (see `qgcplugin.json.in`):
 
-```cpp
-// In ExampleCorePlugin constructor
-QVariantMap item;
-item["title"] = "Example Plugin";
-item["icon"] = "/res/QGCLogoFull.svg";
-item["source"] = "qrc:/qml/ExamplePluginView.qml";
-item["toolbarSource"] = "qrc:/qml/ExampleToolBar.qml";  // Custom toolbar
-item["visible"] = true;
+```json
+"toolMenu": {
+    "title": "Example",
+    "icon": "/qmlimages/plugin.svg",
+    "source": "qrc:/qml/ExamplePluginView.qml",
+    "toolbarSource": "qrc:/qml/ExampleToolBar.qml"
+}
 ```
 
 ### Custom Toolbar Requirements

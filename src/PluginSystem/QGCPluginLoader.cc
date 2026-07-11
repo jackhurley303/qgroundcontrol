@@ -90,6 +90,14 @@ PluginLoadInfo QGCPluginLoader::inspect(const QString& filePath)
         return info;
     }
 
+    error.clear();
+    info.contributions = PluginContributions::fromManifest(info.manifest, &error);
+    if (!error.isEmpty()) {
+        info.state = PluginState::Failed;
+        info.errorString = error;
+        return info;
+    }
+
     info.state = PluginState::Discovered;
     qCDebug(QGCPluginLoaderLog) << "Validated" << info.manifest.name
                                 << "(" << PluginManifest::tierToString(info.manifest.tier)

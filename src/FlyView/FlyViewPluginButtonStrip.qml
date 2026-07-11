@@ -19,7 +19,7 @@ Item {
     property bool _anyCollapsed: {
         var items = _panelItems
         for (var i = 0; i < items.length; i++) {
-            if (!expandedSet[items[i].name]) return true
+            if (!expandedSet[items[i].pluginId]) return true
         }
         return false
     }
@@ -83,7 +83,7 @@ Item {
                     width: _root._dockWidth
                     clip:  true
 
-                    property bool _isExpanded: !!_root.expandedSet[modelData.name]
+                    property bool _isExpanded: !!_root.expandedSet[modelData.pluginId]
 
                     height: _isExpanded ? 0 : _root._rowHeight
                     Behavior on height {

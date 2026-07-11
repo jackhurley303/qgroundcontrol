@@ -1,10 +1,12 @@
 # ============================================================================
 # PluginSystem Unit Tests
-# Tests for plugin manifest parsing and host-compatibility validation
+# Tests for plugin manifest/contributions parsing and host-compatibility validation
 # ============================================================================
 
 target_sources(${CMAKE_PROJECT_NAME}
     PRIVATE
+        PluginContributionsTest.cc
+        PluginContributionsTest.h
         PluginManifestTest.cc
         PluginManifestTest.h
         QGCPluginManagerTest.cc

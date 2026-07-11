@@ -8,23 +8,9 @@
  ****************************************************************************/
 
 #include "PluginManifest.h"
+#include "PluginJsonUtils.h"
 
-namespace {
-
-bool requireStringField(const QJsonObject &json, const char *key, QString *valueOut, QString *errorOut)
-{
-    const QJsonValue value = json.value(QString::fromLatin1(key));
-    if (!value.isString() || value.toString().isEmpty()) {
-        if (errorOut) {
-            *errorOut = QStringLiteral("missing or empty required field '%1'").arg(QString::fromLatin1(key));
-        }
-        return false;
-    }
-    *valueOut = value.toString();
-    return true;
-}
-
-} // namespace
+using PluginJson::requireStringField;
 
 QString PluginManifest::tierToString(Tier tier)
 {
@@ -153,7 +139,14 @@ PluginManifest PluginManifest::fromJson(const QJsonObject &json, QString *errorO
         return PluginManifest();
     }
 
-    manifest.contributes = json.value(QStringLiteral("contributes")).toObject();
+    const QJsonValue contributesValue = json.value(QStringLiteral("contributes"));
+    if (!contributesValue.isUndefined() && !contributesValue.isObject()) {
+        if (errorOut) {
+            *errorOut = QStringLiteral("'contributes' must be an object");
+        }
+        return PluginManifest();
+    }
+    manifest.contributes = contributesValue.toObject();
 
     return manifest;
 }

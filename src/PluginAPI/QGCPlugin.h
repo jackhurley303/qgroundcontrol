@@ -12,8 +12,6 @@
 #include <memory>
 
 #include <QtCore/QObject>
-#include <QtCore/QPointF>
-#include <QtCore/QVariantList>
 
 #include "QGCReplayExtension.h"
 #include "qgc_plugin_api_global.h"
@@ -25,9 +23,11 @@ class QGCPluginPrivate;
  * @class QGCPlugin
  * @brief Base class for runtime QGroundControl plugins
  *
- * This is the base class for all runtime-loaded plugins. Plugins extend
- * QGroundControl functionality by providing additional tool menu items,
- * settings, and custom UI components.
+ * This is the base class for all runtime-loaded plugins. Code is only for
+ * behaviour: the lifecycle (init/cleanup) and live extension objects such as
+ * the replay extension. Static contributions — tool menu entry, fly/plan-view
+ * panels, the telemetry-logging claim — are declared as data in the plugin's
+ * qgcplugin.json manifest ("contributes" object) and never queried from code.
  *
  * Unlike QGCCorePlugin (which is a singleton managing the core application),
  * QGCPlugin instances represent individual runtime plugins loaded from
@@ -52,69 +52,10 @@ public:
     /// Called before the plugin is unloaded
     virtual void cleanup() { }
 
-    /// The tool menu item provided by this plugin
-    /// Returns a QVariantMap with keys: title, icon, source, visible
-    /// @return A tool menu item
-    virtual QVariantMap toolMenuItem() const { return QVariantMap(); }
-
     /// Returns the plugin's flight replay extension, or nullptr if this plugin
-    /// does not provide replay functionality.
+    /// does not provide replay functionality. Only queried when the plugin's
+    /// manifest declares "replay": true in its "contributes" object.
     virtual QGCReplayExtension* replayExtension() const { return nullptr; }
-
-    /// Returns a QML URL for a fly-view panel component provided by this plugin.
-    /// Return an empty string (default) if the plugin does not provide a fly-view panel.
-    virtual QString flyViewPanelUrl() const { return QString(); }
-
-    /// Returns a QML URL for the collapsed dock item shown in the fly-view plugin strip.
-    /// The loaded component fills the strip row and can show icons, badges, etc.
-    /// Return an empty string (default) to use the built-in plain-name label.
-    virtual QString flyViewPanelDockUrl() const { return QString(); }
-
-    /// Default width of the fly-view floating panel in units of ScreenTools.defaultFontPixelWidth.
-    /// Return 0 to use the framework default (30 font-width units).
-    virtual double flyViewPanelDefaultWidth() const { return 0; }
-
-    /// Default height of the fly-view floating panel in units of ScreenTools.defaultFontPixelHeight.
-    /// Return 0 to use the framework default (15 font-height units).
-    virtual double flyViewPanelDefaultHeight() const { return 0; }
-
-    /// Default position of the fly-view floating panel as fractions [0, 1] of the parent size,
-    /// where (0, 0) is the top-left corner and (1, 1) is the bottom-right corner.
-    /// Return (-1, -1) to use the framework default (staggered from the right edge).
-    virtual QPointF flyViewPanelDefaultPosition() const { return QPointF(-1, -1); }
-
-    /// Returns a QML URL for a plan-view panel component provided by this plugin.
-    /// Return an empty string (default) if the plugin does not provide a plan-view panel.
-    virtual QString planViewPanelUrl() const { return QString(); }
-
-    /// Returns a QML URL for the collapsed dock item shown in the plan-view plugin strip.
-    /// The loaded component fills the strip row and can show icons, badges, etc.
-    /// Return an empty string (default) to use the built-in plain-name label.
-    virtual QString planViewPanelDockUrl() const { return QString(); }
-
-    /// Default width of the plan-view floating panel in units of ScreenTools.defaultFontPixelWidth.
-    /// Return 0 to use the framework default (30 font-width units).
-    virtual double planViewPanelDefaultWidth() const { return 0; }
-
-    /// Default height of the plan-view floating panel in units of ScreenTools.defaultFontPixelHeight.
-    /// Return 0 to use the framework default (15 font-height units).
-    virtual double planViewPanelDefaultHeight() const { return 0; }
-
-    /// Default position of the plan-view floating panel as fractions [0, 1] of the parent size,
-    /// where (0, 0) is the top-left corner and (1, 1) is the bottom-right corner.
-    /// Return (-1, -1) to use the framework default (staggered from the right edge).
-    virtual QPointF planViewPanelDefaultPosition() const { return QPointF(-1, -1); }
-
-    /// Returns true if this plugin wants to take exclusive control of telemetry
-    /// logging (tlog). When any loaded plugin returns true, MAVLinkProtocol
-    /// disables its built-in auto-start/auto-save behaviour and exposes
-    /// startTlogLogging() / stopTlogLogging() / savePendingLog() /
-    /// discardPendingLog() for the plugin to drive instead.
-    virtual bool controlsTelemetryLogging() const { return false; }
-
-    /// Get the plugin's display name
-    /// @return Human-readable plugin name
-    virtual QString name() const = 0;
 
 private:
     // ABI headroom: future state lives behind this pointer, never as new

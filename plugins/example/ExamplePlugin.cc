@@ -28,15 +28,4 @@ ExampleRuntimePlugin::ExampleRuntimePlugin(QObject* parent)
     : QGCPlugin(parent)
 {
     qCDebug(ExamplePluginLog) << "ExampleRuntimePlugin instance created";
-
-    // Build tool menu item - enabled/disabled state is handled by PluginSettings
-    _toolMenuItem["title"] = "Example";
-    _toolMenuItem["icon"] = "/qmlimages/plugin.svg";
-    _toolMenuItem["source"] = "qrc:/qml/ExamplePluginView.qml";
-    _toolMenuItem["toolbarSource"] = "qrc:/qml/ExampleToolBar.qml";
-}
-
-QVariantMap ExampleRuntimePlugin::toolMenuItem() const
-{
-    return _toolMenuItem;
 }

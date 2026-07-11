@@ -1,5 +1,6 @@
 #include "PluginManifestTest.h"
 
+#include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 
@@ -224,6 +225,31 @@ void PluginManifestTest::_apiVersionMismatch_test()
     QString reason;
     QVERIFY(!manifest.validateForHost(host, &reason));
     QVERIFY(reason.contains(QStringLiteral("apiVersion")));
+}
+
+void PluginManifestTest::_contributesMustBeObject_test()
+{
+    QString error;
+
+    // Wrong-type 'contributes' must fail parsing, not silently coerce to empty
+    QJsonObject arrayContributes = validInternalManifestJson();
+    arrayContributes[QStringLiteral("contributes")] = QJsonArray();
+    QVERIFY(PluginManifest::fromJson(arrayContributes, &error).id.isEmpty());
+    QVERIFY(error.contains(QStringLiteral("contributes")));
+
+    error.clear();
+    QJsonObject stringContributes = validInternalManifestJson();
+    stringContributes[QStringLiteral("contributes")] = QStringLiteral("oops");
+    QVERIFY(PluginManifest::fromJson(stringContributes, &error).id.isEmpty());
+    QVERIFY(error.contains(QStringLiteral("contributes")));
+
+    // Absent 'contributes' stays valid (empty object)
+    error.clear();
+    QJsonObject noContributes = validInternalManifestJson();
+    noContributes.remove(QStringLiteral("contributes"));
+    const PluginManifest manifest = PluginManifest::fromJson(noContributes, &error);
+    QVERIFY2(!manifest.id.isEmpty(), qPrintable(error));
+    QVERIFY(manifest.contributes.isEmpty());
 }
 
 void PluginManifestTest::_metaDataEnvelope_test()

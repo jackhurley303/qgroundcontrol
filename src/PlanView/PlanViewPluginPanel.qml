@@ -72,7 +72,7 @@ Item {
 
     Settings {
         id:       _settings
-        category: "PlanViewPluginPanel_" + (panelItem ? panelItem.name.replace(/\s+/g, "_") : panelIndex)
+        category: "PlanViewPluginPanel_" + (panelItem ? panelItem.pluginId.replace(/[^A-Za-z0-9]/g, "_") : panelIndex)
         property real savedX:      -1
         property real savedY:      -1
         property real savedWidth:  -1

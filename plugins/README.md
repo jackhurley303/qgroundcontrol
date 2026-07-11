@@ -7,7 +7,7 @@ This directory contains QGC runtime plugins that extend core functionality.
 QGC uses a dynamic plugin system managed by `QGCPluginManager`:
 
 - Each plugin is a Qt `MODULE` library declaring a **manifest** (`qgcplugin.json`) that
-  states its identity, compatibility range, and (eventually) its contributions.
+  states its identity, compatibility range, and its contributions.
 - `QGCPluginManager::init()` runs before the QML engine exists
   ([QGCApplication.cc](../src/QGCApplication.cc)), so a plugin's contributions must be
   knowable from data, not from running its code.
@@ -36,7 +36,24 @@ CMake's `configure_file`, so `hostBuildId` can be stamped with the host's build 
     "apiVersion": 2,
     "hostVersion": { "min": "5.0", "max": "" },
     "hostBuildId": "@QGC_GIT_HASH@",
-    "contributes": { }
+    "contributes": {
+        "toolMenu": {
+            "title": "Example",
+            "icon": "/qmlimages/plugin.svg",
+            "source": "qrc:/qml/ExamplePluginView.qml",
+            "toolbarSource": "qrc:/qml/ExampleToolBar.qml"
+        },
+        "flyViewPanel": {
+            "panel": "qrc:/qml/ExampleFlyViewPanel.qml",
+            "dock": "qrc:/qml/ExampleFlyViewDockItem.qml",
+            "defaultWidth": 35,
+            "defaultHeight": 18,
+            "defaultPosition": [0.0, 0.0]
+        },
+        "planViewPanel": { "panel": "qrc:/qml/ExamplePlanViewPanel.qml" },
+        "replay": false,
+        "telemetryLogging": false
+    }
 }
 ```
 
@@ -49,9 +66,25 @@ CMake's `configure_file`, so `hostBuildId` can be stamped with the host's build 
 - **`hostVersion.min`/`.max`** — half-open range `[min, max)`; empty `max` means unbounded.
 - **`hostBuildId`** — required and checked for `tier: "internal"` only; a mismatch means
   "built for another QGC build."
-- **`contributes`** — reserved for declaring panels/menu items as data instead of C++
-  virtuals; not yet consumed (contributions are still `QGCPlugin` virtual overrides today
-  — see [QGCPlugin.h](../src/PluginAPI/QGCPlugin.h)).
+- **`contributes`** — the plugin's static contributions, declared as data (every key
+  optional; schema and defaults documented in
+  [PluginContributions.h](../src/PluginSystem/PluginContributions.h)):
+  - **`toolMenu`** — an entry in the main tool menu; `title` and `source` (the
+    full-screen view's QML URL) are required, `icon` and `toolbarSource` (custom toolbar
+    QML) optional.
+  - **`flyViewPanel`** / **`planViewPanel`** — a floating panel; `panel` (QML URL) is
+    required, `dock` (collapsed dock-row QML), `defaultWidth`/`defaultHeight`
+    (font-size units, 0 = framework default) and `defaultPosition` (`[x, y]` fractions
+    of the view, `[-1, -1]` = framework default) optional.
+  - **`replay`** — the plugin provides a flight replay extension; its
+    `replayExtension()` override is only queried when declared.
+  - **`telemetryLogging`** — the plugin claims exclusive control of tlog logging
+    (disables MAVLinkProtocol's built-in auto-start/auto-save).
+
+  Contributions are synthesized from the manifest at inspection time and shown only
+  while the plugin is enabled — plugin code never runs to produce them. URLs starting
+  with `qrc:/` (or a bare resource path) name compiled-in resources; package-relative
+  URLs are a planned Stage 3 feature.
 
 ## Creating a New Plugin
 
@@ -95,9 +128,9 @@ public:
 class MyRuntimePlugin : public QGCPlugin {
     Q_OBJECT
 
-public:
-    QString name() const override { return "MyPlugin"; }
-    QVariantMap toolMenuItem() const override;
+    // Contributions (tool menu, panels, flags) are declared in the manifest's
+    // "contributes" object, not in code. Override init(host)/cleanup() for
+    // lifecycle work and replayExtension() to provide flight replay.
 };
 ```
 

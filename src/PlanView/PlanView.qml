@@ -40,25 +40,25 @@ Item {
     readonly property int _layerFence: 2
     readonly property int _layerRally: 3
 
-    // Plan-view plugin panel state — keyed by plugin name
+    // Plan-view plugin panel state — keyed by plugin id
     property var _planPanelExpanded: ({})
 
-    function _setPlanPanelExpanded(name, val) {
+    function _setPlanPanelExpanded(pluginId, val) {
         var s = Object.assign({}, _planPanelExpanded)
-        s[name] = val
+        s[pluginId] = val
         _planPanelExpanded = s
     }
 
     function _popOutPlanPanel(panelItem, panelRef) {
-        var name   = panelItem.name
-        var loader = panelRef.contentLoader
-        _setPlanPanelExpanded(name, "popped")
+        var pluginId = panelItem.pluginId
+        var loader   = panelRef.contentLoader
+        _setPlanPanelExpanded(pluginId, "popped")
         var win = _windowedPlanPluginPanel.createObject(_root)
         win.panelTitle    = panelItem.name
         win.closeCallback = function() {
             loader.anchors.fill = undefined
             loader.parent       = panelRef.contentArea
-            _setPlanPanelExpanded(name, false)
+            _setPlanPanelExpanded(pluginId, false)
         }
         loader.parent       = win.contentSlot
         loader.anchors.fill = win.contentSlot
@@ -541,7 +541,7 @@ Item {
             expandedSet:      _planPanelExpanded
             onExpandPlugin:   function(idx) {
                 var item = QGroundControl.pluginManager.planViewPanelItems[idx]
-                if (item) _setPlanPanelExpanded(item.name, true)
+                if (item) _setPlanPanelExpanded(item.pluginId, true)
             }
         }
 
@@ -553,8 +553,8 @@ Item {
                 panelItem:            modelData
                 panelIndex:           index
                 planMasterController: _planMasterController
-                expanded:             _planPanelExpanded[modelData.name] === true
-                onMinimized:          _setPlanPanelExpanded(modelData.name, false)
+                expanded:             _planPanelExpanded[modelData.pluginId] === true
+                onMinimized:          _setPlanPanelExpanded(modelData.pluginId, false)
                 onPoppedOut:          _popOutPlanPanel(modelData, _thisPlanPanel)
             }
         }

@@ -6,6 +6,9 @@
 
 target_sources(${CMAKE_PROJECT_NAME}
     PRIVATE
+        PluginContributions.cc
+        PluginContributions.h
+        PluginJsonUtils.h
         PluginManifest.cc
         PluginManifest.h
         QGCPluginLoader.cc

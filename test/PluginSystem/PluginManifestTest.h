@@ -19,6 +19,7 @@ private slots:
     void _internalTierHashMismatch_test();
     void _internalTierMissingHashInvalid_test();
     void _apiVersionMismatch_test();
+    void _contributesMustBeObject_test();
     void _metaDataEnvelope_test();
     void _metaDataIidMismatch_test();
     void _metaDataMissingMetaData_test();

@@ -1,6 +1,9 @@
 #include "QGCPluginManagerTest.h"
 
+#include <QtCore/QJsonObject>
+
 #include "Fact.h"
+#include "PluginContributions.h"
 #include "PluginSettings.h"
 #include "QGCPluginInterface.h"
 #include "QGCPluginManager.h"
@@ -235,6 +238,59 @@ void QGCPluginManagerTest::_knownPluginsReflectsRecords_test()
     const QVariantMap incompatibleInfo = known[1].toMap();
     QCOMPARE(incompatibleInfo["state"].toString(), QStringLiteral("Incompatible"));
     QVERIFY(incompatibleInfo["statusText"].toString().contains(QStringLiteral("requires host version >= 9.9")));
+}
+
+void QGCPluginManagerTest::_contributionsAddedAndRemoved_test()
+{
+    const QString id = QStringLiteral("org.test.contributor");
+
+    PluginLoadInfo record = discoveredFixture(id, QStringLiteral("Contributor"));
+    QJsonObject toolMenu;
+    toolMenu[QStringLiteral("title")]  = QStringLiteral("Contributor");
+    toolMenu[QStringLiteral("source")] = QStringLiteral("qrc:/qml/ContributorView.qml");
+    QJsonObject flyViewPanel;
+    flyViewPanel[QStringLiteral("panel")] = QStringLiteral("qrc:/qml/ContributorFlyPanel.qml");
+    QJsonObject contributes;
+    contributes[QStringLiteral("toolMenu")]     = toolMenu;
+    contributes[QStringLiteral("flyViewPanel")] = flyViewPanel;
+    record.manifest.contributes = contributes;
+
+    QString error;
+    record.contributions = PluginContributions::fromManifest(record.manifest, &error);
+    QVERIFY(error.isEmpty());
+
+    QGCPluginManager manager;
+    manager._addContributions(record);
+
+    QCOMPARE(manager.toolMenuItems().size(), 1);
+    QCOMPARE(manager.toolMenuItems().first().toMap()["pluginId"].toString(), id);
+    QCOMPARE(manager.flyViewPanelItems().size(), 1);
+    QCOMPARE(manager.flyViewPanelItems().first().toMap()["panelUrl"].toString(), QStringLiteral("qrc:/qml/ContributorFlyPanel.qml"));
+    QVERIFY(manager.planViewPanelItems().isEmpty());
+
+    manager._removeContributionsForPlugin(id);
+    QVERIFY(manager.toolMenuItems().isEmpty());
+    QVERIFY(manager.flyViewPanelItems().isEmpty());
+}
+
+void QGCPluginManagerTest::_loggingControllerFromManifest_test()
+{
+    const QString id = QStringLiteral("org.test.logger");
+
+    // The claim is manifest data: no plugin instance exists, only a record state
+    PluginLoadInfo record = discoveredFixture(id, QStringLiteral("Logger"));
+    record.state = PluginState::Active;
+    record.contributions.controlsTelemetryLogging = true;
+
+    QGCPluginManager manager;
+    manager._records = {record};
+    manager._recalcLoggingController();
+    QVERIFY(manager.hasLoggingController());
+
+    // The claim only counts while the plugin is active
+    manager._records.first().state = PluginState::Disabled;
+    manager._recalcLoggingController();
+    QVERIFY(!manager.hasLoggingController());
 }
 
 UT_REGISTER_TEST(QGCPluginManagerTest, TestLabel::Unit)

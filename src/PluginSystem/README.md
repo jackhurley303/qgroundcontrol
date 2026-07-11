@@ -22,10 +22,18 @@ MAVLink message routing, and custom map items/video receivers.
 A pure value type parsed from a plugin's `qgcplugin.json`: `id` (reverse-DNS identity),
 `name`, `version`, `vendor`, `description`, `tier` (`Qml`/`Sdk`/`Internal`), `apiVersion`,
 `hostVersionMin`/`hostVersionMax` (half-open range, empty max = unbounded), `hostBuildId`
-(checked only for `Internal` tier), and `contributes` (reserved, not yet consumed —
-contributions are still `QGCPlugin` virtual overrides, see below).
+(checked only for `Internal` tier), and `contributes` (opaque here; parsed by
+`PluginContributions`, see below).
 `PluginManifest::fromJson()`/`fromMetaData()` and `validateForHost()` are pure functions:
 no plugin code runs to produce or check a manifest.
+
+#### `PluginContributions` — Declared Contributions ([PluginContributions.h](PluginContributions.h))
+A pure value type parsed from the manifest's `contributes` object:
+ready-made `QVariantMap`s for the tool menu entry and the fly/plan-view panels (the
+exact shapes the QML consumers read, keyed by `pluginId`), plus the
+`replay`/`telemetryLogging` flags. `fromManifest()` is a pure function; a malformed
+`contributes` block fails inspection with a legible reason. The schema is documented
+in the header and in [plugins/README.md](../../plugins/README.md).
 
 #### `QGCPluginLoader` — Stateless Inspect/Activate Mechanism ([QGCPluginLoader.h](QGCPluginLoader.h))
 A static utility, not a QObject — it holds no state between calls:
@@ -56,11 +64,12 @@ enum class PluginState {
 };
 
 struct PluginLoadInfo {
-    QGCPlugin* plugin = nullptr;   // non-null only when state == Active
+    QGCPlugin* plugin = nullptr;        // non-null only when state == Active
     QString filePath;
-    PluginManifest manifest;       // valid unless state == Failed
+    PluginManifest manifest;            // valid unless state == Failed
+    PluginContributions contributions;  // valid unless state == Failed
     PluginState state = PluginState::Failed;
-    QString errorString;           // reason for Incompatible/Failed/Quarantined
+    QString errorString;                // reason for Incompatible/Failed/Quarantined
 };
 ```
 
@@ -84,12 +93,11 @@ Key surface:
   file at the same path).
 
 #### `QGCPlugin` — Runtime Plugin Base Class ([QGCPlugin.h](../PluginAPI/QGCPlugin.h))
-Base class for the loaded plugin instance itself: `init(QGCHostServices*)`/`cleanup()` lifecycle,
-`name()`, `toolMenuItem()`, `replayExtension()`, `controlsTelemetryLogging()`, and the
-fly-view/plan-view panel virtuals (`*PanelUrl()`, `*PanelDockUrl()`,
-`*PanelDefaultWidth/Height()`, `*PanelDefaultPosition()`). These are **still C++ virtual
-overrides today** — moving them into the manifest's `contributes` object (so a plugin's
-UI surface is declared as data, not code) is a later architectural step, not yet done.
+Base class for the loaded plugin instance itself. Code is only for behaviour:
+`init(QGCHostServices*)`/`cleanup()` lifecycle and `replayExtension()` (queried only
+when the manifest declares `"replay": true`). Everything static — tool menu entry,
+panels, the telemetry-logging claim, the display name — is manifest data, never a
+virtual.
 
 #### `QGCPluginInterface` — Qt Plugin Factory Interface ([QGCPluginInterface.h](../PluginAPI/QGCPluginInterface.h))
 ```cpp
@@ -106,7 +114,8 @@ inline constexpr int QGCPluginApiVersion = 2;
    └── QGCPluginManager::init()
        └── QGCPluginManager::_loadPlugins()
            ├── QGCPluginLoader::defaultPluginPaths()
-           ├── QGCPluginLoader::inspectDirectories() — reads manifests, zero code run
+           ├── QGCPluginLoader::inspectDirectories() — reads manifests + contributions,
+           │   zero code run
            └── _processInspected():
                ├── Registers each valid plugin's id with PluginSettings
                ├── Duplicate id → Failed, recorded, never activated
@@ -115,9 +124,9 @@ inline constexpr int QGCPluginApiVersion = 2;
                └── Otherwise → _activateRecord():
                    ├── QGCPluginLoader::activate() — instance()/qobject_cast/createPlugin()
                    ├── plugin->init(host)  // host services land with the service layer
-                   ├── First plugin to report a replay extension wins; a second
-                   │   is logged (qCWarning) and ignored
-                   └── Collects toolMenuItem()/flyViewPanel*()/planViewPanel*()
+                   ├── replayExtension() queried iff the manifest declares "replay";
+                   │   first plugin wins, a second is logged (qCWarning) and ignored
+                   └── Publishes the manifest-derived contributions to QML
 
 2. Runtime
    ├── User toggles a plugin → QGCPluginManager::setPluginEnabled(id, bool)

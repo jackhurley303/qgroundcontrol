@@ -64,28 +64,25 @@ public:
     /// @return A list of known plugin info as QVariantList
     QVariantList knownPlugins() const;
 
-    /// Get the list of tool menu items from all loaded plugins
-    /// @return A list of tool menu items
+    /// Get the list of tool menu items from all loaded plugins.
+    /// Each item is a QVariantMap with keys: pluginId, title, icon, source, toolbarSource
     QVariantList toolMenuItems() const { return _toolMenuItems; }
 
     /// Get the replay extension provided by any loaded plugin, or nullptr if none.
     QGCReplayExtension* replayExtension() const { return _replayExtension; }
 
     /// Get the list of fly-view panel items from all loaded plugins.
-    /// Each item is a QVariantMap with keys: name, panelUrl
+    /// Each item is a QVariantMap with keys: pluginId, name, panelUrl, dockUrl,
+    /// defaultWidth, defaultHeight, defaultXFraction, defaultYFraction
     QVariantList flyViewPanelItems() const { return _flyViewPanelItems; }
 
     /// Get the list of plan-view panel items from all loaded plugins.
-    /// Each item is a QVariantMap with keys: name, panelUrl
+    /// Each item is a QVariantMap with the same keys as flyViewPanelItems()
     QVariantList planViewPanelItems() const { return _planViewPanelItems; }
 
     /// Returns true if any active plugin has claimed exclusive control of
-    /// telemetry logging via QGCPlugin::controlsTelemetryLogging().
+    /// telemetry logging by declaring "telemetryLogging" in its manifest.
     bool hasLoggingController() const { return _hasLoggingController; }
-
-    /// Add a tool menu item from a loaded plugin
-    /// @param item QVariantMap with keys: title, icon, source, visible
-    void addToolMenuItem(const QVariantMap& item);
 
     /// Enable or disable a plugin: persists the setting and activates or
     /// deactivates the plugin to match. Idempotent.
@@ -118,6 +115,7 @@ private:
     void _processInspected(const QList<PluginLoadInfo>& infos);
     void _activateRecord(PluginLoadInfo& record);
     void _deactivateRecord(PluginLoadInfo& record);
+    void _addContributions(const PluginLoadInfo& record);
     void _removeContributionsForPlugin(const QString& pluginId);
     void _recalcReplayExtension();
     void _recalcLoggingController();

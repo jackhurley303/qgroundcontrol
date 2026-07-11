@@ -99,7 +99,7 @@ void QGCPluginManager::_recalcLoggingController()
 {
     bool found = false;
     for (const PluginLoadInfo& record : _records) {
-        if (record.plugin && record.plugin->controlsTelemetryLogging()) {
+        if (record.state == PluginState::Active && record.contributions.controlsTelemetryLogging) {
             found = true;
             break;
         }
@@ -111,7 +111,7 @@ void QGCPluginManager::_recalcReplayExtension()
 {
     QGCReplayExtension* newExt = nullptr;
     for (const PluginLoadInfo& record : _records) {
-        if (record.plugin) {
+        if (record.plugin && record.contributions.providesReplayExtension) {
             newExt = record.plugin->replayExtension();
             if (newExt) {
                 break;
@@ -171,12 +171,6 @@ QString QGCPluginManager::_statusText(const PluginLoadInfo& record) const
         return tr("Pending");
     }
     return tr("Unknown");
-}
-
-void QGCPluginManager::addToolMenuItem(const QVariantMap& item)
-{
-    _toolMenuItems.append(item);
-    emit toolMenuItemsChanged();
 }
 
 PluginLoadInfo* QGCPluginManager::_findRecord(const QString& pluginId)
@@ -256,67 +250,51 @@ void QGCPluginManager::_activateRecord(PluginLoadInfo& record)
 
     QGCPlugin* plugin = record.plugin;
     const QString pluginId = record.manifest.id;
-    const QString displayName = record.manifest.name;
 
     // Initialize the plugin. The host does not implement any services yet, so
     // plugins receive a null services handle (allowed by the init() contract).
     plugin->init(nullptr);
 
-    // Register replay extension if this plugin provides one and none is set yet
-    if (!_replayExtension) {
+    // Register the replay extension when the manifest declares one; undeclared
+    // extensions are never queried (the manifest is the contract)
+    if (record.contributions.providesReplayExtension) {
         QGCReplayExtension* ext = plugin->replayExtension();
-        if (ext) {
+        if (!ext) {
+            qCWarning(QGCPluginManagerLog) << "Plugin" << pluginId
+                << "declares a replay extension in its manifest but provides none";
+        } else if (!_replayExtension) {
             _replayExtension = ext;
             emit replayExtensionChanged();
+        } else {
+            qCWarning(QGCPluginManagerLog) << "Plugin" << pluginId
+                << "provides a replay extension, but one is already registered by another plugin"
+                << "- ignoring (first registration wins)";
         }
-    } else if (plugin->replayExtension()) {
-        qCWarning(QGCPluginManagerLog) << "Plugin" << pluginId
-            << "provides a replay extension, but one is already registered by another plugin"
-            << "- ignoring (first registration wins)";
     }
 
-    // Get plugin's tool menu item and add it
-    QVariantMap menuItem = plugin->toolMenuItem();
-    if (!menuItem.isEmpty()) {
-        qCDebug(QGCPluginManagerLog) << "  - Provides menu item:" << menuItem["title"];
-        menuItem["pluginId"] = pluginId;
-        addToolMenuItem(menuItem);
+    _addContributions(record);
+}
+
+void QGCPluginManager::_addContributions(const PluginLoadInfo& record)
+{
+    const PluginContributions& contributions = record.contributions;
+
+    if (!contributions.toolMenuItem.isEmpty()) {
+        qCDebug(QGCPluginManagerLog) << "  - Provides menu item:" << contributions.toolMenuItem["title"];
+        _toolMenuItems.append(contributions.toolMenuItem);
+        emit toolMenuItemsChanged();
     }
 
-    // Register fly-view panel item if this plugin provides one
-    QString panelUrl = plugin->flyViewPanelUrl();
-    if (!panelUrl.isEmpty()) {
-        QPointF defaultPos = plugin->flyViewPanelDefaultPosition();
-        QVariantMap panelItem;
-        panelItem["pluginId"]         = pluginId;
-        panelItem["name"]             = displayName;
-        panelItem["panelUrl"]         = panelUrl;
-        panelItem["dockUrl"]          = plugin->flyViewPanelDockUrl();
-        panelItem["defaultWidth"]     = plugin->flyViewPanelDefaultWidth();
-        panelItem["defaultHeight"]    = plugin->flyViewPanelDefaultHeight();
-        panelItem["defaultXFraction"] = defaultPos.x();
-        panelItem["defaultYFraction"] = defaultPos.y();
-        _flyViewPanelItems.append(panelItem);
+    if (!contributions.flyViewPanelItem.isEmpty()) {
+        qCDebug(QGCPluginManagerLog) << "  - Provides fly-view panel:" << contributions.flyViewPanelItem["panelUrl"];
+        _flyViewPanelItems.append(contributions.flyViewPanelItem);
         emit flyViewPanelItemsChanged();
-        qCDebug(QGCPluginManagerLog) << "  - Provides fly-view panel:" << panelUrl;
     }
 
-    // Register plan-view panel item if this plugin provides one
-    QString planPanelUrl = plugin->planViewPanelUrl();
-    if (!planPanelUrl.isEmpty()) {
-        QPointF defaultPos = plugin->planViewPanelDefaultPosition();
-        QVariantMap panelItem;
-        panelItem["pluginId"]         = pluginId;
-        panelItem["name"]             = displayName;
-        panelItem["panelUrl"]         = planPanelUrl;
-        panelItem["dockUrl"]          = plugin->planViewPanelDockUrl();
-        panelItem["defaultWidth"]     = plugin->planViewPanelDefaultWidth();
-        panelItem["defaultHeight"]    = plugin->planViewPanelDefaultHeight();
-        panelItem["defaultXFraction"] = defaultPos.x();
-        panelItem["defaultYFraction"] = defaultPos.y();
-        _planViewPanelItems.append(panelItem);
+    if (!contributions.planViewPanelItem.isEmpty()) {
+        qCDebug(QGCPluginManagerLog) << "  - Provides plan-view panel:" << contributions.planViewPanelItem["panelUrl"];
+        _planViewPanelItems.append(contributions.planViewPanelItem);
         emit planViewPanelItemsChanged();
-        qCDebug(QGCPluginManagerLog) << "  - Provides plan-view panel:" << planPanelUrl;
     }
 }
 
