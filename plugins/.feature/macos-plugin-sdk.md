@@ -40,12 +40,22 @@
   - No tests (docs + one `qCWarning`, per plan). `/code-review low`: no findings.
   - Next: U1.6 (`qgc_add_plugin()` becomes the single path) in a fresh chat.
 
+- **U1.6 — `qgc_add_plugin()` becomes the single path** — DONE (2026-07-10). **Stage 1 complete.**
+  - `cmake/modules/PluginHelpers.cmake` rewritten: `qgc_add_plugin()` now absorbs manifest plumbing (`MANIFEST` arg → `configure_file` into the binary dir + include path, previously hand-rolled per plugin), `TIER` validation (only `INTERNAL` accepted; `SDK`/`QML` `FATAL_ERROR` pointing at Stage 2/3 — D7's "errors helpfully" framing pulled forward), the undefined-symbol link options (`-undefined dynamic_lookup` / `-Wl,--allow-shlib-undefined`), and the dev-loop auto-deploy `POST_BUILD` step — all previously duplicated verbatim in both plugins' CMakeLists.
+  - **Deploy dir is now computed, not hardcoded**: mirrors `QGCApplication.cc`'s `_setInstanceInfo()` applicationName logic exactly (`"${QGC_APP_NAME} Daily"` unless `QGC_STABLE_BUILD`, using `QGC_ORG_NAME`) instead of the literal string `"QGroundControl Daily"` that was in both plugins' CMakeLists before. Correct for any `QGC_APP_NAME`/`QGC_ORG_NAME`/`QGC_STABLE_BUILD` combination now, not just the default.
+  - `plugins/example/CMakeLists.txt` and `plugins/qdrive/CMakeLists.txt` (nested repo, separate commit there) both collapse to a `qgc_add_plugin(...)` call; QDrive keeps its extra `target_link_libraries(... Qt6::Sql Qt6::Gui)` after the call (helper doesn't guess a plugin's extra Qt modules — by design, extras stay caller-side per the header doc).
+  - `plugins/README.md` "Creating a New Plugin" section updated with the real `qgc_add_plugin()` signature and usage.
+  - `plugins/example/build.sh`/`build.bat` (manual single-target rebuild+deploy scripts) left as-is — still correct since the computed deploy dir is unchanged for the default dev config they target.
+  - No tests (pure CMake consolidation, no new logic, per plan). Verified: clean build of both plugin targets + full app; both `.dylib`s landed in the build output and were auto-deployed to the live runtime plugin dir; live app run confirmed QDrive plugin initialized and ran normally (log lines, no load errors); manifest content correct in both configured `qgcplugin.json` outputs. `/code-review low`: no findings.
+  - Next: Stage 2, U2.1 (library skeleton + type moves) — first unit of the SDK boundary. Entered as an **`/architecture-change`** per the plan's Execution notes (§11): Stages 2–3 are a clean-cutover profile (linkage model reshapes, old model deleted), not additive. Fresh chat.
+
 ### Stage 2–5
 
-Not started — blocked on Stage 1 completing (U1.6).
+Not started. **Stage 1 (the declared contract) is now fully complete** — U1.1 through U1.6 all DONE. Stage 2 (SDK boundary) is next, entered via `/architecture-change`.
 
-## Notes for the next unit (U1.6)
+## Notes for the next unit (U2.1)
 
-- U1.6 = `qgc_add_plugin()` becomes the single path (plan §4, U1.6): rewrite `cmake/modules/PluginHelpers.cmake` to absorb what both `plugins/example/CMakeLists.txt` and QDrive's plugin CMakeLists hand-roll today — MODULE/AUTOMOC/AUTORCC/C++20, output dir, manifest `configure_file` plumbing, platform suffix, undefined-symbol link options (internal tier), auto-deploy dir computed from `QGC_ORG_NAME`/`QGC_APP_NAME` (today it's hardcoded to "QGroundControl Daily" in example's CMakeLists — confirm at start of that unit whether this is still accurate). Both plugins' CMakeLists collapse to a `qgc_add_plugin(...)` call.
-- Verify: clean build, both plugins produced + deployed; check whether `plugins/example/build.sh` still exists/is referenced (plan says "still works or is deleted in favor of the in-tree build" — needs re-grounding at unit start).
-- Run settings: Sonnet + `/code-review low` per plan §11 (mechanical CMake move, not ABI/state-machine work).
+- U2.1 = library skeleton + type moves (plan §5, U2.1): new `QGCPluginAPI` target in `src/PluginAPI/` (D2/D3) — `qgc_plugin_api_global.h` (export macro), `QGCPluginInterface.h` (IID bump to `.../2.0`, `apiVersion` 2 per D6), `QGCPlugin.h/.cc` (d-pointer, only `init(QGCHostServices*)`/`cleanup()`/`replayExtension()` — U2.2 strips the rest per D1), `QGCHostServices.h/.cc` (abstract `service(id)`), `QGCReplayExtension.h/.cc` (moved verbatim, header comment freezes the vtable).
+- This is an ABI-sensitive design unit — plan §11 calls for **Opus**, not the Sonnet-default used for U1.x/U1.6.
+- Run S2m's lessons apply directly (already PASS'd 2026-07-06): host-provided `@rpath` dylib, hidden visibility + export macro, zero rpath config needed by plugin authors.
+- Verify: build-level (app links, unit suite green); `apiVersion` host constant becomes 2, manifest tests updated. S3 (cross-build survival) reruns after U2.4, not this unit.

@@ -55,8 +55,27 @@ CMake's `configure_file`, so `hostBuildId` can be stamped with the host's build 
 
 ## Creating a New Plugin
 
-There is no `qgc_add_plugin()` helper yet (each plugin currently hand-rolls its
-CMakeLists) — copy the structure of `example/`:
+`qgc_add_plugin()` ([cmake/modules/PluginHelpers.cmake](../cmake/modules/PluginHelpers.cmake))
+is the single entry point for building a plugin — it configures the MODULE library, wires up
+the manifest, applies common compile definitions/include dirs/Qt linkage, sets the
+undefined-symbol link options, and auto-deploys the built library to the host's runtime plugin
+directory for the dev loop:
+
+```cmake
+qgc_add_plugin(MyPlugin
+    TIER INTERNAL              # only tier that works today; SDK/QML are Stage 2/3
+    MANIFEST qgcplugin.json.in
+    SOURCES
+        MyPlugin.h
+        MyPlugin.cc
+    QRC_FILES
+        MyPlugin.qrc
+)
+```
+
+Extras beyond the common set (extra Qt modules, a test subdirectory, ...) are added with
+normal CMake commands after the call — see
+[`plugins/qdrive/CMakeLists.txt`](qdrive/CMakeLists.txt) for an example with extra Qt modules.
 
 1. Create `plugins/yourplugin/` with a `.h`/`.cc`/`.qrc`, a `qgcplugin.json.in`, and a
    `CMakeLists.txt` modeled on [`plugins/example/CMakeLists.txt`](example/CMakeLists.txt).
