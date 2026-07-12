@@ -88,6 +88,7 @@ Not started.
 
 ## Notes for the next unit (U2.5)
 
+- **Read first:** the whole-stage ABI review (`~/.claude/reports/macos-plugin-sdk-abi-review-2026-07-12.md`, Fable second-eyes pass 2026-07-12). Verdict: contract sound; 10 findings, none landmine-class. It prescribes a small pre-U2.5 hardening commit (freeze warnings on QGCPlugin/QGCPluginInterface/QGCHostServices; drop the SDK's inert QML_UNCREATABLE + Qt6::Qml link; out-of-line anchors/default bodies; threading + replay-scope contract text; SOVERSION↔API-major cross-comments) and folds three findings (canonical include spelling, signal-name freeze decision, inert QML_ELEMENT in the template) into U2.5 itself.
 - U2.5 = Example becomes pure Tier B (plan §5 U2.5): `plugins/example` switches to `TIER SDK` — links `QGCPluginAPI` + Qt only, include dirs restricted to the SDK dir (build-level enforcement of D2), `-undefined dynamic_lookup` dropped for this target; manifest `tier: "sdk"`, `apiVersion: 2`, no `hostBuildId`.
 - `PluginHelpers.cmake` currently `FATAL_ERROR`s on `TIER SDK` — this unit implements it. The S3 spike harness (U2.4 entry above) is the working reference for the exact link/include shape: SDK include dir alone, link the SDK target + Qt, `.dylib` suffix, no undefined-symbol options.
 - Example's code adjusts to storing the `init(QGCHostServices*)` pointer and demonstrating a lookup in comments (it needs no services yet).
