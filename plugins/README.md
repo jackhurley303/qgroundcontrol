@@ -27,15 +27,15 @@ CMake's `configure_file`, so `hostBuildId` can be stamped with the host's build 
 
 ```json
 {
-    "id": "org.example.qgc.example",
+    "id": "org.qgroundcontrol.example",
     "name": "Example",
     "version": "1.0.0",
-    "vendor": "Example Org",
+    "vendor": "QGroundControl",
     "description": "Demonstrates the QGC plugin system",
-    "tier": "internal",
+    "tier": "sdk",
     "apiVersion": 2,
     "hostVersion": { "min": "5.0", "max": "" },
-    "hostBuildId": "@QGC_GIT_HASH@",
+    "hostBuildId": null,
     "contributes": {
         "toolMenu": {
             "title": "Example",
@@ -59,8 +59,10 @@ CMake's `configure_file`, so `hostBuildId` can be stamped with the host's build 
 
 - **`id`** — reverse-DNS, stable identity. This is the key used for the plugin's
   enabled/disabled setting (`PluginSettings`), *not* its display name.
-- **`tier`** — `internal` (today's only working tier: full access to QGC internals,
-  gated to a matching `hostBuildId`), `sdk`, or `qml` (see [Tier roadmap](#tier-roadmap)).
+- **`tier`** — `internal` (full access to QGC internals, gated to a matching
+  `hostBuildId`) or `sdk` (links only the published `QGCPluginAPI` + Qt, no QGC
+  internals) work today; `qml` is a Stage 3 target (see
+  [Tier roadmap](#tier-roadmap)).
 - **`apiVersion`** — must equal the host's supported major version
   (`QGCPluginApiVersion` in [QGCPluginInterface.h](../src/PluginAPI/QGCPluginInterface.h)).
 - **`hostVersion.min`/`.max`** — half-open range `[min, max)`; empty `max` means unbounded.
@@ -96,7 +98,7 @@ directory for the dev loop:
 
 ```cmake
 qgc_add_plugin(MyPlugin
-    TIER INTERNAL              # only tier that works today; SDK/QML are Stage 2/3
+    TIER SDK                   # or INTERNAL for full QGC-internals access; QML is Stage 3
     MANIFEST qgcplugin.json.in
     SOURCES
         MyPlugin.h
@@ -105,6 +107,13 @@ qgc_add_plugin(MyPlugin
         MyPlugin.qrc
 )
 ```
+
+Prefer `TIER SDK` unless the plugin genuinely needs a QGC internal not exposed by a
+host service (§ below) — it's the tier a real out-of-tree SDK consumer will use, links
+nothing but `QGCPluginAPI` + Qt, and the include boundary is enforced by the build
+itself (no `src/` path means a violation fails to compile, not just to link). See
+`plugins/example/` for a working `TIER SDK` plugin and `plugins/qdrive/` for `TIER
+INTERNAL`.
 
 Extras beyond the common set (extra Qt modules, a test subdirectory, ...) are added with
 normal CMake commands after the call — see
@@ -115,6 +124,9 @@ normal CMake commands after the call — see
 2. Implement `QGCPluginInterface` (factory) and a `QGCPlugin` subclass:
 
 ```cpp
+#include <QGCPluginAPI/QGCPlugin.h>
+#include <QGCPluginAPI/QGCPluginInterface.h>
+
 class MyPlugin : public QObject, public QGCPluginInterface {
     Q_OBJECT
     Q_PLUGIN_METADATA(IID QGCPluginInterface_iid FILE "qgcplugin.json")
@@ -165,13 +177,16 @@ never as a change to an existing interface):
 | `qgc.missions/1` | `QGCMissionService` | Per-vehicle mission readiness + snapshot of a vehicle's current mission to a `.plan` file |
 | `qgc.app/1` | `QGCAppService` | Host identity (app/org name, version) and storage paths (save root, telemetry directory) |
 
-3. **Real linkage** (macOS/Linux today): the plugin links Qt only, *not* the
-   `QGroundControl` target. Undefined symbols (QGC internals) are resolved at `dlopen`
-   time from the running executable, via `-undefined dynamic_lookup` (macOS) or
-   `-Wl,--allow-shlib-undefined` (Linux) — see `plugins/example/CMakeLists.txt` for the
-   exact flags. This only works because the app is built with `-Wl,-export_dynamic`
-   today; that's temporary scaffolding for Tier C plugins, not something a real SDK
-   consumer should rely on.
+3. **Real linkage** — tier-dependent, never the `QGroundControl` target itself:
+   - `TIER SDK` links only the published `QGCPluginAPI` shared library + Qt (`@rpath`);
+     every symbol it needs resolves from that dylib, the same shape an out-of-tree
+     author gets from the SDK zip (Stage 2, §7 of the macOS implementation plan). See
+     `plugins/example/CMakeLists.txt`.
+   - `TIER INTERNAL` links Qt only and resolves QGC-internal symbols at `dlopen` time
+     from the running executable, via `-undefined dynamic_lookup` (macOS) or
+     `-Wl,--allow-shlib-undefined` (Linux) — see `plugins/qdrive/CMakeLists.txt`. This
+     only works because the app is built with `-Wl,-export_dynamic` today; that's
+     scaffolding for Tier C plugins, not something a real SDK consumer should rely on.
 4. Build: `cmake --build build --target MyPlugin`. The plugin auto-deploys (via a
    `POST_BUILD` copy step) to the platform's user plugins directory for local iteration.
 
@@ -213,25 +228,27 @@ validated) at startup; only valid **and** enabled ones are **activated**.
 
 ## Tier Roadmap
 
-`tier` in the manifest is forward-looking; only `internal` actually works today:
+`tier` in the manifest: `internal` and `sdk` both work today, `qml` is forward-looking:
 
 | Tier | Status | Description |
 |---|---|---|
-| `internal` | **Working today** | Full access to QGC internals, gated by matching `hostBuildId` (rebuilds together with the host). Both `example` and `qdrive` are this tier. |
-| `sdk` | Not yet built | Links only a stable `QGCPluginAPI` shared library + Qt; loads into any host build within its declared version range. |
+| `internal` | **Working today** | Full access to QGC internals, gated by matching `hostBuildId` (rebuilds together with the host). `qdrive` is this tier. |
+| `sdk` | **Working today** | Links only a stable `QGCPluginAPI` shared library + Qt; loads into any host build within its declared version range. `example` is this tier — see [Example Plugin](#example-plugin) and `plugins/.architecture/04-macos-implementation-plan.md` §5 for the full SDK boundary story. |
 | `qml` | Not yet built | No compiled binary at all — pure manifest + QML, installed at runtime. |
 
 ## Example Plugin
 
-See `example/` for a minimal working plugin: adds "Example Plugin" to the Tools menu,
-shows a custom QML view, demonstrates resource bundling.
+See `example/` for a minimal working `TIER SDK` plugin: adds "Example Plugin" to the
+Tools menu, shows a custom QML view, demonstrates resource bundling and a host-service
+lookup shape (`ExampleRuntimePlugin::init()`).
 
 ## Troubleshooting
 
 **Plugin not loading:**
 - Check logs: `qCDebug(QGCPluginLoaderLog)` / `qCDebug(QGCPluginManagerLog)`.
-- Look for "Validated `<name>` (internal, build `<hash>`) before load" — if it's missing,
-  inspection rejected the manifest (check `errorString` in the log).
+- Look for "Validated `<name>` (`<tier>`, build `<hash>`) before load" — if it's missing,
+  inspection rejected the manifest (check `errorString` in the log). `build` is empty for
+  non-`internal` tiers.
 - Confirm the plugin is in one of the search paths above and has the right extension
   (`.dylib`/`.so`/`.dll`).
 

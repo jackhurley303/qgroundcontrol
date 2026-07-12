@@ -1,0 +1,17 @@
+{
+    "id": "org.qgroundcontrol.test.pluginloadergate",
+    "name": "PluginLoaderGateTest Fixture",
+    "version": "1.0.0",
+    "vendor": "QGroundControl Test Suite",
+    "description": "Real SDK-tier dylib backing PluginLoaderGateTest; not a real plugin.",
+    "tier": "sdk",
+    "apiVersion": 2,
+    "hostVersion": { "min": "5.0", "max": "" },
+    "hostBuildId": null,
+    "contributes": {
+        "toolMenu": {
+            "title": "Test Plugin Fixture",
+            "source": "qrc:/nonexistent/TestPluginFixtureView.qml"
+        }
+    }
+}

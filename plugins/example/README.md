@@ -1,6 +1,9 @@
 # Example Plugin
 
-Demonstrates the QGC plugin architecture with a minimal working example.
+Demonstrates the QGC plugin architecture with a minimal working example. This is a
+**Tier SDK (Tier B)** plugin: it links only the published `QGCPluginAPI` shared library
++ Qt, via `#include <QGCPluginAPI/...>` — no QGC internals, no `src/` include path. See
+[plugins/README.md](../README.md) for the tier model.
 
 ## Building
 

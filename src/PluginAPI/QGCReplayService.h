@@ -72,7 +72,11 @@ public:
     /// Pause playback.
     virtual void pause() = 0;
 
-    /// Begin streaming the log from the current playhead position.
+    /// Start streaming the log for the first time in a session, once vehicle
+    /// bootstrap (the pre-heartbeat read that creates the replay vehicle) has
+    /// completed. play() is for resuming after pause() (and also handles
+    /// restarting from the beginning once the log has reached its end);
+    /// beginStream() is only for this one-time session kickoff.
     virtual void beginStream() = 0;
 
     /// Set the playback speed multiplier (1.0 = realtime). Must be > 0;
@@ -100,8 +104,11 @@ signals:
     void playbackAtEnd();
     /// @param percentComplete Position as a percentage of the log [0, 100].
     void playbackPercentCompleteChanged(qreal percentComplete);
-    void currentLogTimeSecs(quint32 secs);
-    void logFileStats(quint32 logDurationSecs);
+    /// Current playhead position, in seconds since the start of the log.
+    void logTimeChanged(quint32 secs);
+    /// Total duration of the loaded log, in seconds. Emitted once per session
+    /// (when the log's length becomes known), not on every tick.
+    void logDurationChanged(quint32 logDurationSecs);
     /// A session error reported by the host (e.g. replay refused while a
     /// vehicle is connected, corrupt tlog, seek failure). The session may or
     /// may not survive the error; a terminal one is followed by replayEnded().

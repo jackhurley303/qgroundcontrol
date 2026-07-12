@@ -1,11 +1,13 @@
 #pragma once
 
-#include "PluginAPI/QGCPlugin.h"
-#include "PluginAPI/QGCPluginInterface.h"
+#include <QGCPluginAPI/QGCPlugin.h>
+#include <QGCPluginAPI/QGCPluginInterface.h>
 
 #include <QtCore/QLoggingCategory>
 #include <QtCore/QObject>
 #include <QtCore/QtPlugin>
+
+class QGCHostServices;
 
 Q_DECLARE_LOGGING_CATEGORY(ExamplePluginLog)
 
@@ -48,4 +50,12 @@ class ExampleRuntimePlugin : public QGCPlugin
 public:
     explicit ExampleRuntimePlugin(QObject* parent = nullptr);
     ~ExampleRuntimePlugin() override = default;
+
+    // This plugin needs no host services yet; init() just stores the pointer.
+    // A real plugin would acquire one by id and qobject_cast, e.g.:
+    //     auto* vehicles = qobject_cast<QGCVehicleService*>(host->service(QGCVehicleServiceId));
+    void init(QGCHostServices* host) override;
+
+private:
+    QGCHostServices* _host = nullptr;
 };

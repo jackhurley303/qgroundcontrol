@@ -1,7 +1,10 @@
 #include "ExamplePlugin.h"
-#include "QGCLoggingCategory.h"
 
-QGC_LOGGING_CATEGORY(ExamplePluginLog, "PluginSystem.ExamplePlugin")
+// Tier SDK plugins can't reach QGCLoggingCategory.h (host-internal, wired to
+// QGCLoggingCategoryManager) — this is the plain-Qt equivalent of the host's
+// QGC_LOGGING_CATEGORY macro, matching its default level (qCDebug silent
+// unless enabled) without the host's runtime category registration/UI.
+Q_LOGGING_CATEGORY(ExamplePluginLog, "PluginSystem.ExamplePlugin", QtWarningMsg)
 
 // Initialize plugin resources
 void initializePluginResources() {
@@ -28,4 +31,10 @@ ExampleRuntimePlugin::ExampleRuntimePlugin(QObject* parent)
     : QGCPlugin(parent)
 {
     qCDebug(ExamplePluginLog) << "ExampleRuntimePlugin instance created";
+}
+
+void ExampleRuntimePlugin::init(QGCHostServices* host)
+{
+    _host = host;
+    qCDebug(ExamplePluginLog) << "ExampleRuntimePlugin initialized" << (host ? "with host services" : "without host services");
 }

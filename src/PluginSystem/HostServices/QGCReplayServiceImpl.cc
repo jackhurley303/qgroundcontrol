@@ -44,8 +44,8 @@ bool QGCReplayServiceImpl::startReplay(const QString& tlogPath)
     connect(link, &LogReplayLink::playbackPaused, this, &QGCReplayService::playbackPaused);
     connect(link, &LogReplayLink::playbackAtEnd, this, &QGCReplayService::playbackAtEnd);
     connect(link, &LogReplayLink::playbackPercentCompleteChanged, this, &QGCReplayService::playbackPercentCompleteChanged);
-    connect(link, &LogReplayLink::currentLogTimeSecs, this, &QGCReplayService::currentLogTimeSecs);
-    connect(link, &LogReplayLink::logFileStats, this, &QGCReplayService::logFileStats);
+    connect(link, &LogReplayLink::currentLogTimeSecs, this, &QGCReplayService::logTimeChanged);
+    connect(link, &LogReplayLink::logFileStats, this, &QGCReplayService::logDurationChanged);
     connect(link, &LogReplayLink::communicationError, this,
             [this](const QString& title, const QString& error) {
                 Q_UNUSED(title);
