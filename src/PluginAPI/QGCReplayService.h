@@ -28,6 +28,12 @@ inline constexpr const char* QGCReplayServiceId = "qgc.replay/1";
  * while a session is active fails; the playback controls are safe no-ops
  * when no session is active.
  *
+ * Scope: this service tracks only sessions started through it. A replay the
+ * user starts from the host UI (a Log Replay comm link) is invisible here —
+ * replayActive() stays false, and behaviour when a plugin drives replay
+ * alongside such a host session is unspecified for v1. A host-state-aware
+ * replay surface would ship as "qgc.replay/2".
+ *
  * The sidecar registries associate a parameter or plan file with a vehicle
  * system id before that vehicle is created by replay, so the host loads them
  * during vehicle initialisation. Passing an empty path clears the entry.

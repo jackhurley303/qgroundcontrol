@@ -8,3 +8,15 @@
  ****************************************************************************/
 
 #include "QGCReplayExtension.h"
+
+// Out-of-line constructor/destructor anchor the vtable and metaobject in the
+// SDK library so qobject_cast works across the plugin boundary.
+
+QGCReplayExtension::QGCReplayExtension(QObject* parent)
+    : QObject(parent)
+{
+}
+
+QGCReplayExtension::~QGCReplayExtension()
+{
+}

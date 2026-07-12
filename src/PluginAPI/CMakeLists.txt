@@ -34,6 +34,9 @@ set_target_properties(QGCPluginAPI PROPERTIES
     # to exactly the API (and makes the eventual Windows declspec build a no-op).
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
+    # SOVERSION == the API major (QGC_PLUGIN_API_VERSION_MAJOR in
+    # QGCPluginInterface.h); bump both together. A frozen plugin binds to
+    # libQGCPluginAPI.<SOVERSION>.dylib, so they must never diverge.
     VERSION 2.0
     SOVERSION 2
 )
@@ -45,5 +48,4 @@ target_include_directories(QGCPluginAPI PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(QGCPluginAPI
     PUBLIC
         Qt6::Core
-        Qt6::Qml
 )

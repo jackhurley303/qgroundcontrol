@@ -32,6 +32,13 @@ class QGCPluginPrivate;
  * Unlike QGCCorePlugin (which is a singleton managing the core application),
  * QGCPlugin instances represent individual runtime plugins loaded from
  * shared libraries.
+ *
+ * @warning This is the base class every plugin subclasses, so its vtable is
+ * frozen once the SDK ships: a subclass's vtable is laid out against this one,
+ * so adding, removing, or reordering virtuals breaks every built plugin
+ * silently. New lifecycle hooks arrive via a host service or a future
+ * QGCPlugin2 interface, never as a new virtual here; non-virtual state lives
+ * behind the d-pointer.
  */
 class QGCPLUGINAPI_EXPORT QGCPlugin : public QObject
 {
@@ -46,16 +53,16 @@ public:
     /// @param host The host's service registry, or nullptr when the host
     /// provides no services. When non-null it stays valid for the plugin's
     /// lifetime; plugins that need it later store the pointer themselves.
-    virtual void init(QGCHostServices* host) { Q_UNUSED(host); }
+    virtual void init(QGCHostServices* host);
 
     /// Cleanup the plugin
     /// Called before the plugin is unloaded
-    virtual void cleanup() { }
+    virtual void cleanup();
 
     /// Returns the plugin's flight replay extension, or nullptr if this plugin
     /// does not provide replay functionality. Only queried when the plugin's
     /// manifest declares "replay": true in its "contributes" object.
-    virtual QGCReplayExtension* replayExtension() const { return nullptr; }
+    virtual QGCReplayExtension* replayExtension() const;
 
 private:
     // ABI headroom: future state lives behind this pointer, never as new

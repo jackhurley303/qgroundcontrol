@@ -22,3 +22,21 @@ QGCPlugin::QGCPlugin(QObject *parent)
 QGCPlugin::~QGCPlugin()
 {
 }
+
+// Default virtual bodies live in the SDK library, not inline: a plugin that
+// doesn't override them binds the symbol here, so the SDK can still evolve the
+// default behaviour for already-shipped plugins (an ABI-safe evolution channel).
+
+void QGCPlugin::init(QGCHostServices *host)
+{
+    Q_UNUSED(host);
+}
+
+void QGCPlugin::cleanup()
+{
+}
+
+QGCReplayExtension *QGCPlugin::replayExtension() const
+{
+    return nullptr;
+}

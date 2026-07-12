@@ -44,7 +44,6 @@ public:
 class ExampleRuntimePlugin : public QGCPlugin
 {
     Q_OBJECT
-    QML_ELEMENT
 
 public:
     explicit ExampleRuntimePlugin(QObject* parent = nullptr);

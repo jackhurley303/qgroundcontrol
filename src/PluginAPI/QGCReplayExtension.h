@@ -11,7 +11,6 @@
 
 #include <QtCore/QObject>
 #include <QtCore/QString>
-#include <QtQmlIntegration/QtQmlIntegration>
 
 #include "qgc_plugin_api_global.h"
 
@@ -35,7 +34,6 @@
 class QGCPLUGINAPI_EXPORT QGCReplayExtension : public QObject
 {
     Q_OBJECT
-    QML_UNCREATABLE("QGCReplayExtension is an abstract interface")
 
     // ── Replay state ─────────────────────────────────────────────────────────
     Q_PROPERTY(bool     isActive        READ isActive        NOTIFY isActiveChanged)
@@ -51,7 +49,8 @@ class QGCPLUGINAPI_EXPORT QGCReplayExtension : public QObject
     Q_PROPERTY(qint64   videoDurationMs  READ videoDurationMs  NOTIFY videoDurationMsChanged)
 
 public:
-    explicit QGCReplayExtension(QObject* parent = nullptr) : QObject(parent) {}
+    explicit QGCReplayExtension(QObject* parent = nullptr);
+    ~QGCReplayExtension() override;
 
     virtual bool     isActive()        const = 0;
     virtual QObject* logReplayLink()   const = 0;
