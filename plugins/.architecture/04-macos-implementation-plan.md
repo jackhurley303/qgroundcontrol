@@ -247,8 +247,9 @@ Goal: `.qgcplugin` install/remove from the settings page; Tier A live; consent +
 
 ### U3.1 — Package discovery + Tier A synthesis
 - Loader learns **package dirs** (D8): for each search root, any child directory with `qgcplugin.json` is a package. Tier A (no `bin/`): skip `QPluginLoader` entirely — record + contributions come from manifest alone (the machinery U2.2 already built), QML/asset URLs resolved `file://<pkg>/…`. Tier B package: binary at `bin/macos-universal/<name>.dylib` (key documented; loader falls back to any single dylib under `bin/macos-*`).
-- Declare the **QML API level** (02 §5.4): an integer on the host (`1`), `"qmlApiVersion"` optional in manifests, checked for Tier A.
-- **Tests:** loader-gate test grows package fixtures: Tier A dir (no binary → active, contributions synthesized), Tier B package dir (binary loaded), missing-arch/bad-layout errors legible. **Verify:** S4's package promoted into `test/PluginSystem/fixtures/`.
+- **Stage 2 as-built (reground here, not against U2.2's sketch):** U2.2 shipped `PluginContributions::fromManifest(manifest, errorOut)` **without** the planned `urlResolver` parameter — deferred to this unit because no package path existed yet; URL strings pass through verbatim today, and the icon fields are bare host resource paths (`/qmlimages/…`), not `qrc:` URLs. This unit adds the resolver seam and defines resolution per URL form: `qrc:/…` = compiled-in (pass through), bare `/…` icons = host resource lookup (pass through), relative = package-relative `file://<pkg>/…`.
+- Declare the **QML API level** (02 §5.4): an integer on the host (`1`), `"qmlApiVersion"` optional in manifests, checked for Tier A. The manifest side is pre-paid: F9 (landed in U2.7) already parses `apiVersion` as optional+unchecked for tier `qml` — this unit adds only the `qmlApiVersion` field + host constant + check.
+- **Tests:** loader-gate test grows package fixtures: Tier A dir (no binary → active, contributions synthesized), Tier B package dir (binary loaded), missing-arch/bad-layout errors legible. **Verify:** a package equivalent to S4's goes into `test/PluginSystem/fixtures/` (recreated — the spike harnesses were throwaway and deleted; S4's recipe is in §11).
 
 ### U3.2 — Install / remove UX
 - Vendor **miniz** (`libs/miniz/`, two files). New `src/PluginSystem/PluginInstaller.h/.cc`: `installFromFile(zipPath)` → read manifest from zip root → validate (schema + tier + collision on id) → extract to `<user-plugins>/<id>/` (in-process ⇒ no quarantine, §1.4) → rescan that id; `removePlugin(id)` → deactivate + delete dir.
@@ -273,11 +274,17 @@ Goal: `.qgcplugin` install/remove from the settings page; Tier A live; consent +
 
 ## 7. Stage 4 — QDrive migration (fork-only, parallel after Stage 2)
 
-QDrive stays Tier C and shippable throughout; each unit burns down one internal dependency onto a seam. The baseline (grounded grep of `plugins/qdrive/src`):
+QDrive stays Tier C and shippable throughout; each unit burns down one internal dependency onto a seam. The baseline (grounded grep of `plugins/qdrive/src`; counts are from 2026-07-06 — Q1 re-runs the grep and records the fresh table in `plugins/qdrive/docs/`):
+
+**Stage 2 as-built notes (2026-07-12) — Q2–Q4 must target the shipped service surfaces, which drifted from the pre-U2.3 sketches in this table:**
+- **Q1 is mostly pre-paid.** The include swap (`PluginAPI/…` headers, IID constant, `pluginInterfaceVersion()` → `QGCPluginApiVersion`) and the manifest `contributes` block landed in Stage 2's lockstep qdrive commits (`0686eb8`, `8a9dc3f`). Q1's remainder: adopt `init(QGCHostServices*)` (no override exists yet — `QDriveRuntimePlugin` never sees the host pointer) + refresh this table's grep counts.
+- **`qgc.replay/1` is a flat single-session service** — controls live on the service itself; there is no `QObject*` link handover (`LogReplayLink`'s controls aren't meta-invokable). The three typed replay signals (`replayMissionUploaded`/`replaySeekMissionResolved`/`replaySeekParamResolved`) were **excluded from v1**; Q3's likely resolution is hoisting that seek-apply plumbing host-side (it's host→host, keyed off the registries) rather than piping mavlink types through the SDK. Registries are two vehicleId-keyed calls (`registerReplayParamFile(vehicleId, path)`, `registerReplayPlanFile(vehicleId, path)`); their lifecycle (a stale plan-file registration shadows a live mission snapshot) is a flagged Q3 consideration. The service also scopes to sessions *it* started — host-initiated replay (a user Log Replay link) is invisible to it in v1 (F5).
+- **`qgc.missions/1` is the per-vehicle snapshot surface** (`missionReady(vehicleId)`, `saveVehicleMissionToFile(vehicleId, path)`, `missionReadyChanged`) — **not** this table's `TelemetryMissionController` method list; that API writes qdrive's own SQLite/settings and can't move host-side. `allMissionsReady` stays derived plugin-side (vehicle list + per-vehicle `missionReady`). Q3 consumes this shape.
+- **`qgc.app/1` is deliberately minimal** (app/org name, `versionString`, `savePath`, `telemetrySavePath`): U2.4's grounding found the ~10 `qgcApp()` sites are parent-object-only — Q4's app row is mostly deleting those, not seam adoption.
 
 | Internal dependency | Sites | Seam | Unit |
 |---|---|---|---|
-| `PluginSystem/QGCPlugin.h`, `QGCPluginInterface.h`, `QGCReplayExtension.h` | — | SDK headers (same names) | Q1: mechanical include swap + `init(host)` adoption + manifest `contributes` (panels/toolMenu/telemetryLogging flags) |
+| `PluginSystem/QGCPlugin.h`, `QGCPluginInterface.h`, `QGCReplayExtension.h` | — | SDK headers (same names) | Q1: ~~include swap + manifest `contributes`~~ (landed in Stage 2 lockstep, see notes above); remainder = `init(host)` adoption + grep refresh |
 | `MultiVehicleManager` (16), `Vehicle` | replay + upload controllers | `qgc.vehicles/1` | Q2 |
 | `MAVLinkProtocol` (11) | telemetry logging takeover | `qgc.telemetryLogging/1` | Q2 |
 | `LinkManager` (2), `ParameterManager::registerReplayParamFile` (3), `LogReplayLink` | `FlightReplayController`, `TelemetryParamsController` | `qgc.replay/1` | Q3 |
@@ -294,7 +301,7 @@ When the table is empty: flip manifest to `tier: "sdk"`, `apiVersion: 2` — QDr
 
 ## 8. Stage 5 — Keeping it honest (CI + docs)
 
-- **Golden-plugin cross-build test:** when SDK 2.0 ships (end of Stage 2), archive the built example plugin as a versioned artifact; a macOS CI job downloads it and runs `PluginLoaderGateTest --golden <path>` against today's host — spike S3 automated forever. Any red = an ABI rule was broken; the fix is reverting the break, not rebuilding the golden.
+- **Golden-plugin cross-build test:** when SDK 2.0 ships (end of Stage 2), archive the built example plugin as a versioned artifact; a macOS CI job downloads it and runs `PluginLoaderGateTest --golden <path>` against today's host — spike S3 automated forever. Any red = an ABI rule was broken; the fix is reverting the break, not rebuilding the golden. *(That moment arrived 2026-07-12 — Stage 2 is complete; archive the golden from the next Release CI run. This job also inherits **definition-of-done #1's residue** from U2.7: the local rehearsal used a same-commit host, so the golden job is where the different-commit proof becomes permanent and automated. U2.7's published SDK zip + `plugins/template/` offer a cheap second leg: build the template against the released SDK artifact in CI and load it too.)*
 - **SDK docs:** doxygen group for `src/PluginAPI/` headers; "Writing your first plugin (macOS)" tutorial replacing template-copy instructions (uses the SDK zip + template from U2.7).
 - **Defect ledger check** (from 01 §4, all should be closed by now): IID mismatch → U1.2 · export_dynamic → U2.6 · docs drift → U1.5 · replay double-slot → U1.5 · reload-scans-everything → U1.3 · unload pretense → U1.3 · security posture → U3.3/U3.4/U3.5 · helper drift → U1.6.
 
