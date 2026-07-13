@@ -236,6 +236,17 @@ validated) at startup; only valid **and** enabled ones are **activated**.
 | `sdk` | **Working today** | Links only a stable `QGCPluginAPI` shared library + Qt; loads into any host build within its declared version range. `example` is this tier — see [Example Plugin](#example-plugin) and `plugins/.architecture/04-macos-implementation-plan.md` §5 for the full SDK boundary story. |
 | `qml` | Not yet built | No compiled binary at all — pure manifest + QML, installed at runtime. |
 
+## SDK Package (out-of-tree Tier B)
+
+`plugins/template/` is the source of the standalone, copy-and-build plugin project
+shipped inside the packaged SDK zip (`qgc-plugin-sdk-macos-<version>.zip`, built by
+`cmake --install <build-dir> --component QGCPluginSDK`, packed in `macos.yml`). Unlike
+`plugins/example/`, it builds with **`find_package(QGCPluginAPI)`**, not
+`qgc_add_plugin()` — that helper is an in-tree build convenience, not part of the
+published package, so the template proves the actual out-of-tree path a real SDK
+consumer uses. See `plugins/template/SDK-README.md` (installed at the package root) for
+the full compatibility contract and ABI rules.
+
 ## Example Plugin
 
 See `example/` for a minimal working `TIER SDK` plugin: adds "Example Plugin" to the

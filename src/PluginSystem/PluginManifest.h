@@ -40,7 +40,7 @@ public:
     QString vendor;
     QString description;
     Tier tier = Tier::Internal;
-    int apiVersion = 0;
+    int apiVersion = 0; ///< Required and exact-matched for sdk/internal; optional and unchecked for qml (no binary, no C++ ABI — D1).
     QVersionNumber hostVersionMin;
     QVersionNumber hostVersionMax; ///< Null/empty QVersionNumber means unbounded.
     QString hostBuildId;

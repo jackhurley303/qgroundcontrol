@@ -320,6 +320,14 @@ When the table is empty: flip manifest to `tier: "sdk"`, `apiVersion: 2` — QDr
 
 **Android (later):** Tier A packages already work by construction (data, not code — U3.1's synthesis path is what the Android v1 story runs on); plugin-APK (ATAK model) stays its own future effort behind spike S5 (03 Phase 4).
 
+**Platform forward-look, recorded by the whole-stage ABI review (2026-07-12) so the ports don't rediscover them** (U2.7's SDK-README.md carries the plugin-author-facing versions of these):
+
+- **Windows has no soname mechanism.** `qt_add_library` produces `QGCPluginAPI.dll` regardless of `VERSION`/`SOVERSION` — the macOS/Linux "frozen plugin binds to a versioned filename" story has no DLL equivalent. Decide at port time: encode the major in the filename (`QGCPluginAPI2.dll`) or rely solely on the manifest's `apiVersion` gate. Either works because the gate rejects before any plugin code runs.
+- **The out-of-line `~QGCPlugin()` (F3) is load-bearing on MSVC, not just style:** a dllexported class with a `std::unique_ptr<Incomplete>` member needs its dtor out-of-line or MSVC fails to instantiate it. Already true today; keep it true. The compat contract must additionally pin the **same MSVC toolset family + CRT** (both `std` types and Qt require it) — stronger than the macOS/Linux "libc++ mostly tolerates mixed configs" looseness.
+- **`pluginInterfaceVersion()`'s belt-and-braces runtime check earns its keep on Windows** — no two-level namespace means symbol-clash failure modes are messier there than on macOS. Keep the check forever, not just until Stage 2 stabilizes.
+- **Android Tier B from the user plugins directory is impossible by OS policy, not by choice:** W^X enforcement (target SDK 29+) forbids `dlopen` from app-writable storage. "Android v1 = Tier A only, native plugins ship as their own APK later" is therefore the *only* possible story. When the Android port happens, `defaultPluginPaths()` should skip binary scanning entirely on Android — those directories can only ever hold Tier A packages.
+- **Qt kit skew (all platforms):** the manifest deliberately doesn't record the plugin's own Qt version. Qt's plugin gate already rejects a plugin built against a newer Qt than the host with a legible error at activation (via the existing `errorString()` plumbing); forward-BC covers plugin-older-than-host. No design change needed — just document it (done in SDK-README.md).
+
 ---
 
 ## 11. Execution notes

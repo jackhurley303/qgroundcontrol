@@ -1,0 +1,12 @@
+{
+    "id": "com.example.myplugin",
+    "name": "My Plugin",
+    "version": "1.0.0",
+    "vendor": "Your Name or Organization",
+    "description": "A QGroundControl Tier B (SDK) plugin",
+    "tier": "sdk",
+    "apiVersion": @QGCPluginAPI_VERSION_MAJOR@,
+    "hostVersion": { "min": "5.0", "max": "" },
+    "hostBuildId": null,
+    "contributes": {}
+}

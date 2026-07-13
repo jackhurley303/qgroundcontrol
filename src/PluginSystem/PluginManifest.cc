@@ -87,14 +87,21 @@ PluginManifest PluginManifest::fromJson(const QJsonObject &json, QString *errorO
         return PluginManifest();
     }
 
+    // apiVersion gates the C++ ABI. Tier qml packages (Stage 3) carry no binary and never
+    // touch it (D1) — required and exact-matched for sdk/internal, optional and unchecked
+    // for qml (see validateForHost; qmlApiVersion is the qml compatibility axis, U3.1).
     const QJsonValue apiVersionValue = json.value(QStringLiteral("apiVersion"));
-    if (!apiVersionValue.isDouble()) {
-        if (errorOut) {
-            *errorOut = QStringLiteral("missing or non-numeric required field 'apiVersion'");
+    if (manifest.tier == Tier::Qml) {
+        manifest.apiVersion = apiVersionValue.isDouble() ? apiVersionValue.toInt() : 0;
+    } else {
+        if (!apiVersionValue.isDouble()) {
+            if (errorOut) {
+                *errorOut = QStringLiteral("missing or non-numeric required field 'apiVersion'");
+            }
+            return PluginManifest();
         }
-        return PluginManifest();
+        manifest.apiVersion = apiVersionValue.toInt();
     }
-    manifest.apiVersion = apiVersionValue.toInt();
 
     const QJsonValue hostVersionValue = json.value(QStringLiteral("hostVersion"));
     if (!hostVersionValue.isObject()) {
@@ -176,7 +183,7 @@ PluginManifest PluginManifest::fromMetaData(const QJsonObject &envelope, const Q
 
 bool PluginManifest::validateForHost(const HostInfo &host, QString *reasonOut) const
 {
-    if (apiVersion != host.apiVersion) {
+    if (tier != Tier::Qml && apiVersion != host.apiVersion) {
         if (reasonOut) {
             *reasonOut = QStringLiteral("apiVersion %1 does not match host apiVersion %2").arg(apiVersion).arg(host.apiVersion);
         }

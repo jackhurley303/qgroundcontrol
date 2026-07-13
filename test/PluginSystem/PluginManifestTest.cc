@@ -227,6 +227,31 @@ void PluginManifestTest::_apiVersionMismatch_test()
     QVERIFY(reason.contains(QStringLiteral("apiVersion")));
 }
 
+void PluginManifestTest::_qmlTierApiVersionOptionalAndUnchecked_test()
+{
+    // Tier qml (Stage 3 packages) carries no binary and never touches the C++ ABI (D1);
+    // apiVersion is optional at parse time and unchecked at validation time (F9).
+    QJsonObject json = validInternalManifestJson();
+    json[QStringLiteral("tier")] = QStringLiteral("qml");
+    json.remove(QStringLiteral("apiVersion"));
+    json.remove(QStringLiteral("hostBuildId"));
+
+    QString error;
+    const PluginManifest manifest = PluginManifest::fromJson(json, &error);
+    QVERIFY2(!manifest.id.isEmpty(), qPrintable(error));
+    QCOMPARE(manifest.tier, PluginManifest::Tier::Qml);
+    QCOMPARE(manifest.apiVersion, 0);
+
+    HostInfo host;
+    host.version = QVersionNumber::fromString(QStringLiteral("5.0"));
+    host.apiVersion = QGCPluginApiVersion + 1; // deliberately mismatched
+    host.buildId = QStringLiteral("abc1234");
+
+    QString reason;
+    QVERIFY(manifest.validateForHost(host, &reason));
+    QVERIFY(reason.isEmpty());
+}
+
 void PluginManifestTest::_contributesMustBeObject_test()
 {
     QString error;

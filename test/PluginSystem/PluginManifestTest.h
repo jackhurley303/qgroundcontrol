@@ -19,6 +19,7 @@ private slots:
     void _internalTierHashMismatch_test();
     void _internalTierMissingHashInvalid_test();
     void _apiVersionMismatch_test();
+    void _qmlTierApiVersionOptionalAndUnchecked_test();
     void _contributesMustBeObject_test();
     void _metaDataEnvelope_test();
     void _metaDataIidMismatch_test();

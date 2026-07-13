@@ -1,0 +1,17 @@
+@PACKAGE_INIT@
+
+# find_package(QGCPluginAPI) config for the out-of-tree plugin SDK (U2.7).
+# A consuming project never clones QGC; it just does:
+#
+#   find_package(QGCPluginAPI 2 REQUIRED)
+#   target_link_libraries(MyPlugin PRIVATE QGCPluginAPI::QGCPluginAPI)
+#
+# See ../../SDK-README.md (installed at the package root) for the full
+# compatibility contract.
+
+include(CMakeFindDependencyMacro)
+find_dependency(Qt6 @QGC_QT_MINIMUM_VERSION@ COMPONENTS Core)
+
+include("${CMAKE_CURRENT_LIST_DIR}/QGCPluginAPITargets.cmake")
+
+check_required_components(QGCPluginAPI)

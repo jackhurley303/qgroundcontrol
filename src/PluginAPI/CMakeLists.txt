@@ -5,25 +5,35 @@
 # Ships as a host-provided @rpath dylib; plugins link it, never bundle it.
 # ============================================================================
 
-qt_add_library(QGCPluginAPI SHARED
-    QGCAppService.cc
+# Public headers, listed once and reused for the SDK's packaged install (U2.7,
+# cmake/install/InstallPluginSDK.cmake, included from the root CMakeLists.txt — hence
+# CACHE INTERNAL, the propagation pattern the root CMakeLists.txt already uses for
+# QGC_PLUGIN_INCLUDE_DIRECTORIES) so the shipped include/QGCPluginAPI/ set can never
+# drift from what this target actually builds against.
+set(QGC_PLUGIN_API_PUBLIC_HEADERS
     QGCAppService.h
-    QGCHostServices.cc
     QGCHostServices.h
-    QGCMissionService.cc
     QGCMissionService.h
-    QGCPlugin.cc
     QGCPlugin.h
     QGCPluginInterface.h
-    QGCReplayExtension.cc
     QGCReplayExtension.h
-    QGCReplayService.cc
     QGCReplayService.h
-    QGCTelemetryLoggingService.cc
     QGCTelemetryLoggingService.h
-    QGCVehicleService.cc
     QGCVehicleService.h
     qgc_plugin_api_global.h
+    CACHE INTERNAL "Public headers of the QGCPluginAPI SDK target"
+)
+
+qt_add_library(QGCPluginAPI SHARED
+    QGCAppService.cc
+    QGCHostServices.cc
+    QGCMissionService.cc
+    QGCPlugin.cc
+    QGCReplayExtension.cc
+    QGCReplayService.cc
+    QGCTelemetryLoggingService.cc
+    QGCVehicleService.cc
+    ${QGC_PLUGIN_API_PUBLIC_HEADERS}
 )
 
 set_target_properties(QGCPluginAPI PROPERTIES
@@ -69,9 +79,15 @@ if(NOT EXISTS "${_qgc_plugin_api_shim}")
     endif()
 endif()
 
+# BUILD_INTERFACE/INSTALL_INTERFACE split: an exported target (U2.7's install(EXPORT ...))
+# may not reference build-tree paths in its installed INTERFACE_INCLUDE_DIRECTORIES, so the
+# in-tree shim dirs above are build-only and the packaged SDK gets its own installed
+# include/ tree instead (see InstallPluginSDK.cmake) — same <QGCPluginAPI/...> spelling
+# either way.
 target_include_directories(QGCPluginAPI PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${QGC_PLUGIN_API_INCLUDE_SHIM_DIR}
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${QGC_PLUGIN_API_INCLUDE_SHIM_DIR}>
+    $<INSTALL_INTERFACE:include>
 )
 
 target_link_libraries(QGCPluginAPI
