@@ -298,13 +298,17 @@ include(Coverage)
 # Apply compiler warning configuration to QGC target
 qgc_apply_warning_flags()
 
-# Export symbols from executable for runtime plugin loading
-if(APPLE OR LINUX)
-    target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
-        -Wl,-export_dynamic  # Export all symbols for plugins
-    )
-elseif(WIN32)
-    # Windows doesn't need this - DLLs export symbols by default
+# Export symbols from executable for Tier C (internals-native) plugin loading (D7).
+# Upstream-facing builds turn QGC_ENABLE_INTERNAL_PLUGINS off; the fork defaults it
+# ON to keep QDrive working (see cmake/CustomOptions.cmake).
+if(QGC_ENABLE_INTERNAL_PLUGINS)
+    if(APPLE OR LINUX)
+        target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
+            -Wl,-export_dynamic  # Export all symbols for plugins
+        )
+    elseif(WIN32)
+        # Windows doesn't need this - DLLs export symbols by default
+    endif()
 endif()
 
 # ----------------------------------------------------------------------------

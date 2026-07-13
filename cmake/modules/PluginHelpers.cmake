@@ -78,6 +78,16 @@ function(qgc_add_plugin PLUGIN_NAME)
         # SDK-tier plugin needs comes through the linked QGCPluginAPI dylib.
         target_link_libraries(${PLUGIN_NAME} PRIVATE QGCPluginAPI)
     else() # INTERNAL
+        if(NOT QGC_ENABLE_INTERNAL_PLUGINS)
+            message(FATAL_ERROR
+                "qgc_add_plugin(${PLUGIN_NAME}): TIER INTERNAL (Tier C) requires "
+                "QGC_ENABLE_INTERNAL_PLUGINS=ON. This build was configured with it OFF "
+                "(the upstream-facing default — D7), so the host exposes no exported "
+                "symbols for internals-native plugins to resolve against. Use TIER SDK "
+                "instead, or reconfigure with -DQGC_ENABLE_INTERNAL_PLUGINS=ON "
+                "(see plugins/.architecture/04-macos-implementation-plan.md).")
+        endif()
+
         # Apply common compile definitions from main QGC build
         if(DEFINED QGC_PLUGIN_COMPILE_DEFINITIONS)
             target_compile_definitions(${PLUGIN_NAME}

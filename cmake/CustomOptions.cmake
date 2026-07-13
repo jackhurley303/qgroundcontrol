@@ -111,6 +111,17 @@ option(QGC_DISABLE_PX4_PLUGIN "Disable PX4 plugin" OFF)
 option(QGC_DISABLE_PX4_PLUGIN_FACTORY "Disable PX4 plugin factory" OFF)
 
 # ============================================================================
+# Plugin System Configuration
+# ============================================================================
+
+# Tier C (internals-native, qgc_add_plugin(TIER INTERNAL)) plugins resolve QGC
+# internals via -Wl,-export_dynamic on the executable instead of linking the
+# published QGCPluginAPI SDK. It exists to keep the fork's QDrive plugin
+# working during the SDK migration; the upstream-facing configuration turns it
+# off (plugins/.architecture/04-macos-implementation-plan.md D7).
+option(QGC_ENABLE_INTERNAL_PLUGINS "Support internals-native (Tier C) plugins" ON)
+
+# ============================================================================
 # Platform-Specific Configuration
 # ============================================================================
 

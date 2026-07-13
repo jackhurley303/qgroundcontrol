@@ -104,13 +104,22 @@
   - `/code-review medium` (8 finder angles): **3 confirmed findings, all fixed** — (1) `file(CREATE_LINK ... SYMBOLIC COPY_ON_ERROR)` on a directory source silently no-ops per CMake's own docs (creates the dest dir, copies nothing), which would leave every Tier SDK plugin's build broken with zero diagnostic wherever a symlink can't be created (e.g. Windows without `SeCreateSymbolicLinkPrivilege`) — fixed by checking `RESULT` and falling back to a real `file(COPY)` ourselves; (2) the `QGC_LOGGING_CATEGORY`→`Q_LOGGING_CATEGORY` swap silently changed the default log level (fixed, explicit `QtWarningMsg`); (3) `TestPlugin/CMakeLists.txt` hand-rolling the SDK-tier shape instead of reusing `qgc_add_plugin()` (fixed via the new `NO_DEPLOY` option, which also restores `plugins/README.md`'s "single entry point" claim). One **plausible, unfixed** finding: two agents split on whether `$<TARGET_FILE:TestPluginFixture>` embedded in a compile definition escapes Windows backslashes correctly — flagged for the eventual Windows CI run rather than guessed at from this macOS sandbox. Declined as out-of-scope/by-design: manifest-constant duplication across 3 files (pre-existing pattern, no templating system for a 2-plugin project); the TIER SDK/INTERNAL branch shape not fitting a future no-binary QML tier (refuted — plan's own Stage 3 design has QML packages skip `qgc_add_plugin()`/`add_library()` entirely, so this function was never going to host that tier); `PluginLoaderGateTest`'s missing-file case (real coverage of a real code path, not padding); `ExampleRuntimePlugin::_host` sitting unused (exactly the plan's prescribed minimal template).
   - Next: U2.6 (`export_dynamic` gated; Tier C formalized, D7) in a fresh chat.
 
-### Stage 2 remaining (U2.6–U2.7), Stages 3–5
+- **U2.6 — `export_dynamic` gated; Tier C formalized (D7)** — DONE (2026-07-12).
+  - `cmake/CustomOptions.cmake` gained a new "Plugin System Configuration" section with `option(QGC_ENABLE_INTERNAL_PLUGINS "Support internals-native (Tier C) plugins" ON)` (fork default ON) — placed after the Autopilot Plugin section, included (line 41) well before both consumers.
+  - Root `CMakeLists.txt`: the `-Wl,-export_dynamic` block is now wrapped in `if(QGC_ENABLE_INTERNAL_PLUGINS)`.
+  - `cmake/modules/PluginHelpers.cmake`'s `qgc_add_plugin()` `TIER INTERNAL` branch gained a `FATAL_ERROR` guard at the top when the option is off, mirroring the existing unsupported-tier-name error's phrasing (names the plugin, the fix, and the plan doc).
+  - QDrive's manifest already declared `tier: "internal"` with a real `hostBuildId` check (U1.2) — this unit only gated the *linker flag* + the CMake-time guard, no manifest/validation changes.
+  - Verified: reconfigured the existing Debug build with the default `ON` — `build.ninja`'s link line for the `QGroundControl` target still carries `-Wl,-export_dynamic`; full build succeeded, both `libExamplePlugin.dylib` (tier `sdk`) and `libQDrivePlugin.dylib` (tier `internal`) built; offscreen boot log shows both discovered with correct metadata (`hostBuildId` `a217f6e0c` matching HEAD). Fresh configure with `-DQGC_ENABLE_INTERNAL_PLUGINS=OFF`: Example (Tier SDK) configures and deploys normally; QDrive's `qgc_add_plugin(TIER INTERNAL ...)` call hits the new `FATAL_ERROR` with the expected message, halting configure — the intended "errors helpfully" behavior for this repo where QDrive is actually present (upstream, which never carries `plugins/qdrive`, would configure clean with Example only under `OFF`).
+  - `/code-review low`: no findings (three small, mechanical CMake hunks).
+  - Next: U2.7 (SDK packaging — the "never build QGC" artifact) in a fresh chat. **Stage 2 nearly complete.**
+
+### Stage 2 remaining (U2.7), Stages 3–5
 
 Not started.
 
-## Notes for the next unit (U2.6)
+## Notes for the next unit (U2.7)
 
-- Plan §5 U2.6: wrap the root `CMakeLists.txt:301-308` `-Wl,-export_dynamic` line in `option(QGC_ENABLE_INTERNAL_PLUGINS "Support internals-native (Tier C) plugins" ON)` — fork default ON (keeps QDrive working), upstream story OFF. `qgc_add_plugin(TIER INTERNAL)` should error helpfully when the option is off (mirrors the existing unsupported-tier `FATAL_ERROR` pattern in `PluginHelpers.cmake`).
-- QDrive's manifest already declares `tier: "internal"` with a real `hostBuildId` check (U1.2) — this unit's job is gating the *linker flag*, not the manifest/validation logic, which already works.
-- Verify: `-DQGC_ENABLE_INTERNAL_PLUGINS=OFF` builds and runs with Example (now SDK tier, unaffected) only; `ON` restores QDrive.
-- Sonnet-fit per plan §11 (mechanical CMake), `/code-review` low as gate (per plan's default; bump to medium if the option's interaction with existing `TIER INTERNAL` error messaging gets non-trivial).
+- Plan §5 U2.7: install component `QGCPluginSDK` — headers, universal `libQGCPluginAPI.dylib`, `QGCPluginAPIConfig.cmake` + version file, a plugin-project template, `SDK-README.md` with the compatibility contract + ABI rules. CI packs a zip in `macos.yml`.
+- Two remaining review findings from the Pre-U2.5 ABI hardening pass are explicitly owned by this unit: **F9** (tier-dependent `apiVersion` validation before any external `qml`-tier manifest exists) and the Windows/Android platform notes from plan §10.
+- Verify (definition-of-done #1 rehearsal): build the template plugin on a second machine/clean checkout against the zip + stock Qt 6.10.3, drop the dylib into the user plugins dir, confirm it loads into a QGC built from a different commit.
+- Sonnet-fit per plan §11 (mechanical CMake/install-component work), `/code-review low` as gate.
