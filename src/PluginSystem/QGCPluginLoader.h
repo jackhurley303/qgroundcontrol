@@ -33,8 +33,9 @@ enum class PluginState {
 /// @brief Information about a discovered plugin
 /// The manifest and state are populated by inspection, before any plugin code runs.
 struct PluginLoadInfo {
-    QGCPlugin* plugin = nullptr;        ///< Plugin instance, non-null only when state == Active
-    QString filePath;                   ///< Absolute path to plugin file
+    QGCPlugin* plugin = nullptr;        ///< Plugin instance, non-null only when state == Active and tier != Qml
+    QString filePath;                   ///< Absolute path to the plugin binary (bare dylib, or a package's resolved binary); the package directory itself for a tier-qml package
+    QString packageDir;                 ///< Absolute path to the package directory (one containing qgcplugin.json at its root); empty for bare dev-loop dylibs
     PluginManifest manifest;            ///< Declared identity/compatibility (valid unless state == Failed)
     PluginContributions contributions;  ///< Declared contributions (valid unless state == Failed)
     PluginState state = PluginState::Failed;
@@ -55,12 +56,25 @@ public:
     /// @return PluginLoadInfo in state Discovered, Incompatible, or Failed
     static PluginLoadInfo inspect(const QString& filePath);
 
-    /// @brief Inspect every plugin library found in the given directories
+    /// @brief Read and validate a package's manifest without executing plugin code (D8)
+    /// A package is a directory with qgcplugin.json at its root. Tier qml packages ship
+    /// no binary; contributions are synthesized from the manifest alone, with relative
+    /// URLs resolved package-relative. Other tiers require exactly one platform binary
+    /// under bin/<platform>-*/ (documented key: bin/macos-universal/ on macOS).
+    /// @param packageDir Absolute path to the package directory
+    /// @return PluginLoadInfo in state Discovered, Incompatible, or Failed
+    static PluginLoadInfo inspectPackage(const QString& packageDir);
+
+    /// @brief Inspect every plugin library and package found in the given directories
+    /// A child directory containing qgcplugin.json at its root is a package (D8);
+    /// bare library files remain the dev-loop path. Both are supported side by side.
     /// @param pluginDirs List of absolute paths to directories containing plugins
-    /// @return One PluginLoadInfo per discovered file; none are activated
+    /// @return One PluginLoadInfo per discovered file/package; none are activated
     static QList<PluginLoadInfo> inspectDirectories(const QStringList& pluginDirs);
 
     /// @brief Instantiate a plugin that passed inspection
+    /// Tier qml packages have no binary to instantiate: activation is trivial, leaving
+    /// PluginLoadInfo::plugin null.
     /// @param info Inspection result in state Discovered; updated to Active or Failed
     static void activate(PluginLoadInfo& info);
 

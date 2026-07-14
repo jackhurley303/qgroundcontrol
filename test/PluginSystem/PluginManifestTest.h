@@ -20,6 +20,10 @@ private slots:
     void _internalTierMissingHashInvalid_test();
     void _apiVersionMismatch_test();
     void _qmlTierApiVersionOptionalAndUnchecked_test();
+    void _qmlApiVersionChecked_test();
+    void _qmlApiVersionUndeclaredUnchecked_test();
+    void _qmlApiVersionIgnoredOnNonQmlTier_test();
+    void _qmlApiVersionZeroRejected_test();
     void _contributesMustBeObject_test();
     void _metaDataEnvelope_test();
     void _metaDataIidMismatch_test();

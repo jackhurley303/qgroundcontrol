@@ -60,11 +60,16 @@ CMake's `configure_file`, so `hostBuildId` can be stamped with the host's build 
 - **`id`** — reverse-DNS, stable identity. This is the key used for the plugin's
   enabled/disabled setting (`PluginSettings`), *not* its display name.
 - **`tier`** — `internal` (full access to QGC internals, gated to a matching
-  `hostBuildId`) or `sdk` (links only the published `QGCPluginAPI` + Qt, no QGC
-  internals) work today; `qml` is a Stage 3 target (see
-  [Tier roadmap](#tier-roadmap)).
+  `hostBuildId`), `sdk` (links only the published `QGCPluginAPI` + Qt, no QGC
+  internals), or `qml` (no binary at all — see [Packages](#packages) below) — all three
+  work today (see [Tier roadmap](#tier-roadmap)).
 - **`apiVersion`** — must equal the host's supported major version
-  (`QGCPluginApiVersion` in [QGCPluginInterface.h](../src/PluginAPI/QGCPluginInterface.h)).
+  (`QGCPluginApiVersion` in [QGCPluginInterface.h](../src/PluginAPI/QGCPluginInterface.h));
+  required for `sdk`/`internal`, optional and unchecked for `qml` (no binary, no C++ ABI).
+- **`qmlApiVersion`** — tier `qml` only; the `QGroundControl` QML singleton tree's API
+  level (`QGCPluginQmlApiLevel` in
+  [PluginManifest.h](../src/PluginSystem/PluginManifest.h)). Optional — declared values
+  are checked against the host's, undeclared is unchecked.
 - **`hostVersion.min`/`.max`** — half-open range `[min, max)`; empty `max` means unbounded.
 - **`hostBuildId`** — required and checked for `tier: "internal"` only; a mismatch means
   "built for another QGC build."
@@ -85,8 +90,11 @@ CMake's `configure_file`, so `hostBuildId` can be stamped with the host's build 
 
   Contributions are synthesized from the manifest at inspection time and shown only
   while the plugin is enabled — plugin code never runs to produce them. URLs starting
-  with `qrc:/` (or a bare resource path) name compiled-in resources; package-relative
-  URLs are a planned Stage 3 feature.
+  with `qrc:/` (or a bare resource path, e.g. `/qmlimages/...`) name compiled-in/host
+  resources and pass through verbatim; any other (relative) URL is resolved
+  package-relative to `file://<package dir>/<url>` for a [package](#packages) plugin,
+  or left as declared for a dev-loop bare-dylib plugin (no package directory to resolve
+  against).
 
 ## Creating a New Plugin
 
@@ -209,7 +217,41 @@ never as a change to an existing interface):
 - `%APPDATA%/QGroundControl/plugins/`
 
 Every plugin file found in these directories is **inspected** (manifest read,
-validated) at startup; only valid **and** enabled ones are **activated**.
+validated) at startup; only valid **and** enabled ones are **activated**. A child
+*directory* containing `qgcplugin.json` at its root is a **package** (below) — both
+forms are discovered side by side in the same search paths.
+
+## Packages
+
+A package is a directory (or, once installed, a `.qgcplugin` zip's extracted contents)
+laid out like:
+
+```
+org.example.qgc.mypackage/
+├── qgcplugin.json              # manifest — read directly, not via QPluginLoader metadata
+├── qml/ …                      # tier qml content and/or panel QML
+├── assets/ …
+└── bin/                        # absent for tier qml
+    └── macos-universal/
+        └── MyPlugin.dylib
+```
+
+- **Tier `qml` (no `bin/` at all)** — no binary; contributions synthesize from the
+  manifest alone (`QGCPluginLoader::activate()` is a no-op — nothing to instantiate),
+  with relative URLs resolved package-relative. A `qml`-tier manifest that declares a
+  binary, or declares `replay`/`telemetryLogging` (nothing exists to implement them),
+  fails inspection.
+- **Tier `sdk`/`internal`** — the binary is looked up under `bin/macos-universal/` (the
+  documented key on macOS); if that's absent, the loader falls back to any single binary
+  under a `bin/macos-*/` directory. Anything else (missing, or more than one candidate)
+  fails inspection with a legible reason rather than guessing.
+- Package identity/contributions always come from the sidecar `qgcplugin.json`, never
+  from a binary's own embedded `Q_PLUGIN_METADATA` (even for tier `sdk`/`internal`,
+  which happen to carry one too, built the same way as any other plugin).
+
+Package **installation** (`.qgcplugin` → `<plugins dir>/<id>/`, consent, removal) is a
+later stage — today, package directories are discovered exactly like bare dylibs: drop
+one in a search path above for the dev loop.
 
 ## Plugin Settings
 
@@ -228,13 +270,14 @@ validated) at startup; only valid **and** enabled ones are **activated**.
 
 ## Tier Roadmap
 
-`tier` in the manifest: `internal` and `sdk` both work today, `qml` is forward-looking:
+`tier` in the manifest — all three work today, `qml` (Tier A) is dev-loop only until the
+installer UX (`.qgcplugin` → "Install from file…") lands:
 
 | Tier | Status | Description |
 |---|---|---|
 | `internal` | **Working today** | Full access to QGC internals, gated by matching `hostBuildId` (rebuilds together with the host). `qdrive` is this tier. |
 | `sdk` | **Working today** | Links only a stable `QGCPluginAPI` shared library + Qt; loads into any host build within its declared version range. `example` is this tier — see [Example Plugin](#example-plugin) and `plugins/.architecture/04-macos-implementation-plan.md` §5 for the full SDK boundary story. |
-| `qml` | Not yet built | No compiled binary at all — pure manifest + QML, installed at runtime. |
+| `qml` | **Working (dev-loop)** | No compiled binary at all — pure manifest + QML, discovered from a [package](#packages) directory. Installing a `.qgcplugin` from the settings page is a later stage; today, drop a package directory into a search path to test one. |
 
 ## SDK Package (out-of-tree Tier B)
 

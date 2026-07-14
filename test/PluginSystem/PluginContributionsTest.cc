@@ -54,7 +54,7 @@ void PluginContributionsTest::_fullContributes_test()
 {
     QString error;
     const PluginContributions contributions =
-        PluginContributions::fromManifest(manifestWithContributes(fullContributes()), &error);
+        PluginContributions::fromManifest(manifestWithContributes(fullContributes()), QString(), &error);
     QVERIFY(error.isEmpty());
 
     // Whole-map comparisons pin the exact shapes the QML consumers read
@@ -96,7 +96,7 @@ void PluginContributionsTest::_emptyContributes_test()
 {
     QString error;
     const PluginContributions contributions =
-        PluginContributions::fromManifest(manifestWithContributes(QJsonObject()), &error);
+        PluginContributions::fromManifest(manifestWithContributes(QJsonObject()), QString(), &error);
     QVERIFY(error.isEmpty());
     QVERIFY(contributions.toolMenuItem.isEmpty());
     QVERIFY(contributions.flyViewPanelItem.isEmpty());
@@ -116,7 +116,7 @@ void PluginContributionsTest::_panelDefaults_test()
 
     QString error;
     const PluginContributions contributions =
-        PluginContributions::fromManifest(manifestWithContributes(contributes), &error);
+        PluginContributions::fromManifest(manifestWithContributes(contributes), QString(), &error);
     QVERIFY(error.isEmpty());
 
     const QVariantMap item = contributions.flyViewPanelItem;
@@ -137,7 +137,7 @@ void PluginContributionsTest::_missingToolMenuRequired_test()
 
     QString error;
     const PluginContributions contributions =
-        PluginContributions::fromManifest(manifestWithContributes(contributes), &error);
+        PluginContributions::fromManifest(manifestWithContributes(contributes), QString(), &error);
     QVERIFY(!error.isEmpty());
     QVERIFY(error.contains(QStringLiteral("source")));
     QVERIFY(contributions.toolMenuItem.isEmpty());
@@ -152,7 +152,7 @@ void PluginContributionsTest::_missingPanelRequired_test()
 
     QString error;
     const PluginContributions contributions =
-        PluginContributions::fromManifest(manifestWithContributes(contributes), &error);
+        PluginContributions::fromManifest(manifestWithContributes(contributes), QString(), &error);
     QVERIFY(!error.isEmpty());
     QVERIFY(error.contains(QStringLiteral("panel")));
     QVERIFY(contributions.planViewPanelItem.isEmpty());
@@ -165,7 +165,7 @@ void PluginContributionsTest::_wrongTypes_test()
     // toolMenu must be an object
     QJsonObject contributes;
     contributes[QStringLiteral("toolMenu")] = QStringLiteral("not an object");
-    QVERIFY(PluginContributions::fromManifest(manifestWithContributes(contributes), &error).toolMenuItem.isEmpty());
+    QVERIFY(PluginContributions::fromManifest(manifestWithContributes(contributes), QString(), &error).toolMenuItem.isEmpty());
     QVERIFY(!error.isEmpty());
 
     // defaultWidth must be a number
@@ -175,14 +175,14 @@ void PluginContributionsTest::_wrongTypes_test()
     panel[QStringLiteral("defaultWidth")] = QStringLiteral("35");
     contributes = QJsonObject();
     contributes[QStringLiteral("flyViewPanel")] = panel;
-    QVERIFY(PluginContributions::fromManifest(manifestWithContributes(contributes), &error).flyViewPanelItem.isEmpty());
+    QVERIFY(PluginContributions::fromManifest(manifestWithContributes(contributes), QString(), &error).flyViewPanelItem.isEmpty());
     QVERIFY(!error.isEmpty());
 
     // replay must be a boolean
     error.clear();
     contributes = QJsonObject();
     contributes[QStringLiteral("replay")] = QStringLiteral("yes");
-    QVERIFY(!PluginContributions::fromManifest(manifestWithContributes(contributes), &error).providesReplayExtension);
+    QVERIFY(!PluginContributions::fromManifest(manifestWithContributes(contributes), QString(), &error).providesReplayExtension);
     QVERIFY(!error.isEmpty());
 }
 
@@ -195,13 +195,13 @@ void PluginContributionsTest::_badDefaultPosition_test()
     panel[QStringLiteral("defaultPosition")] = QJsonArray{0.0, 0.5, 1.0};
     QJsonObject contributes;
     contributes[QStringLiteral("flyViewPanel")] = panel;
-    QVERIFY(PluginContributions::fromManifest(manifestWithContributes(contributes), &error).flyViewPanelItem.isEmpty());
+    QVERIFY(PluginContributions::fromManifest(manifestWithContributes(contributes), QString(), &error).flyViewPanelItem.isEmpty());
     QVERIFY(!error.isEmpty());
 
     error.clear();
     panel[QStringLiteral("defaultPosition")] = QJsonArray{QStringLiteral("left"), QStringLiteral("top")};
     contributes[QStringLiteral("flyViewPanel")] = panel;
-    QVERIFY(PluginContributions::fromManifest(manifestWithContributes(contributes), &error).flyViewPanelItem.isEmpty());
+    QVERIFY(PluginContributions::fromManifest(manifestWithContributes(contributes), QString(), &error).flyViewPanelItem.isEmpty());
     QVERIFY(!error.isEmpty());
 }
 
@@ -212,7 +212,7 @@ void PluginContributionsTest::_unknownKeysIgnored_test()
 
     QString error;
     const PluginContributions contributions =
-        PluginContributions::fromManifest(manifestWithContributes(contributes), &error);
+        PluginContributions::fromManifest(manifestWithContributes(contributes), QString(), &error);
     QVERIFY(error.isEmpty());
     QVERIFY(!contributions.toolMenuItem.isEmpty());
 }
@@ -225,11 +225,98 @@ void PluginContributionsTest::_flags_test()
 
     QString error;
     const PluginContributions contributions =
-        PluginContributions::fromManifest(manifestWithContributes(contributes), &error);
+        PluginContributions::fromManifest(manifestWithContributes(contributes), QString(), &error);
     QVERIFY(error.isEmpty());
     QVERIFY(contributions.providesReplayExtension);
     QVERIFY(!contributions.controlsTelemetryLogging);
     QVERIFY(contributions.toolMenuItem.isEmpty());
+}
+
+void PluginContributionsTest::_relativeUrlsResolvedPackageRelative_test()
+{
+    QJsonObject toolMenu;
+    toolMenu[QStringLiteral("title")]         = QStringLiteral("Contrib");
+    toolMenu[QStringLiteral("source")]        = QStringLiteral("qml/ContribView.qml");
+    toolMenu[QStringLiteral("icon")]          = QStringLiteral("assets/icon.svg");
+    toolMenu[QStringLiteral("toolbarSource")] = QStringLiteral("qml/ContribToolBar.qml");
+    QJsonObject panel;
+    panel[QStringLiteral("panel")] = QStringLiteral("qml/ContribPanel.qml");
+    panel[QStringLiteral("dock")]  = QStringLiteral("qml/ContribDock.qml");
+    QJsonObject contributes;
+    contributes[QStringLiteral("toolMenu")]     = toolMenu;
+    contributes[QStringLiteral("flyViewPanel")] = panel;
+
+    const QString packageDir = QStringLiteral("/Users/test/plugins/org.test.contrib");
+    QString error;
+    const PluginContributions contributions =
+        PluginContributions::fromManifest(manifestWithContributes(contributes), packageDir, &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+
+    QCOMPARE(contributions.toolMenuItem[QStringLiteral("source")].toString(),
+             QStringLiteral("file:///Users/test/plugins/org.test.contrib/qml/ContribView.qml"));
+    QCOMPARE(contributions.toolMenuItem[QStringLiteral("icon")].toString(),
+             QStringLiteral("file:///Users/test/plugins/org.test.contrib/assets/icon.svg"));
+    QCOMPARE(contributions.toolMenuItem[QStringLiteral("toolbarSource")].toString(),
+             QStringLiteral("file:///Users/test/plugins/org.test.contrib/qml/ContribToolBar.qml"));
+    QCOMPARE(contributions.flyViewPanelItem[QStringLiteral("panelUrl")].toString(),
+             QStringLiteral("file:///Users/test/plugins/org.test.contrib/qml/ContribPanel.qml"));
+    QCOMPARE(contributions.flyViewPanelItem[QStringLiteral("dockUrl")].toString(),
+             QStringLiteral("file:///Users/test/plugins/org.test.contrib/qml/ContribDock.qml"));
+}
+
+void PluginContributionsTest::_qrcAndHostResourceUrlsPassThrough_test()
+{
+    QJsonObject toolMenu;
+    toolMenu[QStringLiteral("title")]  = QStringLiteral("Contrib");
+    toolMenu[QStringLiteral("source")] = QStringLiteral("qrc:/qml/ContribView.qml");
+    toolMenu[QStringLiteral("icon")]   = QStringLiteral("/qmlimages/plugin.svg");
+    QJsonObject contributes;
+    contributes[QStringLiteral("toolMenu")] = toolMenu;
+
+    // Compiled-in/host resource forms pass through unchanged even with a package
+    // context — only genuinely relative URLs are package-resolved.
+    QString error;
+    const PluginContributions contributions = PluginContributions::fromManifest(
+        manifestWithContributes(contributes), QStringLiteral("/Users/test/plugins/org.test.contrib"), &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QCOMPARE(contributions.toolMenuItem[QStringLiteral("source")].toString(), QStringLiteral("qrc:/qml/ContribView.qml"));
+    QCOMPARE(contributions.toolMenuItem[QStringLiteral("icon")].toString(), QStringLiteral("/qmlimages/plugin.svg"));
+}
+
+void PluginContributionsTest::_relativeUrlWithoutPackageContextPassesThrough_test()
+{
+    // The dev-loop bare-dylib path has no package directory to resolve against;
+    // a relative URL there is left as declared rather than guessed at.
+    QJsonObject toolMenu;
+    toolMenu[QStringLiteral("title")]  = QStringLiteral("Contrib");
+    toolMenu[QStringLiteral("source")] = QStringLiteral("qml/ContribView.qml");
+    QJsonObject contributes;
+    contributes[QStringLiteral("toolMenu")] = toolMenu;
+
+    QString error;
+    const PluginContributions contributions =
+        PluginContributions::fromManifest(manifestWithContributes(contributes), QString(), &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QCOMPARE(contributions.toolMenuItem[QStringLiteral("source")].toString(), QStringLiteral("qml/ContribView.qml"));
+}
+
+void PluginContributionsTest::_absoluteSchemeUrlsPassThroughEvenInPackageContext_test()
+{
+    // A URL that already names a scheme (not just qrc:/bare-slash) must pass through
+    // unchanged rather than being mangled into "file://<packageDir>/http://...".
+    QJsonObject toolMenu;
+    toolMenu[QStringLiteral("title")]  = QStringLiteral("Contrib");
+    toolMenu[QStringLiteral("source")] = QStringLiteral("http://example.com/View.qml");
+    toolMenu[QStringLiteral("icon")]   = QStringLiteral("file:///already/absolute/icon.svg");
+    QJsonObject contributes;
+    contributes[QStringLiteral("toolMenu")] = toolMenu;
+
+    QString error;
+    const PluginContributions contributions = PluginContributions::fromManifest(
+        manifestWithContributes(contributes), QStringLiteral("/Users/test/plugins/org.test.contrib"), &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QCOMPARE(contributions.toolMenuItem[QStringLiteral("source")].toString(), QStringLiteral("http://example.com/View.qml"));
+    QCOMPARE(contributions.toolMenuItem[QStringLiteral("icon")].toString(), QStringLiteral("file:///already/absolute/icon.svg"));
 }
 
 UT_REGISTER_TEST(PluginContributionsTest, TestLabel::Unit)

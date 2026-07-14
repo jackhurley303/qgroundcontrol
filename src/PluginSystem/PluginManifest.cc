@@ -103,6 +103,20 @@ PluginManifest PluginManifest::fromJson(const QJsonObject &json, QString *errorO
         manifest.apiVersion = apiVersionValue.toInt();
     }
 
+    // qmlApiVersion is the qml-tier compatibility axis (U3.1): meaningful, and therefore
+    // parsed/validated, only for tier qml — ignored (like an unknown key) on every other
+    // tier, so an irrelevant or stray field there never breaks an otherwise-valid manifest.
+    const QJsonValue qmlApiVersionValue = json.value(QStringLiteral("qmlApiVersion"));
+    if (manifest.tier == Tier::Qml && !qmlApiVersionValue.isUndefined()) {
+        if (!qmlApiVersionValue.isDouble() || qmlApiVersionValue.toInt() < 1) {
+            if (errorOut) {
+                *errorOut = QStringLiteral("field 'qmlApiVersion' must be a number >= 1");
+            }
+            return PluginManifest();
+        }
+        manifest.qmlApiVersion = qmlApiVersionValue.toInt();
+    }
+
     const QJsonValue hostVersionValue = json.value(QStringLiteral("hostVersion"));
     if (!hostVersionValue.isObject()) {
         if (errorOut) {
@@ -186,6 +200,13 @@ bool PluginManifest::validateForHost(const HostInfo &host, QString *reasonOut) c
     if (tier != Tier::Qml && apiVersion != host.apiVersion) {
         if (reasonOut) {
             *reasonOut = QStringLiteral("apiVersion %1 does not match host apiVersion %2").arg(apiVersion).arg(host.apiVersion);
+        }
+        return false;
+    }
+
+    if (tier == Tier::Qml && qmlApiVersion != 0 && qmlApiVersion != host.qmlApiVersion) {
+        if (reasonOut) {
+            *reasonOut = QStringLiteral("qmlApiVersion %1 does not match host qmlApiVersion %2").arg(qmlApiVersion).arg(host.qmlApiVersion);
         }
         return false;
     }

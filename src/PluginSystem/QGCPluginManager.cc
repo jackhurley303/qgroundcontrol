@@ -277,23 +277,27 @@ void QGCPluginManager::_activateRecord(PluginLoadInfo& record)
     QGCPlugin* plugin = record.plugin;
     const QString pluginId = record.manifest.id;
 
-    _ensureHostServices();
-    plugin->init(_hostServices);
+    // Tier qml packages have no binary — nothing to init() or query for a replay
+    // extension; their contributions came entirely from the manifest (D1).
+    if (plugin) {
+        _ensureHostServices();
+        plugin->init(_hostServices);
 
-    // Register the replay extension when the manifest declares one; undeclared
-    // extensions are never queried (the manifest is the contract)
-    if (record.contributions.providesReplayExtension) {
-        QGCReplayExtension* ext = plugin->replayExtension();
-        if (!ext) {
-            qCWarning(QGCPluginManagerLog) << "Plugin" << pluginId
-                << "declares a replay extension in its manifest but provides none";
-        } else if (!_replayExtension) {
-            _replayExtension = ext;
-            emit replayExtensionChanged();
-        } else {
-            qCWarning(QGCPluginManagerLog) << "Plugin" << pluginId
-                << "provides a replay extension, but one is already registered by another plugin"
-                << "- ignoring (first registration wins)";
+        // Register the replay extension when the manifest declares one; undeclared
+        // extensions are never queried (the manifest is the contract)
+        if (record.contributions.providesReplayExtension) {
+            QGCReplayExtension* ext = plugin->replayExtension();
+            if (!ext) {
+                qCWarning(QGCPluginManagerLog) << "Plugin" << pluginId
+                    << "declares a replay extension in its manifest but provides none";
+            } else if (!_replayExtension) {
+                _replayExtension = ext;
+                emit replayExtensionChanged();
+            } else {
+                qCWarning(QGCPluginManagerLog) << "Plugin" << pluginId
+                    << "provides a replay extension, but one is already registered by another plugin"
+                    << "- ignoring (first registration wins)";
+            }
         }
     }
 
@@ -413,8 +417,12 @@ void QGCPluginManager::reloadPlugin(const QString& pluginId)
         _deactivateRecord(*record);
     }
 
-    // Re-inspect the stored path only: the manifest may have changed on disk
-    PluginLoadInfo fresh = QGCPluginLoader::inspect(record->filePath);
+    // Re-inspect the stored path only: the manifest may have changed on disk. A
+    // package re-inspects via its directory (the sidecar qgcplugin.json governs
+    // identity/contributions), not the resolved binary path inspect() expects.
+    PluginLoadInfo fresh = record->packageDir.isEmpty()
+        ? QGCPluginLoader::inspect(record->filePath)
+        : QGCPluginLoader::inspectPackage(record->packageDir);
     fresh.plugin = nullptr;
 
     if (fresh.manifest.id != pluginId) {

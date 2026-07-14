@@ -19,7 +19,14 @@ struct HostInfo
     QVersionNumber version;
     int apiVersion = 0;
     QString buildId;
+    int qmlApiVersion = 0; ///< Current QGCPluginQmlApiLevel (see below)
 };
+
+/// The QML plugin API level: the `QGroundControl` QML singleton tree *is* the API for
+/// tier qml packages (no binary, no C++ ABI — D1). Bumped when that QML-visible surface
+/// changes incompatibly. A manifest's "qmlApiVersion", when declared, is checked against
+/// this; undeclared is unchecked (mirrors apiVersion's qml-tier looseness, F9).
+inline constexpr int QGCPluginQmlApiLevel = 1;
 
 /// Value type describing a plugin's identity, compatibility range, and contributions,
 /// as declared in its qgcplugin.json manifest. Parsing and validation are pure data
@@ -41,6 +48,7 @@ public:
     QString description;
     Tier tier = Tier::Internal;
     int apiVersion = 0; ///< Required and exact-matched for sdk/internal; optional and unchecked for qml (no binary, no C++ ABI — D1).
+    int qmlApiVersion = 0; ///< Tier qml only; 0 = undeclared, no check performed (see QGCPluginQmlApiLevel).
     QVersionNumber hostVersionMin;
     QVersionNumber hostVersionMax; ///< Null/empty QVersionNumber means unbounded.
     QString hostBuildId;

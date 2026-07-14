@@ -252,6 +252,89 @@ void PluginManifestTest::_qmlTierApiVersionOptionalAndUnchecked_test()
     QVERIFY(reason.isEmpty());
 }
 
+void PluginManifestTest::_qmlApiVersionChecked_test()
+{
+    // Declared qmlApiVersion (U3.1) is the qml-tier compatibility axis: checked against
+    // the host's QGCPluginQmlApiLevel, unlike apiVersion which qml-tier ignores entirely.
+    QJsonObject json = validInternalManifestJson();
+    json[QStringLiteral("tier")] = QStringLiteral("qml");
+    json.remove(QStringLiteral("apiVersion"));
+    json.remove(QStringLiteral("hostBuildId"));
+    json[QStringLiteral("qmlApiVersion")] = QGCPluginQmlApiLevel;
+
+    QString error;
+    const PluginManifest manifest = PluginManifest::fromJson(json, &error);
+    QVERIFY2(!manifest.id.isEmpty(), qPrintable(error));
+    QCOMPARE(manifest.qmlApiVersion, QGCPluginQmlApiLevel);
+
+    HostInfo host;
+    host.version = QVersionNumber::fromString(QStringLiteral("5.0"));
+    host.apiVersion = QGCPluginApiVersion;
+    host.qmlApiVersion = QGCPluginQmlApiLevel;
+    host.buildId = QStringLiteral("abc1234");
+
+    QString reason;
+    QVERIFY(manifest.validateForHost(host, &reason));
+    QVERIFY(reason.isEmpty());
+
+    host.qmlApiVersion = QGCPluginQmlApiLevel + 1;
+    QVERIFY(!manifest.validateForHost(host, &reason));
+    QVERIFY(reason.contains(QStringLiteral("qmlApiVersion")));
+}
+
+void PluginManifestTest::_qmlApiVersionUndeclaredUnchecked_test()
+{
+    QJsonObject json = validInternalManifestJson();
+    json[QStringLiteral("tier")] = QStringLiteral("qml");
+    json.remove(QStringLiteral("apiVersion"));
+    json.remove(QStringLiteral("hostBuildId"));
+    // qmlApiVersion intentionally absent
+
+    QString error;
+    const PluginManifest manifest = PluginManifest::fromJson(json, &error);
+    QVERIFY2(!manifest.id.isEmpty(), qPrintable(error));
+    QCOMPARE(manifest.qmlApiVersion, 0);
+
+    HostInfo host;
+    host.version = QVersionNumber::fromString(QStringLiteral("5.0"));
+    host.apiVersion = QGCPluginApiVersion;
+    host.qmlApiVersion = QGCPluginQmlApiLevel + 5; // deliberately different; must not matter
+    host.buildId = QStringLiteral("abc1234");
+
+    QString reason;
+    QVERIFY(manifest.validateForHost(host, &reason));
+    QVERIFY(reason.isEmpty());
+}
+
+void PluginManifestTest::_qmlApiVersionIgnoredOnNonQmlTier_test()
+{
+    // qmlApiVersion is meaningful only for tier qml; a malformed value on any other
+    // tier must not break parsing of an otherwise-valid manifest.
+    QJsonObject json = validInternalManifestJson();
+    json[QStringLiteral("qmlApiVersion")] = QStringLiteral("not a number");
+
+    QString error;
+    const PluginManifest manifest = PluginManifest::fromJson(json, &error);
+    QVERIFY2(!manifest.id.isEmpty(), qPrintable(error));
+    QCOMPARE(manifest.qmlApiVersion, 0);
+}
+
+void PluginManifestTest::_qmlApiVersionZeroRejected_test()
+{
+    // An explicit 0 is indistinguishable from "undeclared" if silently accepted;
+    // reject it outright since QGCPluginQmlApiLevel is never 0.
+    QJsonObject json = validInternalManifestJson();
+    json[QStringLiteral("tier")] = QStringLiteral("qml");
+    json.remove(QStringLiteral("apiVersion"));
+    json.remove(QStringLiteral("hostBuildId"));
+    json[QStringLiteral("qmlApiVersion")] = 0;
+
+    QString error;
+    const PluginManifest manifest = PluginManifest::fromJson(json, &error);
+    QVERIFY(manifest.id.isEmpty());
+    QVERIFY(error.contains(QStringLiteral("qmlApiVersion")));
+}
+
 void PluginManifestTest::_contributesMustBeObject_test()
 {
     QString error;
@@ -335,6 +418,7 @@ void PluginManifestTest::_hostInfo_test()
     QVERIFY(!host.version.isNull());
     QVERIFY(!host.buildId.isEmpty());
     QCOMPARE(host.apiVersion, QGCPluginApiVersion);
+    QCOMPARE(host.qmlApiVersion, QGCPluginQmlApiLevel);
 }
 
 UT_REGISTER_TEST(PluginManifestTest, TestLabel::Unit)

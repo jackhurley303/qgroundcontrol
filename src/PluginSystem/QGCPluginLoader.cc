@@ -15,11 +15,84 @@
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
+#include <QtCore/QFile>
+#include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
+#include <QtCore/QJsonParseError>
 #include <QtCore/QPluginLoader>
 #include <QtCore/QStandardPaths>
 
 QGC_LOGGING_CATEGORY(QGCPluginLoaderLog, "PluginSystem.QGCPluginLoader")
+
+namespace {
+
+// Platform-specific plugin binary extension, shared by the dev-loop bare-file scan
+// and package bin/ discovery.
+QStringList pluginBinaryFilters()
+{
+#if defined(Q_OS_WIN)
+    return {QStringLiteral("*.dll")};
+#elif defined(Q_OS_MACOS)
+    return {QStringLiteral("*.dylib"), QStringLiteral("*.bundle")};
+#else
+    return {QStringLiteral("*.so")};
+#endif
+}
+
+// The package format's documented per-platform bin/ subdirectory key (02 §6).
+QString platformBinarySubdir()
+{
+#if defined(Q_OS_WIN)
+    return QStringLiteral("windows-x64");
+#elif defined(Q_OS_MACOS)
+    return QStringLiteral("macos-universal");
+#else
+    return QStringLiteral("linux-x64");
+#endif
+}
+
+// Finds a package's binary under bin/: the documented key subdirectory first
+// (bin/macos-universal/ on macOS), falling back to any single binary under a
+// platform-prefixed subdirectory (bin/macos-*/) — the fallback the plan documents
+// for e.g. a single-arch bin/macos-x86_64/ layout.
+QStringList findPackageBinaries(const QString& binDir)
+{
+    QDir bin(binDir);
+    if (!bin.exists()) {
+        return {};
+    }
+
+    const QStringList filters = pluginBinaryFilters();
+
+    QDir primary(bin.filePath(platformBinarySubdir()));
+    if (primary.exists()) {
+        const QFileInfoList entries = primary.entryInfoList(filters, QDir::Files, QDir::Name);
+        if (!entries.isEmpty()) {
+            QStringList paths;
+            for (const QFileInfo& fi : entries) {
+                paths << fi.absoluteFilePath();
+            }
+            return paths;
+        }
+    }
+
+    QStringList paths;
+    const QString platformPrefix = platformBinarySubdir().section(QLatin1Char('-'), 0, 0);
+    const QFileInfoList subdirs = bin.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    for (const QFileInfo& subdirInfo : subdirs) {
+        if (!subdirInfo.fileName().startsWith(platformPrefix)) {
+            continue;
+        }
+        const QDir subdir(subdirInfo.absoluteFilePath());
+        const QFileInfoList entries = subdir.entryInfoList(filters, QDir::Files, QDir::Name);
+        for (const QFileInfo& fi : entries) {
+            paths << fi.absoluteFilePath();
+        }
+    }
+    return paths;
+}
+
+} // namespace
 
 QList<PluginLoadInfo> QGCPluginLoader::inspectDirectories(const QStringList& pluginDirs)
 {
@@ -36,22 +109,22 @@ QList<PluginLoadInfo> QGCPluginLoader::inspectDirectories(const QStringList& plu
 
         qCDebug(QGCPluginLoaderLog) << "Scanning plugin directory:" << dirPath;
 
-        // Get platform-specific library extension
-        QStringList filters;
-#if defined(Q_OS_WIN)
-        filters << "*.dll";
-#elif defined(Q_OS_MACOS)
-        filters << "*.dylib" << "*.bundle";
-#else
-        filters << "*.so";
-#endif
-
-        // Sorted so duplicate-id resolution in the manager is deterministic across runs
-        const QFileInfoList entries = dir.entryInfoList(filters, QDir::Files, QDir::Name);
+        // Bare plugin libraries (dev-loop path). Sorted so duplicate-id resolution in
+        // the manager is deterministic across runs.
+        const QFileInfoList entries = dir.entryInfoList(pluginBinaryFilters(), QDir::Files, QDir::Name);
         qCDebug(QGCPluginLoaderLog) << "Found" << entries.size() << "potential plugin files";
 
         for (const QFileInfo& fileInfo : entries) {
             infos.append(inspect(fileInfo.absoluteFilePath()));
+        }
+
+        // Package directories: any child directory with qgcplugin.json at its root (D8)
+        const QFileInfoList subdirs = dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+        for (const QFileInfo& subdirInfo : subdirs) {
+            const QString packageDir = subdirInfo.absoluteFilePath();
+            if (QFile::exists(packageDir + QStringLiteral("/qgcplugin.json"))) {
+                infos.append(inspectPackage(packageDir));
+            }
         }
     }
 
@@ -83,6 +156,15 @@ PluginLoadInfo QGCPluginLoader::inspect(const QString& filePath)
         return info;
     }
 
+    // Tier qml has no binary at all (D1) — a compiled file declaring it is a tier
+    // mismatch, not a plugin the loader should silently half-load (activate() would
+    // otherwise no-op it without ever running its code).
+    if (info.manifest.tier == PluginManifest::Tier::Qml) {
+        info.state = PluginState::Failed;
+        info.errorString = QStringLiteral("tier qml has no binary and cannot be declared by a compiled plugin file; ship it as a package directory instead");
+        return info;
+    }
+
     QString reason;
     if (!info.manifest.validateForHost(hostInfo(), &reason)) {
         info.state = PluginState::Incompatible;
@@ -91,7 +173,7 @@ PluginLoadInfo QGCPluginLoader::inspect(const QString& filePath)
     }
 
     error.clear();
-    info.contributions = PluginContributions::fromManifest(info.manifest, &error);
+    info.contributions = PluginContributions::fromManifest(info.manifest, QString(), &error);
     if (!error.isEmpty()) {
         info.state = PluginState::Failed;
         info.errorString = error;
@@ -105,8 +187,104 @@ PluginLoadInfo QGCPluginLoader::inspect(const QString& filePath)
     return info;
 }
 
+PluginLoadInfo QGCPluginLoader::inspectPackage(const QString& packageDir)
+{
+    PluginLoadInfo info;
+    info.packageDir = packageDir;
+    info.filePath = packageDir;
+
+    QFile manifestFile(packageDir + QStringLiteral("/qgcplugin.json"));
+    if (!manifestFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        info.state = PluginState::Failed;
+        info.errorString = QStringLiteral("cannot read qgcplugin.json in package %1").arg(packageDir);
+        return info;
+    }
+    const QByteArray manifestBytes = manifestFile.readAll();
+    manifestFile.close();
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(manifestBytes, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        info.state = PluginState::Failed;
+        info.errorString = QStringLiteral("malformed qgcplugin.json in package %1: %2").arg(packageDir, parseError.errorString());
+        return info;
+    }
+
+    QString error;
+    info.manifest = PluginManifest::fromJson(doc.object(), &error);
+    if (info.manifest.id.isEmpty()) {
+        info.state = PluginState::Failed;
+        info.errorString = error;
+        return info;
+    }
+
+    QString reason;
+    if (!info.manifest.validateForHost(hostInfo(), &reason)) {
+        info.state = PluginState::Incompatible;
+        info.errorString = reason;
+        return info;
+    }
+
+    // Tier internal is dev-loop only (hostBuildId-gated to a same-commit build, D7) —
+    // packaging it would let a package's binary be swapped for another without the
+    // loader ever re-checking it against the sidecar manifest that granted it trust.
+    if (info.manifest.tier == PluginManifest::Tier::Internal) {
+        info.state = PluginState::Failed;
+        info.errorString = QStringLiteral("tier internal cannot be packaged (dev-loop only); use tier sdk for a distributable binary plugin");
+        return info;
+    }
+
+    const QStringList binaries = findPackageBinaries(packageDir + QStringLiteral("/bin"));
+
+    if (info.manifest.tier == PluginManifest::Tier::Qml) {
+        // Tier A: no binary at all (D1) — a package that ships one has a layout/tier
+        // mismatch, not a plugin the loader should silently half-load.
+        if (!binaries.isEmpty()) {
+            info.state = PluginState::Failed;
+            info.errorString = QStringLiteral("qml-tier package must not ship a binary (found %1)").arg(binaries.first());
+            return info;
+        }
+    } else {
+        if (binaries.size() != 1) {
+            info.state = PluginState::Failed;
+            info.errorString = binaries.isEmpty()
+                ? QStringLiteral("no %1 binary found under bin/%2 or bin/%3-*").arg(PluginManifest::tierToString(info.manifest.tier), platformBinarySubdir(), platformBinarySubdir().section(QLatin1Char('-'), 0, 0))
+                : QStringLiteral("multiple candidate binaries found (%1); expected exactly one").arg(binaries.join(QStringLiteral(", ")));
+            return info;
+        }
+        info.filePath = binaries.first();
+    }
+
+    error.clear();
+    info.contributions = PluginContributions::fromManifest(info.manifest, packageDir, &error);
+    if (!error.isEmpty()) {
+        info.state = PluginState::Failed;
+        info.errorString = error;
+        return info;
+    }
+
+    if (info.manifest.tier == PluginManifest::Tier::Qml
+        && (info.contributions.providesReplayExtension || info.contributions.controlsTelemetryLogging)) {
+        info.state = PluginState::Failed;
+        info.errorString = QStringLiteral("qml-tier package cannot declare 'replay' or 'telemetryLogging' (no binary to implement them)");
+        return info;
+    }
+
+    info.state = PluginState::Discovered;
+    qCDebug(QGCPluginLoaderLog) << "Validated package" << info.manifest.name
+                                << "(" << PluginManifest::tierToString(info.manifest.tier)
+                                << ") at" << packageDir;
+    return info;
+}
+
 void QGCPluginLoader::activate(PluginLoadInfo& info)
 {
+    if (info.manifest.tier == PluginManifest::Tier::Qml) {
+        // No binary to instantiate: contributions already came from the manifest alone.
+        info.state = PluginState::Active;
+        return;
+    }
+
     QPluginLoader loader(info.filePath);
     QObject* pluginObject = loader.instance();
 
@@ -160,6 +338,7 @@ HostInfo QGCPluginLoader::hostInfo()
 
     host.apiVersion = QGCPluginApiVersion;
     host.buildId = QStringLiteral(QGC_GIT_HASH);
+    host.qmlApiVersion = QGCPluginQmlApiLevel;
     return host;
 }
 

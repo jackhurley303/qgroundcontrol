@@ -256,7 +256,7 @@ void QGCPluginManagerTest::_contributionsAddedAndRemoved_test()
     record.manifest.contributes = contributes;
 
     QString error;
-    record.contributions = PluginContributions::fromManifest(record.manifest, &error);
+    record.contributions = PluginContributions::fromManifest(record.manifest, QString(), &error);
     QVERIFY(error.isEmpty());
 
     QGCPluginManager manager;

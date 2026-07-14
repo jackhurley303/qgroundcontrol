@@ -19,8 +19,10 @@ class PluginManifest;
 /// consumers read. Synthesis is a pure data operation: no plugin code runs.
 ///
 /// URL rule: "qrc:/..." URLs and resource paths ("/...") refer to compiled-in
-/// resources and pass through verbatim. Package-relative paths are a Stage 3
-/// feature (resolved when package directories arrive).
+/// resources and pass through verbatim. Any other (relative) URL is package-relative,
+/// resolved against packageDir into a "file://<packageDir>/<url>" URL; with no package
+/// context (packageDir empty — the dev-loop bare-dylib path), a relative URL passes
+/// through unresolved.
 ///
 /// Schema of the "contributes" object (all keys optional):
 ///
@@ -63,7 +65,9 @@ public:
     /// built-in auto-start/auto-save behaviour.
     bool controlsTelemetryLogging = false;
 
-    /// Parses a manifest's "contributes" object. On failure returns default-constructed
-    /// contributions and, if errorOut is non-null, a human-readable reason.
-    static PluginContributions fromManifest(const PluginManifest &manifest, QString *errorOut = nullptr);
+    /// Parses a manifest's "contributes" object, resolving relative URLs against
+    /// packageDir (empty for non-package plugins — see the URL rule above). On failure
+    /// returns default-constructed contributions and, if errorOut is non-null, a
+    /// human-readable reason.
+    static PluginContributions fromManifest(const PluginManifest &manifest, const QString &packageDir, QString *errorOut = nullptr);
 };

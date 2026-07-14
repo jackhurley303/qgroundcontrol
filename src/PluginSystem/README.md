@@ -21,9 +21,11 @@ MAVLink message routing, and custom map items/video receivers.
 #### `PluginManifest` — Declared Identity/Compatibility ([PluginManifest.h](PluginManifest.h))
 A pure value type parsed from a plugin's `qgcplugin.json`: `id` (reverse-DNS identity),
 `name`, `version`, `vendor`, `description`, `tier` (`Qml`/`Sdk`/`Internal`), `apiVersion`,
-`hostVersionMin`/`hostVersionMax` (half-open range, empty max = unbounded), `hostBuildId`
-(checked only for `Internal` tier), and `contributes` (opaque here; parsed by
-`PluginContributions`, see below).
+`qmlApiVersion` (tier `Qml` only — the `QGroundControl` QML singleton tree's API level,
+checked against the host's `QGCPluginQmlApiLevel` when declared), `hostVersionMin`/
+`hostVersionMax` (half-open range, empty max = unbounded), `hostBuildId` (checked only
+for `Internal` tier), and `contributes` (opaque here; parsed by `PluginContributions`,
+see below).
 `PluginManifest::fromJson()`/`fromMetaData()` and `validateForHost()` are pure functions:
 no plugin code runs to produce or check a manifest.
 
@@ -31,23 +33,32 @@ no plugin code runs to produce or check a manifest.
 A pure value type parsed from the manifest's `contributes` object:
 ready-made `QVariantMap`s for the tool menu entry and the fly/plan-view panels (the
 exact shapes the QML consumers read, keyed by `pluginId`), plus the
-`replay`/`telemetryLogging` flags. `fromManifest()` is a pure function; a malformed
-`contributes` block fails inspection with a legible reason. The schema is documented
-in the header and in [plugins/README.md](../../plugins/README.md).
+`replay`/`telemetryLogging` flags. `fromManifest(manifest, packageDir)` is a pure
+function; a malformed `contributes` block fails inspection with a legible reason. URLs
+are resolved against `packageDir` (empty for non-package plugins) per the URL rule
+documented in the header and in [plugins/README.md](../../plugins/README.md).
 
 #### `QGCPluginLoader` — Stateless Inspect/Activate Mechanism ([QGCPluginLoader.h](QGCPluginLoader.h))
 A static utility, not a QObject — it holds no state between calls:
 - `inspect(filePath)` reads `QPluginLoader::metaData()`, checks the IID, parses the
   embedded manifest, and validates it against the host — **without instantiating the
   plugin**. Returns a `PluginLoadInfo` in state `Discovered`, `Incompatible`, or `Failed`.
-- `inspectDirectories(dirs)` runs `inspect()` over every plugin file found under the
-  given directories (sorted by filename for deterministic duplicate-id resolution).
+- `inspectPackage(packageDir)` reads `qgcplugin.json` directly (not via `QPluginLoader`
+  metadata) from a package directory (D8): a package's identity/contributions always come
+  from this sidecar file, never a binary's own embedded metadata. Tier `qml` requires no
+  binary; other tiers resolve one binary under `bin/<platform>-*/` (documented key
+  `bin/macos-universal/` on macOS, with a same-platform fallback) or fail legibly.
+- `inspectDirectories(dirs)` runs `inspect()` over every bare plugin file, and
+  `inspectPackage()` over every child directory containing `qgcplugin.json`, found under
+  the given directories (sorted by filename for deterministic duplicate-id resolution).
+  Both forms are discovered side by side.
 - `activate(info)` instantiates a plugin that passed inspection (`Discovered` →
-  `Active`/`Failed`).
+  `Active`/`Failed`). A no-op for tier `Qml` (no binary — nothing to instantiate;
+  `info.plugin` stays null).
 - `defaultPluginPaths()` returns the platform's search directories.
 - `hostInfo()` returns the running host's `HostInfo` (version from `QGC_APP_VERSION_STR`,
-  `apiVersion` from `QGCPluginApiVersion`, build id from `QGC_GIT_HASH`), used to validate
-  manifests.
+  `apiVersion` from `QGCPluginApiVersion`, `qmlApiVersion` from `QGCPluginQmlApiLevel`,
+  build id from `QGC_GIT_HASH`), used to validate manifests.
 
 Policy (which plugins are enabled, which get activated, record-keeping) is **not** the
 loader's job — that's `QGCPluginManager`.
@@ -64,8 +75,9 @@ enum class PluginState {
 };
 
 struct PluginLoadInfo {
-    QGCPlugin* plugin = nullptr;        // non-null only when state == Active
-    QString filePath;
+    QGCPlugin* plugin = nullptr;        // non-null only when state == Active and tier != Qml
+    QString filePath;                   // binary path (bare dylib, or a package's resolved binary); the package dir itself for tier Qml
+    QString packageDir;                 // non-empty for a package (dir with qgcplugin.json); empty for a bare dev-loop dylib
     PluginManifest manifest;            // valid unless state == Failed
     PluginContributions contributions;  // valid unless state == Failed
     PluginState state = PluginState::Failed;
@@ -87,10 +99,11 @@ Key surface:
   `version`, `vendor`, `description`, `state`, `statusText`) for the Plugins settings page.
 - `setPluginEnabled(id, bool)` — persists the setting (keyed by manifest `id`, via
   `PluginSettings`) and activates/deactivates immediately to match. Idempotent.
-- `reloadPlugin(id)` — deactivate if active, re-`inspect()` the stored file path,
-  activate again if enabled. No directory rescan (unlike the old "reload = rescan
-  everything" behavior, since dropped — a stale scan could silently pick up an unrelated
-  file at the same path).
+- `reloadPlugin(id)` — deactivate if active, re-inspect the stored path (`inspect()` for
+  a bare dylib, `inspectPackage()` for a package — keyed off `packageDir`), activate
+  again if enabled. No directory rescan (unlike the old "reload = rescan everything"
+  behavior, since dropped — a stale scan could silently pick up an unrelated file at the
+  same path).
 
 #### `QGCPlugin` — Runtime Plugin Base Class ([QGCPlugin.h](../PluginAPI/QGCPlugin.h))
 Base class for the loaded plugin instance itself. Code is only for behaviour:
@@ -140,8 +153,9 @@ inline constexpr int QGCPluginApiVersion = 2;
                ├── Disabled by settings → recorded as Disabled, _activateRecord()
                │   is never called (its code never runs)
                └── Otherwise → _activateRecord():
-                   ├── QGCPluginLoader::activate() — instance()/qobject_cast/createPlugin()
-                   ├── plugin->init(host)  // host services registry (see Host Services)
+                   ├── QGCPluginLoader::activate() — instance()/qobject_cast/createPlugin();
+                   │   a no-op for tier Qml (no binary — info.plugin stays null)
+                   ├── plugin->init(host) iff a plugin instance exists (tier != Qml)
                    ├── replayExtension() queried iff the manifest declares "replay";
                    │   first plugin wins, a second is logged (qCWarning) and ignored
                    └── Publishes the manifest-derived contributions to QML

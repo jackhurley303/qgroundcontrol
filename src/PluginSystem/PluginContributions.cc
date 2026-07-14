@@ -89,7 +89,21 @@ bool optionalPositionField(const QJsonObject &json, const char *key, QPointF *va
     return true;
 }
 
-bool parseToolMenu(const QJsonObject &contributes, const PluginManifest &manifest, QVariantMap *itemOut, QString *errorOut)
+/// "qrc:/..." paths, bare "/..." paths, and any URL that already names a scheme
+/// (contains "://" — http://, file://, ...) are compiled-in/host/already-absolute and
+/// pass through verbatim; any other (relative) URL is package-relative. With no package
+/// context (packageDir empty — the dev-loop bare-dylib path), a relative URL passes
+/// through unresolved rather than guessing.
+QString resolveUrl(const QString &url, const QString &packageDir)
+{
+    if (url.isEmpty() || url.startsWith(QStringLiteral("qrc:")) || url.startsWith(QLatin1Char('/'))
+        || url.contains(QStringLiteral("://")) || packageDir.isEmpty()) {
+        return url;
+    }
+    return QStringLiteral("file://%1/%2").arg(packageDir, url);
+}
+
+bool parseToolMenu(const QJsonObject &contributes, const PluginManifest &manifest, const QString &packageDir, QVariantMap *itemOut, QString *errorOut)
 {
     const QJsonValue value = contributes.value(QStringLiteral("toolMenu"));
     if (value.isUndefined()) {
@@ -121,14 +135,14 @@ bool parseToolMenu(const QJsonObject &contributes, const PluginManifest &manifes
     QVariantMap item;
     item[QStringLiteral("pluginId")]      = manifest.id;
     item[QStringLiteral("title")]         = title;
-    item[QStringLiteral("icon")]          = icon;
-    item[QStringLiteral("source")]        = source;
-    item[QStringLiteral("toolbarSource")] = toolbarSource;
+    item[QStringLiteral("icon")]          = resolveUrl(icon, packageDir);
+    item[QStringLiteral("source")]        = resolveUrl(source, packageDir);
+    item[QStringLiteral("toolbarSource")] = resolveUrl(toolbarSource, packageDir);
     *itemOut = item;
     return true;
 }
 
-bool parsePanel(const QJsonObject &contributes, const char *key, const PluginManifest &manifest, QVariantMap *itemOut, QString *errorOut)
+bool parsePanel(const QJsonObject &contributes, const char *key, const PluginManifest &manifest, const QString &packageDir, QVariantMap *itemOut, QString *errorOut)
 {
     const QJsonValue value = contributes.value(QString::fromLatin1(key));
     if (value.isUndefined()) {
@@ -162,8 +176,8 @@ bool parsePanel(const QJsonObject &contributes, const char *key, const PluginMan
     QVariantMap item;
     item[QStringLiteral("pluginId")]         = manifest.id;
     item[QStringLiteral("name")]             = manifest.name;
-    item[QStringLiteral("panelUrl")]         = panelUrl;
-    item[QStringLiteral("dockUrl")]          = dockUrl;
+    item[QStringLiteral("panelUrl")]         = resolveUrl(panelUrl, packageDir);
+    item[QStringLiteral("dockUrl")]          = resolveUrl(dockUrl, packageDir);
     item[QStringLiteral("defaultWidth")]     = defaultWidth;
     item[QStringLiteral("defaultHeight")]    = defaultHeight;
     item[QStringLiteral("defaultXFraction")] = defaultPosition.x();
@@ -174,15 +188,15 @@ bool parsePanel(const QJsonObject &contributes, const char *key, const PluginMan
 
 } // namespace
 
-PluginContributions PluginContributions::fromManifest(const PluginManifest &manifest, QString *errorOut)
+PluginContributions PluginContributions::fromManifest(const PluginManifest &manifest, const QString &packageDir, QString *errorOut)
 {
     QString error;
     PluginContributions contributions;
     const QJsonObject contributes = manifest.contributes;
 
-    if (!parseToolMenu(contributes, manifest, &contributions.toolMenuItem, &error)
-        || !parsePanel(contributes, "flyViewPanel", manifest, &contributions.flyViewPanelItem, &error)
-        || !parsePanel(contributes, "planViewPanel", manifest, &contributions.planViewPanelItem, &error)
+    if (!parseToolMenu(contributes, manifest, packageDir, &contributions.toolMenuItem, &error)
+        || !parsePanel(contributes, "flyViewPanel", manifest, packageDir, &contributions.flyViewPanelItem, &error)
+        || !parsePanel(contributes, "planViewPanel", manifest, packageDir, &contributions.planViewPanelItem, &error)
         || !optionalBoolField(contributes, "replay", &contributions.providesReplayExtension, &error)
         || !optionalBoolField(contributes, "telemetryLogging", &contributions.controlsTelemetryLogging, &error)) {
         if (errorOut) {
