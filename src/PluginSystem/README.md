@@ -72,6 +72,7 @@ enum class PluginState {
     Active,         // Instantiated and running
     Failed,         // Metadata unreadable/invalid, or activation failed (see errorString)
     Quarantined,    // Skipped after a crash during a previous load attempt
+    NeedsApproval,  // Discovered but requires explicit user consent before activation
 };
 
 struct PluginLoadInfo {
@@ -81,9 +82,13 @@ struct PluginLoadInfo {
     PluginManifest manifest;            // valid unless state == Failed
     PluginContributions contributions;  // valid unless state == Failed
     PluginState state = PluginState::Failed;
-    QString errorString;                // reason for Incompatible/Failed/Quarantined
+    QString errorString;                // reason for Incompatible/Failed/Quarantined/NeedsApproval
 };
 ```
+
+`NeedsApproval` is currently set only by `QGCPluginManager`'s quarantine gate (U3.2, macOS: a
+package carrying `com.apple.quarantine`); D10's broader "every user-dir plugin starts
+unapproved" consent model is U3.3.
 
 #### `QGCPluginManager` — Runtime Plugin Manager (Singleton) ([QGCPluginManager.h](QGCPluginManager.h))
 Owns **one `PluginLoadInfo` record per discovered plugin, in any state** — not just the
@@ -96,7 +101,8 @@ Key surface:
 - `loadedPlugins()` — only `Active` records, minimal shape (`name`), for existing QML
   consumers.
 - `knownPlugins()` — every record regardless of state, richer shape (`id`, `name`,
-  `version`, `vendor`, `description`, `state`, `statusText`) for the Plugins settings page.
+  `version`, `vendor`, `description`, `tier`, `state`, `statusText`, `removable`) for the
+  Plugins settings page.
 - `setPluginEnabled(id, bool)` — persists the setting (keyed by manifest `id`, via
   `PluginSettings`) and activates/deactivates immediately to match. Idempotent.
 - `reloadPlugin(id)` — deactivate if active, re-inspect the stored path (`inspect()` for
@@ -104,6 +110,30 @@ Key surface:
   again if enabled. No directory rescan (unlike the old "reload = rescan everything"
   behavior, since dropped — a stale scan could silently pick up an unrelated file at the
   same path).
+- `installPlugin(zipPath)`/`removePlugin(id)` (U3.2) — thin wrappers around
+  `PluginInstaller` that also keep `_records` in sync: install re-inspects the freshly
+  extracted package and adds/replaces its record; remove deactivates first, then deletes.
+  Both return an empty string on success, a human-readable error otherwise.
+- `approvePlugin(id)` (U3.2) — moves a `NeedsApproval` record to `Discovered` after
+  stripping quarantine (macOS), then activates if enabled.
+
+#### `PluginInstaller` — Package Install/Remove ([PluginInstaller.h](PluginInstaller.h))
+A static utility backing the Plugins settings page's "Install plugin…"/"Remove" actions
+(U3.2, D8):
+- `installFromFile(zipPath)` reads and validates `qgcplugin.json` at the archive root
+  *before* extracting anything else, then extracts to `<user-plugins-dir>/<manifest.id>/`,
+  replacing any existing install of the same id. Extraction is in-process via vendored
+  [miniz](../../libs/miniz/) rather than shelling out, so the extracted files are never
+  quarantined by Gatekeeper the way a browser download would be (01 §1.4) — a per-entry
+  path check rejects zip-slip attempts (`../` escapes) before any file is written.
+- `removePlugin(id)` deletes `<user-plugins-dir>/<id>/` entirely. The caller
+  (`QGCPluginManager::removePlugin`) is responsible for deactivating the plugin first.
+- `isQuarantined(packageDir)`/`stripQuarantine(packageDir)` (macOS only) check/clear
+  `com.apple.quarantine` on every file in a package — for packages that arrived by some
+  other means than `installFromFile()` (e.g. dropped into the plugins directory by hand)
+  and still carry the attribute. `QGCPluginManager` gates such a package into
+  `PluginState::NeedsApproval` on discovery; `approvePlugin(id)` calls `stripQuarantine()`
+  then activates.
 
 #### `QGCPlugin` — Runtime Plugin Base Class ([QGCPlugin.h](../PluginAPI/QGCPlugin.h))
 Base class for the loaded plugin instance itself. Code is only for behaviour:

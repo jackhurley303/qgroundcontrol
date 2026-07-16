@@ -9,6 +9,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 
 import QGroundControl
@@ -16,6 +17,8 @@ import QGroundControl.Controls
 import QGroundControl.FactControls
 
 SettingsPage {
+    id: root
+
     property var _pluginSettings: QGroundControl.settingsManager.pluginSettings
 
     // Runtime plugin unload/reload supported on desktop platforms
@@ -25,6 +28,27 @@ SettingsPage {
                                                      Qt.platform.os === "windows"
 
     QGCPalette { id: qgcPal }
+
+    QGCFileDialog {
+        id:             installDialog
+        title:          qsTr("Select plugin package")
+        selectFolder:   false
+        nameFilters:    ["QGC Plugin Packages (*.qgcplugin)"]
+
+        onAcceptedForLoad: (file) => {
+            const error = QGroundControl.pluginManager.installPlugin(file)
+            if (error.length > 0) {
+                installErrorDialog.text = error
+                installErrorDialog.open()
+            }
+        }
+    }
+
+    MessageDialog {
+        id:         installErrorDialog
+        title:      qsTr("Plugin install failed")
+        buttons:    MessageDialog.Ok
+    }
 
     SettingsGroupLayout {
         Layout.fillWidth:   true
@@ -36,6 +60,13 @@ SettingsPage {
                                 qsTr("Enable or disable plugins. Disabling a plugin will unload it from memory. Plugin code changes require rebuilding the application.") :
                                 qsTr("Enable or disable plugins. Toggle settings to control which plugins load at startup, but changing which plugins are included requires rebuilding the APK.")
             wrapMode:           Text.WordWrap
+        }
+
+        QGCButton {
+            Layout.alignment:   Qt.AlignRight
+            text:               qsTr("Install plugin…")
+            visible:            _supportsRuntimeReload
+            onClicked:          installDialog.openForLoad()
         }
 
         Repeater {
@@ -56,6 +87,14 @@ SettingsPage {
 
                     QGCLabel {
                         Layout.fillWidth:   true
+                        text:               modelData.tier + " — " + modelData.description
+                        wrapMode:           Text.WordWrap
+                        font.pointSize:     ScreenTools.smallFontPointSize
+                        visible:            modelData.description.length > 0
+                    }
+
+                    QGCLabel {
+                        Layout.fillWidth:   true
                         text:               modelData.statusText
                         wrapMode:           Text.WordWrap
                         font.pointSize:     ScreenTools.smallFontPointSize
@@ -67,6 +106,8 @@ SettingsPage {
                             case "Failed":
                             case "Quarantined":
                                 return qgcPal.colorRed
+                            case "NeedsApproval":
+                                return qgcPal.colorOrange
                             default:
                                 return qgcPal.text
                             }
@@ -74,9 +115,15 @@ SettingsPage {
                     }
                 }
 
+                QGCButton {
+                    text:       qsTr("Enable")
+                    visible:    modelData.state === "NeedsApproval"
+                    onClicked:  QGroundControl.pluginManager.approvePlugin(modelData.id)
+                }
+
                 FactCheckBoxSlider {
                     fact:               _pluginSettings.pluginEnabledFact(modelData.id)
-                    visible:            fact !== null
+                    visible:            fact !== null && modelData.state !== "NeedsApproval"
 
                     Connections {
                         target: fact
@@ -86,6 +133,23 @@ SettingsPage {
                             QGroundControl.pluginManager.setPluginEnabled(modelData.id, fact.value)
                         }
                     }
+                }
+
+                QGCButton {
+                    text:       qsTr("Remove")
+                    visible:    modelData.removable && _supportsRuntimeReload
+                    onClicked:  QGroundControl.showMessageDialog(
+                                    root,
+                                    qsTr("Remove Plugin"),
+                                    qsTr("Are you sure you want to remove '%1'? This deletes it from disk.").arg(modelData.name),
+                                    Dialog.Ok | Dialog.Cancel,
+                                    function () {
+                                        const error = QGroundControl.pluginManager.removePlugin(modelData.id)
+                                        if (error.length > 0) {
+                                            installErrorDialog.text = error
+                                            installErrorDialog.open()
+                                        }
+                                    })
                 }
             }
         }

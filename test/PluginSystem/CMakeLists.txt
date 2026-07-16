@@ -11,6 +11,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         HostVehicleServicesTest.h
         PluginContributionsTest.cc
         PluginContributionsTest.h
+        PluginInstallerTest.cc
+        PluginInstallerTest.h
         PluginLoaderGateTest.cc
         PluginLoaderGateTest.h
         PluginManifestTest.cc

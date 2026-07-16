@@ -11,6 +11,7 @@
 #include "QGCPlugin.h"
 #include "QGCLoggingCategory.h"
 #include "SettingsManager.h"
+#include "PluginInstaller.h"
 #include "PluginSettings.h"
 #include "Fact.h"
 #include "HostServices/QGCAppServiceImpl.h"
@@ -21,6 +22,8 @@
 #include "HostServices/QGCVehicleServiceImpl.h"
 
 #include <QtCore/QApplicationStatic>
+#include <QtCore/QDir>
+#include <QtCore/QFileInfo>
 #include <QtQml/qqml.h>
 
 QGC_LOGGING_CATEGORY(QGCPluginManagerLog, "PluginSystem.QGCPluginManager");
@@ -42,6 +45,8 @@ QString pluginStateName(PluginState state)
         return QStringLiteral("Failed");
     case PluginState::Quarantined:
         return QStringLiteral("Quarantined");
+    case PluginState::NeedsApproval:
+        return QStringLiteral("NeedsApproval");
     }
     return QStringLiteral("Failed");
 }
@@ -153,8 +158,17 @@ QVariantList QGCPluginManager::knownPlugins() const
         info["version"]     = record.manifest.version.toString();
         info["vendor"]      = record.manifest.vendor;
         info["description"] = record.manifest.description;
+        info["tier"]        = PluginManifest::tierToString(record.manifest.tier);
         info["state"]       = pluginStateName(record.state);
         info["statusText"]  = _statusText(record);
+        // Only a package installed under the user plugins directory can be removed
+        // through the settings page; bundle-shipped and dev-loop bare dylibs cannot.
+        // QDir::filePath(id) is exactly how PluginInstaller lays packages out, so a
+        // direct parent-path comparison (not a string-prefix check, which could match
+        // an unrelated sibling directory sharing a prefix) is both correct and simple.
+        const QString userPluginsDir = PluginInstaller::userPluginsDir();
+        info["removable"]   = !record.packageDir.isEmpty() && !userPluginsDir.isEmpty()
+            && QFileInfo(record.packageDir).dir().absolutePath() == QDir(userPluginsDir).absolutePath();
         pluginList.append(info);
     }
     return pluginList;
@@ -173,6 +187,8 @@ QString QGCPluginManager::_statusText(const PluginLoadInfo& record) const
         return tr("Failed to load: %1").arg(record.errorString);
     case PluginState::Quarantined:
         return tr("Quarantined: %1").arg(record.errorString);
+    case PluginState::NeedsApproval:
+        return tr("Downloaded plugin — approve to run");
     case PluginState::Discovered:
         return tr("Pending");
     }
@@ -187,6 +203,34 @@ PluginLoadInfo* QGCPluginManager::_findRecord(const QString& pluginId)
         }
     }
     return nullptr;
+}
+
+void QGCPluginManager::_applyQuarantineGate(PluginLoadInfo& record)
+{
+#if defined(Q_OS_MACOS)
+    // Manually-installed packages (dropped into the plugins dir rather than installed
+    // via installPlugin()) may still carry com.apple.quarantine from however they
+    // arrived. Packages installFromFile() extracts are never quarantined (01 §1.4);
+    // D10's general "every user-dir plugin starts unapproved" rule is U3.3 — this is
+    // the narrower quarantine-specific gate U3.2 needs on its own.
+    if (record.state == PluginState::Discovered
+        && !record.packageDir.isEmpty()
+        && PluginInstaller::isQuarantined(record.packageDir)) {
+        record.state = PluginState::NeedsApproval;
+        record.errorString = QStringLiteral("downloaded plugin — approve to run");
+    }
+#else
+    Q_UNUSED(record);
+#endif
+}
+
+void QGCPluginManager::_activateIfEnabled(PluginLoadInfo& record)
+{
+    if (SettingsManager::instance()->pluginSettings()->isPluginEnabled(record.manifest.id)) {
+        _activateRecord(record);
+    } else {
+        record.state = PluginState::Disabled;
+    }
 }
 
 void QGCPluginManager::_loadPlugins()
@@ -226,14 +270,12 @@ void QGCPluginManager::_processInspected(const QList<PluginLoadInfo>& infos)
             pluginSettings->registerPlugin(pluginId, record.manifest.name, defaultEnabled);
         }
 
+        _applyQuarantineGate(record);
+
         if (record.state == PluginState::Discovered) {
-            if (pluginSettings->isPluginEnabled(pluginId)) {
-                _activateRecord(record);
-            } else {
-                // Never activated: the plugin's code does not run
-                qCDebug(QGCPluginManagerLog) << "  - Skipping disabled plugin";
-                record.state = PluginState::Disabled;
-            }
+            _activateIfEnabled(record);
+        } else if (record.state == PluginState::NeedsApproval) {
+            qCDebug(QGCPluginManagerLog) << "  - Awaiting approval (quarantined):" << pluginId;
         } else {
             qCWarning(QGCPluginManagerLog) << "  - Not activating:" << record.errorString;
         }
@@ -435,17 +477,103 @@ void QGCPluginManager::reloadPlugin(const QString& pluginId)
             : QStringLiteral("plugin id changed on disk (now %1); restart to load it").arg(fresh.manifest.id);
         qCWarning(QGCPluginManagerLog) << "Reload inspection failed:" << record->filePath << "-" << record->errorString;
     } else {
+        _applyQuarantineGate(fresh);
+
         if (fresh.state == PluginState::Discovered) {
-            if (SettingsManager::instance()->pluginSettings()->isPluginEnabled(pluginId)) {
-                _activateRecord(fresh);
-            } else {
-                fresh.state = PluginState::Disabled;
-            }
-        } else {
+            _activateIfEnabled(fresh);
+        } else if (fresh.state != PluginState::NeedsApproval) {
             qCWarning(QGCPluginManagerLog) << "Reload inspection failed:" << record->filePath << "-" << fresh.errorString;
         }
         *record = fresh;
     }
+
+    _recalcLoggingController();
+    emit loadedPluginsChanged();
+}
+
+QString QGCPluginManager::installPlugin(const QString& zipPath)
+{
+    qCDebug(QGCPluginManagerLog) << "Installing plugin from:" << zipPath;
+
+    const PluginInstallResult installResult = PluginInstaller::installFromFile(zipPath);
+    if (!installResult.success) {
+        qCWarning(QGCPluginManagerLog) << "Install failed:" << installResult.errorString;
+        return installResult.errorString;
+    }
+
+    // Replacing an existing install: drop the old record (deactivating first) so the
+    // freshly-inspected one below isn't rejected as a duplicate id.
+    PluginLoadInfo* existing = _findRecord(installResult.pluginId);
+    if (existing) {
+        if (existing->state == PluginState::Active) {
+            _deactivateRecord(*existing);
+        }
+        _records.removeIf([&installResult](const PluginLoadInfo& r) {
+            return r.manifest.id == installResult.pluginId;
+        });
+    }
+
+    const QString packageDir = QDir(PluginInstaller::userPluginsDir()).filePath(installResult.pluginId);
+    _processInspected({QGCPluginLoader::inspectPackage(packageDir)});
+
+    return QString();
+}
+
+QString QGCPluginManager::removePlugin(const QString& pluginId)
+{
+    qCDebug(QGCPluginManagerLog) << "Removing plugin:" << pluginId;
+
+    PluginLoadInfo* record = _findRecord(pluginId);
+
+    // A loaded plugin's binary must be deactivated before its files can be deleted
+    // (mapped-in-process dylibs can't be removed on some platforms while active).
+    const bool wasActive = record && record->state == PluginState::Active;
+    if (wasActive) {
+        _deactivateRecord(*record);
+    }
+
+    const PluginInstallResult removeResult = PluginInstaller::removePlugin(pluginId);
+    if (!removeResult.success) {
+        qCWarning(QGCPluginManagerLog) << "Remove failed:" << removeResult.errorString;
+        // Deletion didn't happen: put the plugin back the way it was rather than
+        // leaving it disabled with no recorded reason.
+        if (wasActive && record) {
+            _activateRecord(*record);
+            _recalcLoggingController();
+            emit loadedPluginsChanged();
+        }
+        return removeResult.errorString;
+    }
+
+    _records.removeIf([&pluginId](const PluginLoadInfo& r) {
+        return r.manifest.id == pluginId;
+    });
+    emit loadedPluginsChanged();
+
+    return QString();
+}
+
+void QGCPluginManager::approvePlugin(const QString& pluginId)
+{
+    qCDebug(QGCPluginManagerLog) << "Approving plugin:" << pluginId;
+
+    PluginLoadInfo* record = _findRecord(pluginId);
+    if (!record || record->state != PluginState::NeedsApproval) {
+        qCWarning(QGCPluginManagerLog) << "Plugin not awaiting approval:" << pluginId;
+        return;
+    }
+
+#if defined(Q_OS_MACOS)
+    if (!PluginInstaller::stripQuarantine(record->packageDir)) {
+        qCWarning(QGCPluginManagerLog) << "Could not fully strip quarantine from" << pluginId << "- leaving unapproved";
+        return;
+    }
+#endif
+
+    record->state = PluginState::Discovered;
+    record->errorString.clear();
+
+    _activateIfEnabled(*record);
 
     _recalcLoggingController();
     emit loadedPluginsChanged();
