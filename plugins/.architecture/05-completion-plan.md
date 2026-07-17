@@ -10,15 +10,17 @@
 
 **Next:** fresh chat → `/implement-unit plugins/.architecture/05-completion-plan.md U3.6` — recommended: **Sonnet / medium / thinking on** (mechanical hardening; `code-reviewer` gate at sonnet).
 
-| Unit | What | Status |
-|---|---|---|
-| U3.6 | Stage 3 hardening residue (installer validation + loader dedup) | — |
-| U3.3 | Consent model (D10) + widened quarantine gate | — |
-| U3.4 | Crash sentinel | — |
-| U3.5 | Release signing carries the plugin entitlement (D9) | — |
-| U5.1 | Golden-plugin CI (ABI watchdog) | — |
-| Stage 4 | QDrive burn-down Q1–Q6 — **own plan + ledger in the qdrive repo:** [../qdrive/docs/sdk-burndown-migration.md](../qdrive/docs/sdk-burndown-migration.md) | — |
-| U5.2 | SDK docs + change close-out | — |
+**⚠ Fable access window (through ~2026-07-19):** while it lasts, front-load the two pieces that genuinely benefit: (1) the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)'s **R1 seek-apply spike** — order-free, pull it forward now (it settles the last permanently-frozen ABI decision of the change); (2) run **U3.3** (and U3.4 if reached) on **Fable** per their briefs. After the window, their fallback settings apply and this note is dead — delete it.
+
+- [ ] **U3.6** — Stage 3 hardening residue (installer validation + loader dedup)
+- [ ] **U3.3** — Consent model (D10) + widened quarantine gate
+- [ ] **U3.4** — Crash sentinel
+- [ ] **U3.5** — Release signing carries the plugin entitlement (D9)
+- [ ] **U5.1** — Golden-plugin CI (ABI watchdog)
+- [ ] **Stage 4** — QDrive burn-down Q1–Q6 — own plan + ledger in the qdrive repo: [../qdrive/docs/sdk-burndown-migration.md](../qdrive/docs/sdk-burndown-migration.md)
+- [ ] **U5.2** — SDK docs + change close-out
+
+This repo's plan has no standalone spikes to ledger: R2 rides U3.5's verify and R3 is decided inside U3.3 (see Risks); Stage 4's R1 spike is an own-chat task ledgered in the qdrive plan. Host-side companion units the qdrive plan requests get their own rows here when added.
 
 ## Goal & summary
 
@@ -88,8 +90,8 @@ Everything else below is work, not risk.
 - **Not in scope:** crash sentinel (U3.4); any installer change.
 - **Files:** `QGCPluginManager.cc/.h`, `PluginSettings.h/.cc` (consent storage beside the enabled Facts), [PluginSettings.qml](../../src/UI/AppSettings/PluginSettings.qml) ("New — not yet enabled [Enable]" row reuses U3.2's NeedsApproval UI), `QGCPluginManagerTest`.
 - **Depends on:** U3.6 (adjacent code, cleaner base).
-- **Done means:** manager tests prove a new user-dir plugin never activates pre-approval, approval persists across restarts, changed hash re-prompts, and a clean-manifest/quarantined-binary package is gated (the D15 case); bundle-dir plugins unaffected; `code-reviewer` (opus) clean.
-- **Run settings:** Opus / high / thinking on (trust logic, per 04 §11).
+- **Done means:** manager tests prove a new user-dir plugin never activates pre-approval, approval persists across restarts, changed hash re-prompts, and a clean-manifest/quarantined-binary package is gated (the D15 case); bundle-dir plugins unaffected; `code-reviewer` (fable while the access window lasts, else opus) clean.
+- **Run settings:** **Fable** / high / thinking on while the access window lasts (see Status — this is the security-critical trust surface); Opus / high / thinking on after.
 
 ### U3.4 — Crash sentinel
 - **Scope:** per 04 §6 U3.4 verbatim: persist `PluginSystem/loadingPluginId` (QSettings, synced) before each `activate()`, clear after the load loop; a lingering id at startup ⇒ `Quarantined` + settings-page banner; re-enable clears. Define precedence explicitly: sentinel-quarantine outranks `NeedsApproval` (a plugin that crashed the host must not be re-runnable by mere consent).
@@ -97,7 +99,7 @@ Everything else below is work, not risk.
 - **Files:** `QGCPluginManager.cc` (`_activateRecord`/`_loadPlugins`), `PluginSettings.qml` (banner), `QGCPluginManagerTest` (lingering key ⇒ Quarantined, not activated; re-enable clears).
 - **Depends on:** U3.3 (state precedence interplay).
 - **Done means:** unit tests green; manual verify: `qFatal` in TestPluginFixture's constructor ⇒ next boot quarantines it with the banner; `code-reviewer` (opus) clean.
-- **Run settings:** Opus / medium / thinking on (small diff, but trust-state semantics).
+- **Run settings:** Fable / medium / thinking on if still inside the access window (rides along after U3.3); Opus / medium / thinking on otherwise (small diff, but trust-state semantics).
 
 ### U3.5 — Release signing carries the plugin entitlement (D9)
 - **Scope:** new `deploy/macos/qgroundcontrol-release.entitlements` containing **only** `com.apple.security.cs.disable-library-validation`; the final app-bundle codesign in [SignMacBundle.cmake](../../cmake/install/SignMacBundle.cmake) (~line 110) gains `--entitlements` (that invocation only — dylib signatures don't carry entitlements); comment states why and points at 04 §11's S6m matrix. The sandbox-bearing Xcode-path file is left untouched, flagged in a comment. `plugins/README.md` gains the plugin-author signing guide (ad-hoc = dev; Developer ID + optional notarize = distribution; universal-build advice per 04 §1.5).
