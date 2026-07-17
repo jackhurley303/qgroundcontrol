@@ -1,5 +1,6 @@
 #include "PluginLoaderGateTest.h"
 
+#include <QtCore/QByteArray>
 #include <QtCore/QFile>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
@@ -119,6 +120,50 @@ void PluginLoaderGateTest::_inspectMissingFileFails_test()
 
     QCOMPARE(info.state, PluginState::Failed);
     QVERIFY(!info.errorString.isEmpty());
+}
+
+// The permanent "different-commit-host" ABI proof (04 §11 Spike S3, DoD #1's residue):
+// a dylib built at a different commit (or, for the template leg, against a different
+// SDK zip entirely) must still satisfy today's QGCPluginLoader gate. CI points these at
+// a real path via env var; outside CI (or before U5.1's macos.yml wiring lands) the var
+// is unset and the slot skips rather than failing.
+//
+// Exercises both compiled-in vtables a plugin binary carries: QGCPluginInterface's
+// (pluginInterfaceVersion()/createPlugin(), invoked by activate() itself) and
+// QGCPlugin's own (replayExtension(), invoked explicitly below, mirroring
+// _activateRealPlugin_test's real-fixture check). A manual verify confirmed this
+// actually catches a break: inserting a scratch virtual into QGCPluginInterface
+// ahead of createPlugin() and reloading this committed golden dylib crashes with
+// SIGSEGV (out-of-bounds vtable read against the old 2-slot layout) rather than
+// silently misbehaving — reverted, not part of this commit.
+void PluginLoaderGateTest::_inspectAndActivateExternalDylib(const QByteArray& envVarName, const QString& skipContext)
+{
+    const QString path = qEnvironmentVariable(envVarName.constData());
+    if (path.isEmpty()) {
+        QSKIP(qPrintable(QStringLiteral("%1 not set; skipping %2 ABI check (set by CI, see test/PluginSystem/golden/README.md)")
+                          .arg(QString::fromUtf8(envVarName), skipContext)));
+    }
+    QVERIFY2(QFile::exists(path), qPrintable(QStringLiteral("%1 does not exist: %2").arg(skipContext, path)));
+
+    PluginLoadInfo info = QGCPluginLoader::inspect(path);
+    QCOMPARE(info.state, PluginState::Discovered);
+    QCOMPARE(info.manifest.tier, PluginManifest::Tier::Sdk);
+
+    QGCPluginLoader::activate(info);
+    QCOMPARE(info.state, PluginState::Active);
+    QVERIFY(info.plugin != nullptr);
+    QCOMPARE(info.plugin->replayExtension(), nullptr);
+    delete info.plugin;
+}
+
+void PluginLoaderGateTest::_activateGoldenPluginAgainstCurrentHost_test()
+{
+    _inspectAndActivateExternalDylib(QByteArrayLiteral("QGC_GOLDEN_PLUGIN_PATH"), QStringLiteral("golden plugin"));
+}
+
+void PluginLoaderGateTest::_activateTemplateBuiltPluginAgainstCurrentHost_test()
+{
+    _inspectAndActivateExternalDylib(QByteArrayLiteral("QGC_TEMPLATE_PLUGIN_PATH"), QStringLiteral("SDK-template plugin"));
 }
 
 // Package discovery + Tier A synthesis (U3.1) — recreates S4's manifest-only package

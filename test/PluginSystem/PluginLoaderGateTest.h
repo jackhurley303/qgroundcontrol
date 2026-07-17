@@ -14,6 +14,9 @@ private slots:
     void _activateRealPlugin_test();
     void _inspectMissingFileFails_test();
 
+    void _activateGoldenPluginAgainstCurrentHost_test();
+    void _activateTemplateBuiltPluginAgainstCurrentHost_test();
+
     void _inspectQmlPackageActivatesWithoutBinary_test();
     void _inspectSdkPackageLoadsBinary_test();
     void _inspectPackageBadLayoutErrorsLegible_test();
@@ -24,4 +27,5 @@ private slots:
 
 private:
     QString _writePackage(const QString& subdirName, const QJsonObject& manifestJson);
+    void _inspectAndActivateExternalDylib(const QByteArray& envVarName, const QString& skipContext);
 };

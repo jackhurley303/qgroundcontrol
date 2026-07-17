@@ -6,9 +6,9 @@
 
 ## Status — current position / next step
 
-**Shipped:** U3.6, U3.3, U3.4, U3.5 (all 2026-07-17). Before this plan: Stages 1–3.2 (per-unit history in the `.feature` doc above); DoD **#2** (Tier A runtime install) and **#6** (`export_dynamic` gated) already proven.
+**Shipped:** U3.6, U3.3, U3.4, U3.5, U5.1 (all 2026-07-17). Before this plan: Stages 1–3.2 (per-unit history in the `.feature` doc above); DoD **#2** (Tier A runtime install) and **#6** (`export_dynamic` gated) already proven.
 
-**Next:** fresh chat → `/implement-unit plugins/.architecture/05-completion-plan.md U5.1` — **Sonnet / medium / thinking on**.
+**Next:** Stage 4 (QDrive burn-down Q1–Q6) is planned and executed in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md), not here — this doc's row ticks when that checklist completes. If no qdrive-side work is queued next, fresh chat → `/implement-unit plugins/.architecture/05-completion-plan.md U5.2` (only after Stage 4 finishes — U5.2 depends on qdrive's Change acceptance) — **Sonnet / low / thinking off**.
 
 **⚠ U3.5's manual S6m re-verify is outstanding** — the entitlement wiring shipped (code-reviewer clean) but the actual re-run (self-signed hardened-runtime bundle: differently-signed plugin loads *with* the entitlement, blocked *without*) needs a real signing identity and wasn't run this session. Do it before U5.2 records Change-acceptance evidence for DoD #3, or explicitly defer it there.
 
@@ -102,12 +102,12 @@ Everything else below is work, not risk.
 - **Done means:** re-run the S6m matrix against a self-signed hardened-runtime bundle of the real app — differently-signed plugin loads *with* the entitlement, blocked *without* (definition-of-done #3); measure R2's cell if Developer ID certs are on hand; `code-reviewer` (sonnet) clean.
 - **Run settings:** Sonnet / medium / thinking on (CMake + docs; the verify is manual signing work).
 
-### U5.1 — Golden-plugin CI (the ABI watchdog)
-- **Scope:** archive the built Example plugin from the next Release CI run as a versioned "golden" artifact; new `macos.yml` job downloads it and runs `PluginLoaderGateTest --golden <path>` against the current host (S3 automated forever — any red = an ABI rule broke; fix by reverting the break, never by rebuilding the golden). Second leg: CI builds `plugins/template/` against the *published* SDK zip and loads that too — the permanent different-commit-host proof (definition-of-done #1's residue from U2.7).
+### U5.1 — Golden-plugin CI (the ABI watchdog) — shipped 2026-07-17
+- **Scope (as shipped, corrected from as-planned):** the golden Example-plugin binary is a **git-committed fixture** (`test/PluginSystem/golden/ExamplePlugin-v2.dylib` + README — decided over the doc's original "archive from CI" framing because the AWS-upload path only fires on push-to-mavlink/tag, never this fork's branches/PRs, and GH Actions artifacts expire; a committed binary is the only option that's actually permanent here), universal (`x86_64h;arm64`) Release, built from commit `73f2b4ea4`. The doc's `PluginLoaderGateTest --golden <path>` framing doesn't fit this repo's test harness (every test runs via `QGroundControl --unittest:Name`, no per-test custom-flag plumbing) — implemented instead as two env-var-gated slots (`QGC_GOLDEN_PLUGIN_PATH`, `QGC_TEMPLATE_PLUGIN_PATH`) that `QSKIP` when unset. Second leg (`plugins/template/` built against the just-packaged SDK) as planned. macOS CI didn't build unit tests at all before this unit — `macos.yml`'s `cmake-configure` now passes `testing: 'true'`, and two new steps after "Package plugin SDK" build the template + run just `PluginLoaderGateTest`, gated on `matrix.build_type == 'Release'` (which is every PR, not just pushes — no secrets needed).
 - **Not in scope:** Windows/Android CI; doxygen (U5.2).
-- **Files:** `.github/workflows/macos.yml` (after the SDK steps, ~lines 163–182), `test/PluginSystem/PluginLoaderGateTest.cc` (`--golden` path argument), possibly a small composite-action reuse per AGENTS.md CI conventions.
+- **Files:** `.github/workflows/macos.yml`, `test/PluginSystem/PluginLoaderGateTest.h/.cc`, `test/PluginSystem/golden/ExamplePlugin-v2.dylib` + `README.md` (new).
 - **Depends on:** U3.6 (loader gate flow settles before the harness pins it). Deliberately **before** Stage 4: the watchdog should be live while QDrive churn tempts ABI edits.
-- **Done means:** CI job green on an unmodified host; a deliberate local negative control (add a virtual to `QGCPlugin` in a scratch build) makes the gate test fail loudly; `code-reviewer` (sonnet) clean.
+- **Done means:** new env-gated slots pass locally against the committed golden + a freshly-built template plugin; full `Unit`-labeled suite green (162/165 — the only failures are the pre-existing SigningTest/SigningControllerTest/QGCKeychainTest timeouts, unrelated); manual negative control confirmed decisive — **the doc's "add a virtual to QGCPlugin" location doesn't work**: `QGCPluginLoader::activate()` never calls any `QGCPlugin` virtual (only `QGCPluginInterface`'s `pluginInterfaceVersion()`/`createPlugin()`), so a scratch virtual there silently misfires into an inherited no-op instead of failing. Inserting the scratch virtual into `QGCPluginInterface` instead (between its two real virtuals) reliably crashes the golden test with SIGSEGV — reverted, not committed. Added a `replayExtension()` assertion to the new slots so they also exercise `QGCPlugin`'s own vtable, matching `_activateRealPlugin_test`'s coverage. `code-reviewer` (sonnet) dispatched, found one real bug (template-build step never pointed `CMAKE_PREFIX_PATH`/toolchain at `QT_ROOT_DIR`, so `find_package(Qt6)` would fail on every PR) — fixed and re-verified locally.
 - **Run settings:** Sonnet / medium / thinking on.
 
 ### Stage 4 — QDrive burn-down (cross-repo reference, no units here)
@@ -140,7 +140,7 @@ The whole-change bar, verified by `/lc-branch-cleanup --onto plugin-infrastructu
 - [x] **U3.3** — Consent model (D10) + widened quarantine gate (D15) — shipped 2026-07-17
 - [x] **U3.4** — Crash sentinel — shipped 2026-07-17 (tests green; manual crash verify passed)
 - [x] **U3.5** — Release signing carries the plugin entitlement (D9) — shipped 2026-07-17 (entitlements wired + docs; manual S6m re-verify outstanding, see Status)
-- [ ] **U5.1** — Golden-plugin CI (ABI watchdog)
+- [x] **U5.1** — Golden-plugin CI (ABI watchdog) — shipped 2026-07-17
 - [ ] **Stage 4** — QDrive burn-down Q1–Q6 — ticked in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md); this row ticks when that checklist completes. Its host-side companion units get rows here, between U5.1 and U5.2.
 - [ ] **U5.2** — SDK docs + DoD evidence
 

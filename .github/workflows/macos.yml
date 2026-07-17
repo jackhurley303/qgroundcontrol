@@ -91,6 +91,7 @@ jobs:
           build-dir: ${{ runner.temp }}/build
           build-type: ${{ matrix.build_type }}
           stable: ${{ env.IS_STABLE_BUILD }}
+          testing: 'true'
           extra-args: -DQGC_MACOS_SIGN_WITH_IDENTITY=${{ github.event_name != 'pull_request' && 'ON' || 'OFF' }}
 
       - name: Build
@@ -100,7 +101,9 @@ jobs:
           build-type: ${{ matrix.build_type }}
 
       # TODO: Enable GStreamer integration tests once a Debug build is added to the matrix.
-      # Release builds strip test infrastructure; these tests require a Debug or RelWithDebInfo build.
+      # QGC_BUILD_TESTING=ON (above) does compile test infra into a Release build fine —
+      # PluginLoaderGateTest below proves it — but GStreamer integration specifically still
+      # needs a Debug/RelWithDebInfo build for other reasons; out of scope here.
       # - name: Run GStreamer Integration Tests
       #   uses: ./.github/actions/run-unit-tests
       #   with:
@@ -173,6 +176,35 @@ jobs:
           cmake --install . --config ${{ matrix.build_type }} --component QGCPluginSDK --prefix "${SDK_NAME}"
           ditto -c -k --sequesterRsrc --keepParent "${SDK_NAME}" "${SDK_NAME}.zip"
           echo "SDK_ZIP=${SDK_NAME}.zip" >> "$GITHUB_ENV"
+          echo "SDK_NAME=${SDK_NAME}" >> "$GITHUB_ENV"
+
+      # Plugin SDK ABI watchdog (plugins/.architecture/05-completion-plan.md U5.1): the
+      # permanent "different-commit-host" proof (DoD #1's residue, 04 §11 Spike S3). Leg 1
+      # loads a frozen, git-committed golden Example-plugin dylib (test/PluginSystem/golden/,
+      # built at an earlier commit) through today's QGCPluginLoader. Leg 2 builds
+      # plugins/template/ standalone against the SDK just packaged above and loads that.
+      # Both run through PluginLoaderGateTest's env-var-gated slots; a real ABI break here
+      # crashes loudly (verified manually — see the golden README) rather than passing
+      # silently, so this must run on PRs too, not just Release pushes.
+      - name: Build SDK-template plugin against the just-packaged SDK
+        if: matrix.build_type == 'Release'
+        working-directory: ${{ runner.temp }}/build
+        run: |
+          cmake -B template-build -S "${SDK_NAME}/template" \
+            -DCMAKE_PREFIX_PATH="$(pwd)/${SDK_NAME};${QT_ROOT_DIR}" \
+            -DCMAKE_TOOLCHAIN_FILE="${QT_ROOT_DIR}/lib/cmake/Qt6/qt.toolchain.cmake"
+          cmake --build template-build
+          echo "TEMPLATE_PLUGIN_PATH=$(pwd)/template-build/libMyPlugin.dylib" >> "$GITHUB_ENV"
+
+      - name: Run golden-plugin ABI watchdog (PluginLoaderGateTest)
+        if: matrix.build_type == 'Release'
+        working-directory: ${{ runner.temp }}/build
+        env:
+          QGC_GOLDEN_PLUGIN_PATH: ${{ github.workspace }}/test/PluginSystem/golden/ExamplePlugin-v2.dylib
+          QGC_TEMPLATE_PLUGIN_PATH: ${{ env.TEMPLATE_PLUGIN_PATH }}
+        run: |
+          "${{ matrix.build_type }}/QGroundControl.app/Contents/MacOS/QGroundControl" \
+            --unittest:PluginLoaderGateTest --unittest-output:golden-plugin-results.xml
 
       - name: Attest and Upload plugin SDK
         if: matrix.build_type == 'Release'
