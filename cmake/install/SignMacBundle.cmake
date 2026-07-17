@@ -107,8 +107,15 @@ endif()
 # ----------------------------------------------------------------------------
 # Sign Main Application Bundle
 # ----------------------------------------------------------------------------
+# The main bundle carries com.apple.security.cs.disable-library-validation:
+# under the hardened runtime, dyld otherwise refuses to load ANY library not
+# signed by the app's own Team ID -- including a correctly-signed third-party
+# plugin -- so this entitlement is what makes third-party plugin loading
+# possible at all (measured matrix: plugins/.architecture/04-macos-implementation-plan.md
+# S6m). Only this final app-bundle codesign gets it; per-dylib/framework
+# signatures above don't carry entitlements.
 execute_process(
-    COMMAND codesign --timestamp --options=runtime --force -s "$ENV{QGC_MACOS_SIGNING_IDENTITY}" "${QGC_STAGING_BUNDLE_PATH}"
+    COMMAND codesign --timestamp --options=runtime --force -s "$ENV{QGC_MACOS_SIGNING_IDENTITY}" --entitlements "${CMAKE_SOURCE_DIR}/deploy/macos/qgroundcontrol-release.entitlements" "${QGC_STAGING_BUNDLE_PATH}"
     COMMAND_ERROR_IS_FATAL ANY
 )
 

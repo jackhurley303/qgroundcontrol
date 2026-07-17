@@ -6,9 +6,11 @@
 
 ## Status — current position / next step
 
-**Shipped:** U3.6, U3.3, U3.4 (all 2026-07-17). Before this plan: Stages 1–3.2 (per-unit history in the `.feature` doc above); DoD **#2** (Tier A runtime install) and **#6** (`export_dynamic` gated) already proven.
+**Shipped:** U3.6, U3.3, U3.4, U3.5 (all 2026-07-17). Before this plan: Stages 1–3.2 (per-unit history in the `.feature` doc above); DoD **#2** (Tier A runtime install) and **#6** (`export_dynamic` gated) already proven.
 
-**Next:** fresh chat → `/implement-unit plugins/.architecture/05-completion-plan.md U3.5` — **Sonnet / medium / thinking on**.
+**Next:** fresh chat → `/implement-unit plugins/.architecture/05-completion-plan.md U5.1` — **Sonnet / medium / thinking on**.
+
+**⚠ U3.5's manual S6m re-verify is outstanding** — the entitlement wiring shipped (code-reviewer clean) but the actual re-run (self-signed hardened-runtime bundle: differently-signed plugin loads *with* the entitlement, blocked *without*) needs a real signing identity and wasn't run this session. Do it before U5.2 records Change-acceptance evidence for DoD #3, or explicitly defer it there.
 
 **⚠ Fable access window (through ~2026-07-19):** U3.4 rode the window as planned; the remaining beneficiary is the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)'s **R1 seek-apply spike** — order-free, pull it forward while the window lasts (it settles the last permanently-frozen ABI decision of the change). After the window this note is dead — delete it.
 
@@ -137,7 +139,7 @@ The whole-change bar, verified by `/lc-branch-cleanup --onto plugin-infrastructu
 - [x] **U3.6** — Stage 3 hardening residue (installer validation + loader dedup) — shipped 2026-07-17
 - [x] **U3.3** — Consent model (D10) + widened quarantine gate (D15) — shipped 2026-07-17
 - [x] **U3.4** — Crash sentinel — shipped 2026-07-17 (tests green; manual crash verify passed)
-- [ ] **U3.5** — Release signing carries the plugin entitlement (D9)
+- [x] **U3.5** — Release signing carries the plugin entitlement (D9) — shipped 2026-07-17 (entitlements wired + docs; manual S6m re-verify outstanding, see Status)
 - [ ] **U5.1** — Golden-plugin CI (ABI watchdog)
 - [ ] **Stage 4** — QDrive burn-down Q1–Q6 — ticked in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md); this row ticks when that checklist completes. Its host-side companion units get rows here, between U5.1 and U5.2.
 - [ ] **U5.2** — SDK docs + DoD evidence

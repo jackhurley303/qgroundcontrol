@@ -253,6 +253,30 @@ Package **installation** (`.qgcplugin` → `<plugins dir>/<id>/`, consent, remov
 later stage — today, package directories are discovered exactly like bare dylibs: drop
 one in a search path above for the dev loop.
 
+## Signing Your Plugin
+
+The release build of QGroundControl runs with the hardened runtime and
+`com.apple.security.cs.disable-library-validation` ([deploy/macos/qgroundcontrol-release.entitlements](../deploy/macos/qgroundcontrol-release.entitlements)) —
+without that entitlement, dyld refuses to load *any* library not signed by
+the app's own Team ID, which would block every third-party plugin outright.
+With it, a plugin dylib just needs a valid signature of its own (not
+necessarily the same team) to load:
+
+- **Local dev loop** — ad-hoc signing (`codesign -s -`) is enough; this is
+  also what an unsigned dylib gets away with on Intel (leniency not present
+  on arm64, which requires at least ad-hoc).
+- **Distribution** — sign with a Developer ID certificate. If you're
+  distributing the plugin dylib on its own (outside a `.qgcplugin` package,
+  which is unzipped in-process and consent-gated — see
+  [Packages](#packages)), also notarize it: anything that downloads through
+  a browser or similar picks up the quarantine xattr, which Gatekeeper
+  enforces independently of how the host app is signed.
+- **Universal builds** — build your plugin `x86_64;arm64` (the CI host is
+  built `x86_64h;arm64`; the `h` sub-type is compatible). A single-arch
+  plugin only loads on a host running that arch — the loader reports the
+  mismatch via `errorString()` rather than failing silently, but a universal
+  binary avoids the split entirely.
+
 ## Plugin Settings
 
 - Plugins are registered with `PluginSettings` **by manifest `id`**, not display name —
