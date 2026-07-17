@@ -6,7 +6,7 @@
 
 ## Status — current position
 
-Tracked in [plugins/.feature/macos-plugin-sdk.md](../.feature/macos-plugin-sdk.md) (per-unit ledger + notes for the next unit). Spike results live in §11 below.
+**Remaining work re-planned 2026-07-16 in [05-completion-plan.md](05-completion-plan.md)** (U3.3–U3.5 + a new U3.6 hardening unit, Stage 4 Q1–Q6, Stage 5) — that doc's Status section is now the live ledger; its D12–D16 record the Stage 3 as-built decisions. This document remains the as-built record for Stages 1–3.2: locked decisions D1–D11, platform mechanics (§1), and the spike ledger (§11). Shipped-unit history: [plugins/.feature/macos-plugin-sdk.md](../.feature/macos-plugin-sdk.md).
 
 ## Definition of done (macOS)
 
