@@ -38,6 +38,15 @@ QJsonObject PluginInstallerTest::_validManifestJson(const QString& id, const QSt
     return json;
 }
 
+QJsonObject PluginInstallerTest::_internalTierManifestJson(const QString& id)
+{
+    QJsonObject json = _validManifestJson(id);
+    json[QStringLiteral("tier")] = QStringLiteral("internal");
+    json[QStringLiteral("apiVersion")] = 1;
+    json[QStringLiteral("hostBuildId")] = QStringLiteral("some-other-build");
+    return json;
+}
+
 QString PluginInstallerTest::_writeZip(const QString& zipRelPath, const QMap<QString, QByteArray>& entries)
 {
     const QString zipPath = tempPath(zipRelPath);
@@ -184,6 +193,54 @@ void PluginInstallerTest::_removeUnknownIdFails_test()
     const PluginInstallResult result = PluginInstaller::removePlugin(QStringLiteral("org.test.neverinstalled"));
     QVERIFY(!result.success);
     QVERIFY(!result.errorString.isEmpty());
+}
+
+void PluginInstallerTest::_installInternalTierZipRejectedPreExtraction_test()
+{
+    QMap<QString, QByteArray> entries;
+    entries[QStringLiteral("qgcplugin.json")] = QJsonDocument(_internalTierManifestJson(QStringLiteral("org.test.internalpkg"))).toJson();
+
+    const QString zipPath = _writeZip(QStringLiteral("internal.qgcplugin"), entries);
+    QVERIFY(!zipPath.isEmpty());
+
+    const PluginInstallResult result = PluginInstaller::installFromFile(zipPath);
+    QVERIFY(!result.success);
+    QVERIFY2(result.errorString.contains(QStringLiteral("internal")), qPrintable(result.errorString));
+
+    // Rejected before extraction: nothing was written under the plugins dir.
+    QVERIFY(!QDir(QDir(PluginInstaller::userPluginsDir()).filePath("org.test.internalpkg")).exists());
+}
+
+void PluginInstallerTest::_installBundledPluginApiDylibRejected_test()
+{
+    QMap<QString, QByteArray> entries;
+    entries[QStringLiteral("qgcplugin.json")] = QJsonDocument(_validManifestJson(QStringLiteral("org.test.bundledapi"))).toJson();
+    entries[QStringLiteral("bin/macos-universal/libQGCPluginAPI.2.dylib")] = QByteArrayLiteral("not a real dylib");
+
+    const QString zipPath = _writeZip(QStringLiteral("bundledapi.qgcplugin"), entries);
+    QVERIFY(!zipPath.isEmpty());
+
+    const PluginInstallResult result = PluginInstaller::installFromFile(zipPath);
+    QVERIFY(!result.success);
+    QVERIFY2(result.errorString.contains(QStringLiteral("bundles a runtime")), qPrintable(result.errorString));
+
+    QVERIFY(!QDir(QDir(PluginInstaller::userPluginsDir()).filePath("org.test.bundledapi")).exists());
+}
+
+void PluginInstallerTest::_installBundledQtFrameworkRejected_test()
+{
+    QMap<QString, QByteArray> entries;
+    entries[QStringLiteral("qgcplugin.json")] = QJsonDocument(_validManifestJson(QStringLiteral("org.test.bundledqt"))).toJson();
+    entries[QStringLiteral("Frameworks/QtCore.framework/Versions/A/QtCore")] = QByteArrayLiteral("not a real framework");
+
+    const QString zipPath = _writeZip(QStringLiteral("bundledqt.qgcplugin"), entries);
+    QVERIFY(!zipPath.isEmpty());
+
+    const PluginInstallResult result = PluginInstaller::installFromFile(zipPath);
+    QVERIFY(!result.success);
+    QVERIFY2(result.errorString.contains(QStringLiteral("bundles a runtime")), qPrintable(result.errorString));
+
+    QVERIFY(!QDir(QDir(PluginInstaller::userPluginsDir()).filePath("org.test.bundledqt")).exists());
 }
 
 UT_REGISTER_TEST(PluginInstallerTest, TestLabel::Unit)

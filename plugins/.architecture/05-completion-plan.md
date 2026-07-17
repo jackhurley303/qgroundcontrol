@@ -8,11 +8,11 @@
 
 **Shipped before this plan:** Stage 1 (manifest + loader gate, U1.1–U1.6), Stage 2 (SDK boundary, U2.1–U2.7 + ABI hardening), Stage 3's U3.1 (package discovery + Tier A) and U3.2 (install/remove UX). Definition-of-done #2 (Tier A runtime install) is proven; #6 (`export_dynamic` gated) is done.
 
-**Next:** fresh chat → `/implement-unit plugins/.architecture/05-completion-plan.md U3.6` — recommended: **Sonnet / medium / thinking on** (mechanical hardening; `code-reviewer` gate at sonnet).
+**Next:** fresh chat → `/implement-unit plugins/.architecture/05-completion-plan.md U3.3` — recommended: **Fable / high / thinking on** while the 2026-07-19 access window lasts (security-critical trust surface), else **Opus / high / thinking on** (`code-reviewer` gate at fable/opus to match).
 
 **⚠ Fable access window (through ~2026-07-19):** while it lasts, front-load the two pieces that genuinely benefit: (1) the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)'s **R1 seek-apply spike** — order-free, pull it forward now (it settles the last permanently-frozen ABI decision of the change); (2) run **U3.3** (and U3.4 if reached) on **Fable** per their briefs. After the window, their fallback settings apply and this note is dead — delete it.
 
-- [ ] **U3.6** — Stage 3 hardening residue (installer validation + loader dedup)
+- [x] **U3.6** — Stage 3 hardening residue (installer validation + loader dedup) — shipped 2026-07-17
 - [ ] **U3.3** — Consent model (D10) + widened quarantine gate
 - [ ] **U3.4** — Crash sentinel
 - [ ] **U3.5** — Release signing carries the plugin entitlement (D9)

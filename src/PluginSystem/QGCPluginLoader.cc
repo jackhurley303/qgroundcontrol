@@ -92,6 +92,49 @@ QStringList findPackageBinaries(const QString& binDir)
     return paths;
 }
 
+// Shared tail of inspect()/inspectPackage(): once a manifest is parsed (and any
+// tier-specific checks the two shapes don't share have run), host-compatibility
+// validation, contribution derivation, and Discovered-state logging are identical.
+// info.packageDir is empty for a bare dev-loop dylib and set for a package (D8),
+// which is also how the two call sites already tell their log message apart.
+
+bool validateHostCompatibility(PluginLoadInfo& info)
+{
+    QString reason;
+    if (!info.manifest.validateForHost(QGCPluginLoader::hostInfo(), &reason)) {
+        info.state = PluginState::Incompatible;
+        info.errorString = reason;
+        return false;
+    }
+    return true;
+}
+
+bool deriveContributions(PluginLoadInfo& info)
+{
+    QString error;
+    info.contributions = PluginContributions::fromManifest(info.manifest, info.packageDir, &error);
+    if (!error.isEmpty()) {
+        info.state = PluginState::Failed;
+        info.errorString = error;
+        return false;
+    }
+    return true;
+}
+
+void markDiscovered(PluginLoadInfo& info)
+{
+    info.state = PluginState::Discovered;
+    if (info.packageDir.isEmpty()) {
+        qCDebug(QGCPluginLoaderLog) << "Validated" << info.manifest.name
+                                    << "(" << PluginManifest::tierToString(info.manifest.tier)
+                                    << ", build" << info.manifest.hostBuildId << ") before load";
+    } else {
+        qCDebug(QGCPluginLoaderLog) << "Validated package" << info.manifest.name
+                                    << "(" << PluginManifest::tierToString(info.manifest.tier)
+                                    << ") at" << info.packageDir;
+    }
+}
+
 } // namespace
 
 QList<PluginLoadInfo> QGCPluginLoader::inspectDirectories(const QStringList& pluginDirs)
@@ -165,25 +208,15 @@ PluginLoadInfo QGCPluginLoader::inspect(const QString& filePath)
         return info;
     }
 
-    QString reason;
-    if (!info.manifest.validateForHost(hostInfo(), &reason)) {
-        info.state = PluginState::Incompatible;
-        info.errorString = reason;
+    if (!validateHostCompatibility(info)) {
         return info;
     }
 
-    error.clear();
-    info.contributions = PluginContributions::fromManifest(info.manifest, QString(), &error);
-    if (!error.isEmpty()) {
-        info.state = PluginState::Failed;
-        info.errorString = error;
+    if (!deriveContributions(info)) {
         return info;
     }
 
-    info.state = PluginState::Discovered;
-    qCDebug(QGCPluginLoaderLog) << "Validated" << info.manifest.name
-                                << "(" << PluginManifest::tierToString(info.manifest.tier)
-                                << ", build" << info.manifest.hostBuildId << ") before load";
+    markDiscovered(info);
     return info;
 }
 
@@ -218,10 +251,7 @@ PluginLoadInfo QGCPluginLoader::inspectPackage(const QString& packageDir)
         return info;
     }
 
-    QString reason;
-    if (!info.manifest.validateForHost(hostInfo(), &reason)) {
-        info.state = PluginState::Incompatible;
-        info.errorString = reason;
+    if (!validateHostCompatibility(info)) {
         return info;
     }
 
@@ -255,11 +285,7 @@ PluginLoadInfo QGCPluginLoader::inspectPackage(const QString& packageDir)
         info.filePath = binaries.first();
     }
 
-    error.clear();
-    info.contributions = PluginContributions::fromManifest(info.manifest, packageDir, &error);
-    if (!error.isEmpty()) {
-        info.state = PluginState::Failed;
-        info.errorString = error;
+    if (!deriveContributions(info)) {
         return info;
     }
 
@@ -270,10 +296,7 @@ PluginLoadInfo QGCPluginLoader::inspectPackage(const QString& packageDir)
         return info;
     }
 
-    info.state = PluginState::Discovered;
-    qCDebug(QGCPluginLoaderLog) << "Validated package" << info.manifest.name
-                                << "(" << PluginManifest::tierToString(info.manifest.tier)
-                                << ") at" << packageDir;
+    markDiscovered(info);
     return info;
 }
 

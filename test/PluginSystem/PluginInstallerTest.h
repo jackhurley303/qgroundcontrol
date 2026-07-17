@@ -21,10 +21,14 @@ private slots:
     void _idCollisionReplaces_test();
     void _removeCleansDirectory_test();
     void _removeUnknownIdFails_test();
+    void _installInternalTierZipRejectedPreExtraction_test();
+    void _installBundledPluginApiDylibRejected_test();
+    void _installBundledQtFrameworkRejected_test();
 
 private:
     // Writes a zip at tempPath(zipRelPath) with the given entries (archive-relative
     // path -> content); returns the absolute zip path.
     QString _writeZip(const QString& zipRelPath, const QMap<QString, QByteArray>& entries);
     QJsonObject _validManifestJson(const QString& id, const QString& version = QStringLiteral("1.0.0"));
+    QJsonObject _internalTierManifestJson(const QString& id);
 };

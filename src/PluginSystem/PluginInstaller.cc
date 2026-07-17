@@ -88,6 +88,40 @@ QByteArray readManifestBytesFromZip(mz_zip_archive* zip, QString* errorOut)
     return bytes;
 }
 
+// D12/04 §9: a package's sidecar manifest and bin/ binary are independently trusted
+// (nothing re-validates one against the other at load time), so a package must not
+// carry its own copy of the host's plugin ABI library or Qt itself — either would let
+// installed content run a runtime the loader never checked. Entry names only; the
+// archive isn't touched.
+bool findBundledRuntimeEntry(mz_zip_archive* zip, QString* offendingNameOut)
+{
+    const mz_uint fileCount = mz_zip_reader_get_num_files(zip);
+    for (mz_uint i = 0; i < fileCount; ++i) {
+        mz_zip_archive_file_stat stat;
+        if (!mz_zip_reader_file_stat(zip, i, &stat)) {
+            continue;
+        }
+
+        const QString entryName = QString::fromUtf8(stat.m_filename);
+        const QStringList parts = entryName.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+        for (const QString& part : parts) {
+            // Case-insensitive: this is a name-pattern heuristic, not a code check, so a
+            // trivially re-cased entry (e.g. "qtcore.framework") must not slip past it.
+            const bool isPluginApiDylib = part.startsWith(QStringLiteral("libQGCPluginAPI"), Qt::CaseInsensitive)
+                && part.endsWith(QStringLiteral(".dylib"), Qt::CaseInsensitive);
+            const bool isQtRuntime = part.startsWith(QStringLiteral("Qt"), Qt::CaseInsensitive)
+                && (part.endsWith(QStringLiteral(".framework"), Qt::CaseInsensitive) || part.endsWith(QStringLiteral(".dylib"), Qt::CaseInsensitive));
+            if (isPluginApiDylib || isQtRuntime) {
+                if (offendingNameOut) {
+                    *offendingNameOut = entryName;
+                }
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool extractAllTo(mz_zip_archive* zip, const QString& destDir, QString* errorOut)
 {
     const mz_uint fileCount = mz_zip_reader_get_num_files(zip);
@@ -181,6 +215,21 @@ PluginInstallResult PluginInstaller::installFromFile(const QString& zipPath)
     if (manifest.id.isEmpty()) {
         mz_zip_reader_end(&zip);
         result.errorString = QStringLiteral("invalid manifest: %1").arg(manifestError);
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
+        return result;
+    }
+
+    if (manifest.tier == PluginManifest::Tier::Internal) {
+        mz_zip_reader_end(&zip);
+        result.errorString = QStringLiteral("tier internal cannot be packaged (dev-loop only); use tier sdk for a distributable binary plugin");
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
+        return result;
+    }
+
+    QString offendingEntry;
+    if (findBundledRuntimeEntry(&zip, &offendingEntry)) {
+        mz_zip_reader_end(&zip);
+        result.errorString = QStringLiteral("archive bundles a runtime library ('%1'); plugins must link the host's QGCPluginAPI/Qt, not ship their own").arg(offendingEntry);
         qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
         return result;
     }
