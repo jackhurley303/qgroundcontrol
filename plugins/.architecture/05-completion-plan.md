@@ -6,21 +6,11 @@
 
 ## Status — current position / next step
 
-**Shipped before this plan:** Stage 1 (manifest + loader gate, U1.1–U1.6), Stage 2 (SDK boundary, U2.1–U2.7 + ABI hardening), Stage 3's U3.1 (package discovery + Tier A) and U3.2 (install/remove UX). Definition-of-done #2 (Tier A runtime install) is proven; #6 (`export_dynamic` gated) is done.
+**Shipped:** U3.6, U3.3, U3.4 (all 2026-07-17). Before this plan: Stages 1–3.2 (per-unit history in the `.feature` doc above); DoD **#2** (Tier A runtime install) and **#6** (`export_dynamic` gated) already proven.
 
-**Next:** fresh chat → `/implement-unit plugins/.architecture/05-completion-plan.md U3.5` — recommended: **Sonnet / medium / thinking on** (CMake + docs; the verify is manual signing work).
+**Next:** fresh chat → `/implement-unit plugins/.architecture/05-completion-plan.md U3.5` — **Sonnet / medium / thinking on**.
 
 **⚠ Fable access window (through ~2026-07-19):** U3.4 rode the window as planned; the remaining beneficiary is the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)'s **R1 seek-apply spike** — order-free, pull it forward while the window lasts (it settles the last permanently-frozen ABI decision of the change). After the window this note is dead — delete it.
-
-- [x] **U3.6** — Stage 3 hardening residue (installer validation + loader dedup) — shipped 2026-07-17
-- [x] **U3.3** — Consent model (D10) + widened quarantine gate — shipped 2026-07-17
-- [x] **U3.4** — Crash sentinel — shipped 2026-07-17 (unit tests green; manual crash verify passed: qFatal boot crash ⇒ next boot quarantined with banner)
-- [ ] **U3.5** — Release signing carries the plugin entitlement (D9)
-- [ ] **U5.1** — Golden-plugin CI (ABI watchdog)
-- [ ] **Stage 4** — QDrive burn-down Q1–Q6 — own plan + ledger in the qdrive repo: [../qdrive/docs/sdk-burndown-migration.md](../qdrive/docs/sdk-burndown-migration.md)
-- [ ] **U5.2** — SDK docs + change close-out
-
-This repo's plan has no standalone spikes to ledger: R2 rides U3.5's verify and R3 was decided inside U3.3 as-built (consent digest = manifest version + SHA-256 over manifest + resolved binary only; QML/asset trees are deliberately excluded — a residual gap, not an oversight, flagged in `consentDigest`'s comment). Stage 4's R1 spike is an own-chat task ledgered in the qdrive plan. Host-side companion units the qdrive plan requests get their own rows here when added.
 
 ## Goal & summary
 
@@ -35,20 +25,25 @@ Plus the Stage 3 review residue this plan folds in as first-class work (U3.6, an
 
 ## Architecture / approach
 
-The target architecture is [02-target-architecture.md](02-target-architecture.md); the platform mechanics and locked decisions D1–D11 are 04 §1–§2. **New locked decisions from the Stage 3 as-built + the 2026-07-16 design review** (numbering continues):
+The target architecture is [02-target-architecture.md](02-target-architecture.md); the platform mechanics and locked decisions D1–D11 are 04 §1–§2. New locked decisions from the Stage 3 as-built + the 2026-07-16 design review (numbering continues):
 
-**D12 — Packages are `sdk`/`qml` only; tier `internal` is dev-loop/bare-dylib only.**
+#### D12 — Packages are `sdk`/`qml` only; tier `internal` is dev-loop/bare-dylib only
 A package's sidecar manifest and its `bin/` binary are independent artifacts; nothing re-validates the binary against the sidecar that granted `hostBuildId` trust, so packaging tier `internal` would allow a post-gate binary swap. (As-built U3.1; U3.6 extends the same rejection to install time.)
 
-**D13 — The sidecar `qgcplugin.json` is the sole identity source for packages.** `inspectPackage()` never reads a binary's embedded metadata; a lying sdk-tier binary still fails safely at `activate()` via the IID/`qobject_cast` check.
+#### D13 — The sidecar `qgcplugin.json` is the sole identity source for packages
+`inspectPackage()` never reads a binary's embedded metadata; a lying sdk-tier binary still fails safely at `activate()` via the IID/`qobject_cast` check.
 
-**D14 — Install over an existing id is a silent full replace.** Deliberate (04's U3.2 test line said "prompts"): the user just picked the file in a dialog — intent is unambiguous; matches `.vsix` convention. A version-aware confirm is post-ship polish (Open questions).
+#### D14 — Install over an existing id is a silent full replace
+Deliberate (04's U3.2 test line said "prompts"): the user just picked the file in a dialog — intent is unambiguous; matches `.vsix` convention. A version-aware confirm is post-ship polish (Open questions).
 
-**D15 — Quarantine startup gate checks the manifest + the resolved package binary; approval-strip walks the full tree.** Manifest-only (U3.2 as-built) misses the realistic partial case — a fresh quarantined dylib swapped into a clean package — which Gatekeeper still blocks, but cryptically. Two `getxattr` calls cover the only file whose quarantine status matters (QML/assets are read as data, never Gatekeeper-gated). Widened in U3.3, where the gate is being reworked anyway.
+#### D15 — Quarantine startup gate checks the manifest + the resolved package binary; approval-strip walks the full tree
+Manifest-only (U3.2 as-built) misses the realistic partial case — a fresh quarantined dylib swapped into a clean package — which Gatekeeper still blocks, but cryptically. Two `getxattr` calls cover the only file whose quarantine status matters (QML/assets are read as data, never Gatekeeper-gated). Widened in U3.3, where the gate is being reworked anyway.
 
-**D16 — miniz is the zip implementation for both production extraction and test-fixture writing.** The libarchive path was built and reverted (QGC's vendored xz-utils is decoder-only; libarchive's zip *writer* needs the LZMA encoder even for plain zips) — rationale in [libs/miniz/README.md](../../libs/miniz/README.md); don't retread. One library with a tested zip-slip guard beats two zip codepaths with different security properties.
+#### D16 — miniz is the zip implementation for both production extraction and test-fixture writing
+The libarchive path was built and reverted (QGC's vendored xz-utils is decoder-only; libarchive's zip *writer* needs the LZMA encoder even for plain zips) — rationale in [libs/miniz/README.md](../../libs/miniz/README.md); don't retread. One library with a tested zip-slip guard beats two zip codepaths with different security properties.
 
-**Cutover discipline (the architecture-change end state):** when Q6 lands, QDrive's manifest is `tier: "sdk"`, its `-undefined dynamic_lookup` linkage and every `src/`-internal include are **gone** — not gated, gone from the qdrive tree. `QGC_ENABLE_INTERNAL_PLUGINS` (D7) stays in base QGC as generic Tier C infrastructure, but the fork no longer needs it ON for QDrive. Carrying internal-tier residue in qdrive past Q6 is failure.
+#### Cutover discipline (the architecture-change end state)
+When Q6 lands, QDrive's manifest is `tier: "sdk"`, its `-undefined dynamic_lookup` linkage and every `src/`-internal include are **gone** — not gated, gone from the qdrive tree. `QGC_ENABLE_INTERNAL_PLUGINS` (D7) stays in base QGC as generic Tier C infrastructure, but the fork no longer needs it ON for QDrive. Carrying internal-tier residue in qdrive past Q6 is failure.
 
 ## Repos & key anchors
 
@@ -60,18 +55,14 @@ A package's sidecar manifest and its `bin/` binary are independent artifacts; no
 - [.github/workflows/macos.yml](../../.github/workflows/macos.yml) — SDK package/attest steps (~lines 163–182) are where U5.1's golden job slots.
 - Tests to extend: `test/PluginSystem/` (`PluginInstallerTest`, `PluginLoaderGateTest`, `QGCPluginManagerTest`), fixture plugin `test/PluginSystem/TestPlugin/`.
 
-**`plugins/qdrive` (nested repo)** — Stage 4's Q1–Q6 land there and are planned there: [plugins/qdrive/docs/sdk-burndown-migration.md](../qdrive/docs/sdk-burndown-migration.md) (own Status ledger, risks, unit briefs; follows that repo's workflow). This plan contains **no qdrive units** — one plan per repo, mutually referencing. The two touchpoints back into this repo: gitlink bumps ride each qdrive commit, and if Q3's R1 spike (defined in that plan) lands on the host-side seek-apply hoist — or Q4 demands a new seam — the host-side work is added **here** as a companion unit that the qdrive unit then depends on.
+**`plugins/qdrive` (nested repo)** — Stage 4's Q1–Q6 land there and are planned there: [plugins/qdrive/docs/sdk-burndown-migration.md](../qdrive/docs/sdk-burndown-migration.md) (own checklist, risks, unit briefs; follows that repo's workflow). This plan contains **no qdrive units** — one plan per repo, mutually referencing. The two touchpoints back into this repo: gitlink bumps ride each qdrive commit, and if Q3's R1 spike (defined in that plan) lands on the host-side seek-apply hoist — or Q4 demands a new seam — the host-side work is added **here** as a companion unit that the qdrive unit then depends on.
 
 ## Risks & spikes
 
-All five original spikes passed (04 §11). Remaining genuinely-uncertain mechanics:
+All five original spikes passed (04 §11). This plan ledgers **no standalone spike chats**: R2 rides U3.5's verify and R3 was a bounded in-unit decision, now made; Stage 4's R1 spike is an own-chat task ledgered in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md) (its host-side fallout lands here as a companion unit if the spike says so).
 
-| # | Risk | Handling |
-|---|---|---|
-| R2 | S6m's unmeasured cell: same-team plugin under a **no-entitlement** host (needs real Developer ID certs). | Folded into U3.5's verify. Doesn't change the design either way — the entitlement ships regardless; this only calibrates the docs. |
-| R3 | Consent-hash cost/scope (U3.3): hashing a large package tree at every startup. | Decided in-unit, default = hash manifest + resolved binary only (same file set as D15, same rationale). Not a spike — a bounded decision. |
-
-(Stage 4's risk — R1, the Q3 seek-apply hoist — lives with its units in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md); its host-side fallout lands here as a companion unit if the spike says so.)
+- **R2 — S6m's unmeasured cell:** same-team plugin under a **no-entitlement** host (needs real Developer ID certs). *Handling:* folded into U3.5's verify. Doesn't change the design either way — the entitlement ships regardless; this only calibrates the docs.
+- **R3 — Consent-hash cost/scope (U3.3):** hashing a large package tree at every startup. *Outcome — decided in U3.3 as-built:* consent digest = manifest version + SHA-256 over manifest + resolved binary only (same file set as D15, same rationale); QML/asset trees deliberately excluded — a residual gap, not an oversight, flagged in `consentDigest`'s comment.
 
 Everything else below is work, not risk.
 
@@ -90,8 +81,8 @@ Everything else below is work, not risk.
 - **Not in scope:** crash sentinel (U3.4); any installer change.
 - **Files:** `QGCPluginManager.cc/.h`, `PluginSettings.h/.cc` (consent storage beside the enabled Facts), [PluginSettings.qml](../../src/UI/AppSettings/PluginSettings.qml) ("New — not yet enabled [Enable]" row reuses U3.2's NeedsApproval UI), `QGCPluginManagerTest`.
 - **Depends on:** U3.6 (adjacent code, cleaner base).
-- **Done means:** manager tests prove a new user-dir plugin never activates pre-approval, approval persists across restarts, changed hash re-prompts, and a clean-manifest/quarantined-binary package is gated (the D15 case); bundle-dir plugins unaffected; `code-reviewer` (fable while the access window lasts, else opus) clean.
-- **Run settings:** **Fable** / high / thinking on while the access window lasts (see Status — this is the security-critical trust surface); Opus / high / thinking on after.
+- **Done means:** manager tests prove a new user-dir plugin never activates pre-approval, approval persists across restarts, changed hash re-prompts, and a clean-manifest/quarantined-binary package is gated (the D15 case); bundle-dir plugins unaffected; `code-reviewer` clean.
+- **Run settings:** Fable / high / thinking on (ran during the access window; the security-critical trust surface).
 
 ### U3.4 — Crash sentinel
 - **Scope:** per 04 §6 U3.4 verbatim: persist `PluginSystem/loadingPluginId` (QSettings, synced) before each `activate()`, clear after the load loop; a lingering id at startup ⇒ `Quarantined` + settings-page banner; re-enable clears. Define precedence explicitly: sentinel-quarantine outranks `NeedsApproval` (a plugin that crashed the host must not be re-runnable by mere consent).
@@ -99,7 +90,7 @@ Everything else below is work, not risk.
 - **Files:** `QGCPluginManager.cc` (`_activateRecord`/`_loadPlugins`), `PluginSettings.qml` (banner), `QGCPluginManagerTest` (lingering key ⇒ Quarantined, not activated; re-enable clears).
 - **Depends on:** U3.3 (state precedence interplay).
 - **Done means:** unit tests green; manual verify: `qFatal` in TestPluginFixture's constructor ⇒ next boot quarantines it with the banner; `code-reviewer` (opus) clean.
-- **Run settings:** Fable / medium / thinking on if still inside the access window (rides along after U3.3); Opus / medium / thinking on otherwise (small diff, but trust-state semantics).
+- **Run settings:** Fable / medium / thinking on (rode the access window; small diff, but trust-state semantics).
 
 ### U3.5 — Release signing carries the plugin entitlement (D9)
 - **Scope:** new `deploy/macos/qgroundcontrol-release.entitlements` containing **only** `com.apple.security.cs.disable-library-validation`; the final app-bundle codesign in [SignMacBundle.cmake](../../cmake/install/SignMacBundle.cmake) (~line 110) gains `--entitlements` (that invocation only — dylib signatures don't carry entitlements); comment states why and points at 04 §11's S6m matrix. The sandbox-bearing Xcode-path file is left untouched, flagged in a comment. `plugins/README.md` gains the plugin-author signing guide (ad-hoc = dev; Developer ID + optional notarize = distribution; universal-build advice per 04 §1.5).
@@ -120,26 +111,41 @@ Everything else below is work, not risk.
 ### Stage 4 — QDrive burn-down (cross-repo reference, no units here)
 Q1–Q6 land in the `plugins/qdrive` nested repo and are planned, briefed, and ticked in **[plugins/qdrive/docs/sdk-burndown-migration.md](../qdrive/docs/sdk-burndown-migration.md)** — one plan per repo. What this plan owns about Stage 4: the gitlink bumps riding each qdrive commit, and any host-side companion units the qdrive plan's Q3 (R1 seek-apply hoist / `qgc.replay/2` fallback) or Q4 (possible mission-preview seam) turn out to need — those get added here as normal units when the qdrive plan asks for them, and the qdrive unit depends on them by reference.
 
-### U5.2 — SDK docs + change close-out
-- **Scope:** doxygen group for `src/PluginAPI/`; "Writing your first plugin (macOS)" tutorial (SDK zip + `plugins/template/` from U2.7); 04 §8's defect-ledger check (all closed); walk the full definition-of-done 1–6 and record the evidence; resolve Open questions below (notably qmlApiVersion); mark this doc COMPLETE; compress the memory entry to outcome + gotchas + pointer; then `/lc-branch-cleanup --onto plugin-infrastructure-with-qdrive`.
-- **Not in scope:** upstream PR submission (its own effort, tracked in [[project_plugin_infrastructure]] / 03's PR map).
-- **Files:** docs only + this doc + memory.
-- **Depends on:** U3.6–U5.1 here, **plus the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md) complete through Q6** (its ledger, not this one, is the authority on that).
-- **Done means:** DoD 1–6 each have recorded evidence; docs build; `code-reviewer` (haiku) clean on the docs diff.
+### U5.2 — SDK docs + DoD evidence
+- **Scope:** doxygen group for `src/PluginAPI/`; "Writing your first plugin (macOS)" tutorial (SDK zip + `plugins/template/` from U2.7); 04 §8's defect-ledger check (all closed); walk the **Change acceptance** section below and record the evidence for each item; resolve Open questions below (notably qmlApiVersion).
+- **Not in scope:** upstream PR submission (its own effort, tracked in [[project_plugin_infrastructure]] / 03's PR map); the change's close-out — that is `/lc-branch-cleanup --onto plugin-infrastructure-with-qdrive`'s job (its preflight verifies Change acceptance; it lands the branch, marks this doc COMPLETE, and compresses the memory entry).
+- **Files:** docs only + this doc.
+- **Depends on:** U3.6–U5.1 here, **plus the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md) complete through Q6** (its checklist, not this one, is the authority on that).
+- **Done means:** docs build; every Change-acceptance item has recorded evidence; `code-reviewer` (haiku) clean on the docs diff.
 - **Run settings:** Sonnet / low / thinking off.
 
-## Execution order
+## Change acceptance
 
-**U3.6 → U3.3 → U3.4 → U3.5 → U5.1**, then **Stage 4 runs in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)** (Q1–Q6, strictly sequential there), then **U5.2**.
+The whole-change bar, verified by `/lc-branch-cleanup --onto plugin-infrastructure-with-qdrive`'s preflight at close-out (U5.2 records the evidence):
 
-Constraints: U3.3 needs U3.6; U3.4 needs U3.3; U5.1 deliberately precedes Stage 4 (ABI watchdog live before QDrive churn). U3.5 is order-free — slot it anywhere if a release build is needed sooner. Host-side companion units requested by the qdrive plan (its Q3/Q4) slot between U5.1 and U5.2 as they arise.
+- **DoD #1 (permanent ABI proof):** the golden-plugin CI job is green on an unmodified host, and a deliberate negative control fails it loudly (U5.1).
+- **DoD #2:** Tier A runtime install — proven (U3.2, pre-plan).
+- **DoD #3:** a hardened-runtime signed QGC loads a differently-signed plugin *with* the entitlement and blocks it *without* (U3.5's S6m re-run, evidence recorded).
+- **DoD #4 (consent half):** a user-dir plugin never executes code before explicit approval; approval survives restarts; changed content re-prompts; a boot crash quarantines the plugin on next start (U3.3 + U3.4 — shipped, tests + manual verify green).
+- **DoD #5:** QDrive is pure Tier B — authority: the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)'s own Change acceptance, complete through Q6.
+- **DoD #6:** `export_dynamic` gated — done (pre-plan).
+- **Cutover discipline holds:** zero internal-tier residue in the qdrive tree (per the qdrive plan); `QGC_ENABLE_INTERNAL_PLUGINS` remains only as generic Tier C infrastructure, no longer required ON for QDrive.
+- **Docs:** SDK doxygen + tutorial build; 04 §8's defect ledger fully closed; Open questions below resolved or explicitly deferred.
+
+## Execution order and progress
+
+- [x] **U3.6** — Stage 3 hardening residue (installer validation + loader dedup) — shipped 2026-07-17
+- [x] **U3.3** — Consent model (D10) + widened quarantine gate (D15) — shipped 2026-07-17
+- [x] **U3.4** — Crash sentinel — shipped 2026-07-17 (tests green; manual crash verify passed)
+- [ ] **U3.5** — Release signing carries the plugin entitlement (D9)
+- [ ] **U5.1** — Golden-plugin CI (ABI watchdog)
+- [ ] **Stage 4** — QDrive burn-down Q1–Q6 — ticked in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md); this row ticks when that checklist completes. Its host-side companion units get rows here, between U5.1 and U5.2.
+- [ ] **U5.2** — SDK docs + DoD evidence
 
 ## Open questions
 
-| Question | Decide by |
-|---|---|
-| `qmlApiVersion`: flip from optional to **required** for tier `qml`? Free while zero external Tier A packages exist; breaking after. Current lean: keep optional (consistent with the manifest's permissive posture), flip only if external adoption starts. | U5.2 close-out, or immediately if any external Tier A package appears |
-| Version-aware confirm on id-collision install (D14 keeps silent replace)? | Post-ship polish; revisit with the first real second user |
-| Windows port tripwires (carried from 04 §10, plus two new: `isSafeEntryName()` splits on `/` only — add a `\` guard before any Windows zip extraction; `$<TARGET_FILE:TestPluginFixture>` backslash-escaping in compile definitions) | Windows port, not this change |
+- **`qmlApiVersion`: flip from optional to required for tier `qml`?** Free while zero external Tier A packages exist; breaking after. Current lean: keep optional (consistent with the manifest's permissive posture), flip only if external adoption starts. *Decide by:* U5.2, or immediately if any external Tier A package appears.
+- **Version-aware confirm on id-collision install** (D14 keeps silent replace)? *Decide by:* post-ship polish; revisit with the first real second user.
+- **Windows port tripwires** (carried from 04 §10, plus two new: `isSafeEntryName()` splits on `/` only — add a `\` guard before any Windows zip extraction; `$<TARGET_FILE:TestPluginFixture>` backslash-escaping in compile definitions). *Decide by:* the Windows port, not this change.
 
 (Stage 4's open questions — the Q3 hoist and Q4 seam decisions — live in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md).)
