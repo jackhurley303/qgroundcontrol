@@ -135,6 +135,7 @@ signals:
 
 private:
     void _loadPlugins();
+    void _checkCrashSentinel();
     void _ensureHostServices();
     void _processInspected(const QList<PluginLoadInfo>& infos);
     void _activateRecord(PluginLoadInfo& record);
@@ -155,6 +156,7 @@ private:
     QGCHostServicesImpl* _hostServices = nullptr; // Service registry handed to every plugin's init()
     QGCReplayExtension* _replayExtension = nullptr; // First replay extension found across active plugins
     bool _hasLoggingController = false;   // True if any active plugin claims telemetry-logging control
+    QString _crashedPluginId;             // Plugin blamed for crashing a previous run during its load (crash sentinel)
 
     friend class QGCPluginManagerTest;
 };

@@ -30,6 +30,10 @@ private slots:
     void _approvalActivatesAndPersists_test();
     void _changedContentReprompts_test();
     void _bundleDirPluginTrusted_test();
+
+    void _crashSentinelQuarantines_test();
+    void _crashSentinelOutranksConsent_test();
+    void _sentinelClearedAfterActivation_test();
 #if defined(Q_OS_MACOS)
     void _quarantinedBinaryGated_test();
 #endif

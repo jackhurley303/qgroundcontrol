@@ -62,6 +62,16 @@ SettingsPage {
             wrapMode:           Text.WordWrap
         }
 
+        QGCLabel {
+            id:                 crashBanner
+            Layout.fillWidth:   true
+            property var _crashedPlugins: QGroundControl.pluginManager.knownPlugins.filter(p => p.state === "Quarantined")
+            visible:            _crashedPlugins.length > 0
+            text:               qsTr("QGC crashed while loading %1 last run — re-enable to retry.").arg(_crashedPlugins.map(p => p.name).join(", "))
+            wrapMode:           Text.WordWrap
+            color:              qgcPal.colorRed
+        }
+
         QGCButton {
             Layout.alignment:   Qt.AlignRight
             text:               qsTr("Install plugin…")

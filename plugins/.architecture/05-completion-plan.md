@@ -8,13 +8,13 @@
 
 **Shipped before this plan:** Stage 1 (manifest + loader gate, U1.1–U1.6), Stage 2 (SDK boundary, U2.1–U2.7 + ABI hardening), Stage 3's U3.1 (package discovery + Tier A) and U3.2 (install/remove UX). Definition-of-done #2 (Tier A runtime install) is proven; #6 (`export_dynamic` gated) is done.
 
-**Next:** fresh chat → `/implement-unit plugins/.architecture/05-completion-plan.md U3.4` — recommended: **Fable / medium / thinking on** while the 2026-07-19 access window lasts (rides along after U3.3's state precedence), else **Opus / medium / thinking on**.
+**Next:** fresh chat → `/implement-unit plugins/.architecture/05-completion-plan.md U3.5` — recommended: **Sonnet / medium / thinking on** (CMake + docs; the verify is manual signing work).
 
-**⚠ Fable access window (through ~2026-07-19):** while it lasts, front-load the two pieces that genuinely benefit: (1) the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)'s **R1 seek-apply spike** — order-free, pull it forward now (it settles the last permanently-frozen ABI decision of the change); (2) run **U3.4** on **Fable** per its brief. After the window, its fallback settings apply and this note is dead — delete it.
+**⚠ Fable access window (through ~2026-07-19):** U3.4 rode the window as planned; the remaining beneficiary is the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)'s **R1 seek-apply spike** — order-free, pull it forward while the window lasts (it settles the last permanently-frozen ABI decision of the change). After the window this note is dead — delete it.
 
 - [x] **U3.6** — Stage 3 hardening residue (installer validation + loader dedup) — shipped 2026-07-17
 - [x] **U3.3** — Consent model (D10) + widened quarantine gate — shipped 2026-07-17
-- [ ] **U3.4** — Crash sentinel
+- [x] **U3.4** — Crash sentinel — shipped 2026-07-17 (unit tests green; manual crash verify passed: qFatal boot crash ⇒ next boot quarantined with banner)
 - [ ] **U3.5** — Release signing carries the plugin entitlement (D9)
 - [ ] **U5.1** — Golden-plugin CI (ABI watchdog)
 - [ ] **Stage 4** — QDrive burn-down Q1–Q6 — own plan + ledger in the qdrive repo: [../qdrive/docs/sdk-burndown-migration.md](../qdrive/docs/sdk-burndown-migration.md)

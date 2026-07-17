@@ -41,6 +41,10 @@ PluginSettings* pluginSettings()
     return SettingsManager::instance()->pluginSettings();
 }
 
+// Crash-sentinel keys, mirroring QGCPluginManager's constants
+constexpr const char* kLoadingPluginIdKey = "PluginSystem/loadingPluginId";
+constexpr const char* kCrashedPluginIdKey = "PluginSystem/crashedPluginId";
+
 } // namespace
 
 void QGCPluginManagerTest::init()
@@ -58,6 +62,11 @@ void QGCPluginManagerTest::init()
     // first-sight assertions.
     QSettings settings;
     settings.remove(QStringLiteral("Plugins/ApprovedDigests"));
+
+    // Crash-sentinel keys also persist across runs; a lingering value from an earlier
+    // test (or a real crash of this binary) would quarantine unrelated fixtures.
+    settings.remove(QString::fromLatin1(kLoadingPluginIdKey));
+    settings.remove(QString::fromLatin1(kCrashedPluginIdKey));
 }
 
 QString QGCPluginManagerTest::_writePackage(const QString& parentDir, const QString& id, const QString& tier, const QString& description)
@@ -422,6 +431,78 @@ void QGCPluginManagerTest::_bundleDirPluginTrusted_test()
     manager._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
     QCOMPARE(manager._records.first().state, PluginState::Active);
     QVERIFY(pluginSettings()->approvedPluginDigest(id).isEmpty());
+}
+
+void QGCPluginManagerTest::_crashSentinelQuarantines_test()
+{
+    const QString id = QStringLiteral("org.test.crashed");
+
+    // The previous run died inside this plugin's activation: its sentinel lingers
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(kLoadingPluginIdKey), id);
+
+    QGCPluginManager manager;
+    manager._checkCrashSentinel();
+    manager._processInspected({discoveredFixture(id, QStringLiteral("Crashed Plugin"))});
+
+    // Quarantined with no activation attempt (an attempt on the bogus path would
+    // have flipped the state to Failed), despite the enabled-by-default Fact
+    QCOMPARE(manager._records.first().state, PluginState::Quarantined);
+    QVERIFY(manager._records.first().plugin == nullptr);
+    QVERIFY(manager.loadedPlugins().isEmpty());
+
+    // The lingering id was promoted to the persistent marker
+    settings.sync();
+    QVERIFY(settings.value(QString::fromLatin1(kLoadingPluginIdKey)).toString().isEmpty());
+    QCOMPARE(settings.value(QString::fromLatin1(kCrashedPluginIdKey)).toString(), id);
+
+    // Re-enable clears the marker and retries: activation is now attempted and
+    // fails on the bogus path — proving the gate opened
+    manager.setPluginEnabled(id, true);
+    QCOMPARE(manager._records.first().state, PluginState::Failed);
+    settings.sync();
+    QVERIFY(settings.value(QString::fromLatin1(kCrashedPluginIdKey)).toString().isEmpty());
+}
+
+void QGCPluginManagerTest::_crashSentinelOutranksConsent_test()
+{
+    const QString id = QStringLiteral("org.test.crashedunapproved");
+    const QString packageDir = _writePackage(PluginInstaller::userPluginsDir(), id, QStringLiteral("qml"));
+    QVERIFY(!packageDir.isEmpty());
+
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(kLoadingPluginIdKey), id);
+
+    QGCPluginManager manager;
+    manager._checkCrashSentinel();
+    manager._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
+
+    // Crash quarantine outranks the consent gate: a plugin that crashed the host
+    // must not be runnable by mere approval
+    QCOMPARE(manager._records.first().state, PluginState::Quarantined);
+
+    // Re-enable clears the crash marker but not the consent requirement
+    manager.setPluginEnabled(id, true);
+    QCOMPARE(manager._records.first().state, PluginState::NeedsApproval);
+    QVERIFY(manager.loadedPlugins().isEmpty());
+    settings.sync();
+    QVERIFY(settings.value(QString::fromLatin1(kCrashedPluginIdKey)).toString().isEmpty());
+}
+
+void QGCPluginManagerTest::_sentinelClearedAfterActivation_test()
+{
+    const QString id = QStringLiteral("org.test.sentinelclear");
+
+    QGCPluginManager manager;
+    manager._processInspected({discoveredFixture(id, QStringLiteral("Sentinel Plugin"))});
+
+    // Activation was attempted (and failed on the bogus path); a completed attempt
+    // — even a failed one — must leave no lingering sentinel to blame next boot
+    QCOMPARE(manager._records.first().state, PluginState::Failed);
+    QSettings settings;
+    settings.sync();
+    QVERIFY(settings.value(QString::fromLatin1(kLoadingPluginIdKey)).toString().isEmpty());
+    QVERIFY(settings.value(QString::fromLatin1(kCrashedPluginIdKey)).toString().isEmpty());
 }
 
 #if defined(Q_OS_MACOS)

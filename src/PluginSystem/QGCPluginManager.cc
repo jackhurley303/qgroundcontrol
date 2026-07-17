@@ -26,6 +26,8 @@
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
+#include <QtCore/QScopeGuard>
+#include <QtCore/QSettings>
 #include <QtQml/qqml.h>
 
 QGC_LOGGING_CATEGORY(QGCPluginManagerLog, "PluginSystem.QGCPluginManager");
@@ -80,6 +82,17 @@ QString consentDigest(const PluginLoadInfo& record)
     }
     return record.manifest.version.toString() + QLatin1Char(':') + QString::fromLatin1(hash.result().toHex());
 }
+
+// Crash sentinel (U3.4): loadingPluginId spans each activation attempt — a value
+// still present at the next startup means the process died inside that plugin's
+// load. It is then promoted to crashedPluginId, the persistent marker that keeps
+// the plugin Quarantined until the user explicitly re-enables it (later
+// activations of other plugins overwrite loadingPluginId, so the blame must not
+// live there). Single-id by design: with two independently-crashing plugins the
+// newest crash overwrites the older marker and the pair alternate across boots —
+// anything better is a multi-id bisect, deliberately out of this scope.
+constexpr const char* kLoadingPluginIdKey = "PluginSystem/loadingPluginId";
+constexpr const char* kCrashedPluginIdKey = "PluginSystem/crashedPluginId";
 
 QString pluginStateName(PluginState state)
 {
@@ -263,6 +276,16 @@ void QGCPluginManager::_applyTrustGate(PluginLoadInfo& record)
         return;
     }
 
+    // Crash sentinel: the last run died inside this plugin's activation. Checked
+    // first — it outranks NeedsApproval, because a plugin that crashed the host must
+    // not become runnable by mere consent. Only an explicit re-enable
+    // (setPluginEnabled) clears the marker.
+    if (!_crashedPluginId.isEmpty() && record.manifest.id == _crashedPluginId) {
+        record.state = PluginState::Quarantined;
+        record.errorString = tr("QGC crashed while loading this plugin last run — re-enable to retry");
+        return;
+    }
+
 #if defined(Q_OS_MACOS)
     // Manually-dropped plugins (not extracted in-process by installFromFile(), 01 §1.4)
     // may carry com.apple.quarantine from however they arrived. Check the manifest and
@@ -307,9 +330,24 @@ void QGCPluginManager::_activateIfEnabled(PluginLoadInfo& record)
     }
 }
 
+void QGCPluginManager::_checkCrashSentinel()
+{
+    QSettings settings;
+    const QString lingering = settings.value(QString::fromLatin1(kLoadingPluginIdKey)).toString();
+    if (!lingering.isEmpty()) {
+        qCWarning(QGCPluginManagerLog) << "Previous run crashed while loading plugin:" << lingering;
+        settings.setValue(QString::fromLatin1(kCrashedPluginIdKey), lingering);
+        settings.remove(QString::fromLatin1(kLoadingPluginIdKey));
+        settings.sync();
+    }
+    _crashedPluginId = settings.value(QString::fromLatin1(kCrashedPluginIdKey)).toString();
+}
+
 void QGCPluginManager::_loadPlugins()
 {
     qCDebug(QGCPluginManagerLog) << "=== Plugin Loading Start ===";
+
+    _checkCrashSentinel();
 
     const QStringList pluginPaths = QGCPluginLoader::defaultPluginPaths();
     qCDebug(QGCPluginManagerLog) << "Plugin search paths:" << pluginPaths;
@@ -382,6 +420,17 @@ void QGCPluginManager::_ensureHostServices()
 
 void QGCPluginManager::_activateRecord(PluginLoadInfo& record)
 {
+    // Crash sentinel: if the process dies anywhere inside this activation (dlopen,
+    // static initializers, init(), contribution wiring), the synced id lingers and
+    // the next boot quarantines the plugin instead of crash-looping.
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(kLoadingPluginIdKey), record.manifest.id);
+    settings.sync();
+    const auto clearSentinel = qScopeGuard([&settings] {
+        settings.remove(QString::fromLatin1(kLoadingPluginIdKey));
+        settings.sync();
+    });
+
     QGCPluginLoader::activate(record);
 
     if (record.state != PluginState::Active) {
@@ -502,7 +551,23 @@ void QGCPluginManager::setPluginEnabled(const QString& pluginId, bool enabled)
     }
 
     if (enabled) {
-        if (record->state == PluginState::Disabled || record->state == PluginState::Discovered) {
+        if (record->state == PluginState::Quarantined && record->manifest.id == _crashedPluginId) {
+            // Re-enable is the one path out of crash quarantine: clear the marker and
+            // route back through the trust gate — consent may still be required.
+            qCDebug(QGCPluginManagerLog) << "Clearing crash quarantine for:" << pluginId;
+            QSettings settings;
+            settings.remove(QString::fromLatin1(kCrashedPluginIdKey));
+            settings.sync();
+            _crashedPluginId.clear();
+            record->state = PluginState::Discovered;
+            record->errorString.clear();
+            _applyTrustGate(*record);
+            if (record->state == PluginState::Discovered) {
+                _activateRecord(*record);
+                _recalcLoggingController();
+            }
+            emit loadedPluginsChanged();
+        } else if (record->state == PluginState::Disabled || record->state == PluginState::Discovered) {
             qCDebug(QGCPluginManagerLog) << "Enabling plugin:" << pluginId;
             _activateRecord(*record);
             _recalcLoggingController();
