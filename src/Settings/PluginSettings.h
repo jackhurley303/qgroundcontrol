@@ -47,6 +47,18 @@ public:
     /// Get list of all registered plugin ids
     QStringList registeredPluginIds() const;
 
+    /// Get the consent digest recorded when the user approved this plugin (D10).
+    /// Empty if the plugin was never approved.
+    /// @param pluginId Manifest id (reverse-DNS)
+    QString approvedPluginDigest(const QString& pluginId) const;
+
+    /// Record the consent digest for an approved plugin (D10). Not a Fact: consent
+    /// is internal trust state keyed to the plugin's content, not a user-editable
+    /// setting. A digest mismatch on a later scan re-prompts for approval.
+    /// @param pluginId Manifest id (reverse-DNS)
+    /// @param digest Digest as computed by QGCPluginManager (version + content hash)
+    void setApprovedPluginDigest(const QString& pluginId, const QString& digest);
+
 signals:
     void registeredPluginsChanged();
 

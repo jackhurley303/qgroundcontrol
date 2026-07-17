@@ -66,3 +66,22 @@ QStringList PluginSettings::registeredPluginIds() const
 {
     return _pluginFacts.keys();
 }
+
+namespace {
+// Sibling group of the enabled Facts ("Plugins/<id>"); keyed the same way.
+constexpr const char* kApprovedDigestsGroup = "Plugins/ApprovedDigests";
+} // namespace
+
+QString PluginSettings::approvedPluginDigest(const QString& pluginId) const
+{
+    QSettings settings;
+    settings.beginGroup(QString::fromLatin1(kApprovedDigestsGroup));
+    return settings.value(pluginId).toString();
+}
+
+void PluginSettings::setApprovedPluginDigest(const QString& pluginId, const QString& digest)
+{
+    QSettings settings;
+    settings.beginGroup(QString::fromLatin1(kApprovedDigestsGroup));
+    settings.setValue(pluginId, digest);
+}

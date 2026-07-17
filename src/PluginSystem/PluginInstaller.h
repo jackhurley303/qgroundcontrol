@@ -54,22 +54,21 @@ public:
     static QString userPluginsDir();
 
 #if defined(Q_OS_MACOS)
-    /// @brief True if packageDir's manifest file carries the com.apple.quarantine
-    /// extended attribute (set by the OS when a file arrives via a quarantine-aware
-    /// app, e.g. a browser download unzipped by Finder). A package extracted
-    /// in-process by installFromFile() never carries it; this is for packages a
-    /// user drops into the plugins directory by hand (01 §1.4). Checking the manifest
-    /// alone (rather than every file) is a deliberate cost tradeoff: this runs on every
-    /// discovered package at each app startup, and quarantine is applied uniformly by
-    /// the OS to an entire extracted/copied tree from one archive-expand event, so one
-    /// representative file is sufficient without a full recursive directory walk.
-    /// @param packageDir Absolute path to a package directory
-    static bool isQuarantined(const QString& packageDir);
+    /// @brief True if filePath carries the com.apple.quarantine extended attribute
+    /// (set by the OS when a file arrives via a quarantine-aware app, e.g. a browser
+    /// download unzipped by Finder). Files extracted in-process by installFromFile()
+    /// never carry it; this is for plugins a user drops into the plugins directory by
+    /// hand (01 §1.4). The startup gate checks a package's manifest plus its resolved
+    /// binary — the only files whose quarantine status matters (D15); QML/assets are
+    /// read as data and never Gatekeeper-gated.
+    /// @param filePath Absolute path to a single file
+    static bool isFileQuarantined(const QString& filePath);
 
-    /// @brief Strip the com.apple.quarantine attribute from every file under packageDir
+    /// @brief Strip the com.apple.quarantine attribute from path — every file under it
+    /// when it is a directory (a package), or the file itself (a bare dev-loop dylib).
     /// Consent-gated: call only after explicit user approval to run a downloaded plugin.
-    /// @param packageDir Absolute path to a package directory
-    /// @return true if the attribute was removed (or was never present) on every file
-    static bool stripQuarantine(const QString& packageDir);
+    /// @param path Absolute path to a package directory or a plugin file
+    /// @return true if the attribute was removed (or was never present) everywhere
+    static bool stripQuarantine(const QString& path);
 #endif
 };

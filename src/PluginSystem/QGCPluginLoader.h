@@ -28,9 +28,9 @@ enum class PluginState {
     Active,         ///< Instantiated and running
     Failed,         ///< Metadata unreadable/invalid, or activation failed (see errorString)
     Quarantined,    ///< Skipped after a crash during a previous load attempt
-    NeedsApproval,  ///< Discovered but requires explicit user consent before activation
-                     ///< (currently: a package carrying com.apple.quarantine, U3.2; D10's
-                     ///< general "every user-dir plugin starts here" rule lands in U3.3)
+    NeedsApproval,  ///< Discovered but requires explicit user consent before activation:
+                     ///< every user-dir plugin without a recorded consent digest, and any
+                     ///< plugin carrying com.apple.quarantine (D10/D15, U3.3)
 };
 
 /// @brief Information about a discovered plugin

@@ -1,13 +1,22 @@
 #include "QGCPluginManagerTest.h"
 
+#include <QtCore/QDir>
+#include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
+#include <QtCore/QSettings>
+#include <QtCore/QStandardPaths>
 
 #include "Fact.h"
 #include "PluginContributions.h"
+#include "PluginInstaller.h"
 #include "PluginSettings.h"
 #include "QGCPluginInterface.h"
 #include "QGCPluginManager.h"
 #include "SettingsManager.h"
+
+#if defined(Q_OS_MACOS)
+#include <sys/xattr.h>
+#endif
 
 namespace {
 
@@ -34,6 +43,69 @@ PluginSettings* pluginSettings()
 
 } // namespace
 
+void QGCPluginManagerTest::init()
+{
+    TempDirectoryTest::init();
+
+    // Redirects QStandardPaths::AppDataLocation (and therefore
+    // PluginInstaller::userPluginsDir()) to a Qt-managed, test-scoped location instead
+    // of the developer's real application-support directory.
+    QStandardPaths::setTestModeEnabled(true);
+    QDir(PluginInstaller::userPluginsDir()).removeRecursively();
+
+    // Consent digests persist in QSettings across runs of this binary; the fixture
+    // packages are byte-identical each run, so a stale approval would defeat the
+    // first-sight assertions.
+    QSettings settings;
+    settings.remove(QStringLiteral("Plugins/ApprovedDigests"));
+}
+
+QString QGCPluginManagerTest::_writePackage(const QString& parentDir, const QString& id, const QString& tier, const QString& description)
+{
+    QJsonObject json;
+    json[QStringLiteral("id")] = id;
+    json[QStringLiteral("name")] = QStringLiteral("Test Package");
+    json[QStringLiteral("version")] = QStringLiteral("1.0.0");
+    json[QStringLiteral("vendor")] = QStringLiteral("Test Org");
+    json[QStringLiteral("description")] = description;
+    json[QStringLiteral("tier")] = tier;
+    if (tier != QStringLiteral("qml")) {
+        json[QStringLiteral("apiVersion")] = QGCPluginApiVersion;
+    }
+    QJsonObject hostVersion;
+    hostVersion[QStringLiteral("min")] = QStringLiteral("5.0");
+    hostVersion[QStringLiteral("max")] = QString();
+    json[QStringLiteral("hostVersion")] = hostVersion;
+    json[QStringLiteral("contributes")] = QJsonObject();
+
+    const QDir packageDir(QDir(parentDir).filePath(id));
+    if (!QDir().mkpath(packageDir.absolutePath())) {
+        return QString();
+    }
+    QFile manifestFile(packageDir.filePath(QStringLiteral("qgcplugin.json")));
+    if (!manifestFile.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        || manifestFile.write(QJsonDocument(json).toJson()) < 0) {
+        return QString();
+    }
+    manifestFile.close();
+
+    if (tier != QStringLiteral("qml")) {
+        // inspectPackage() requires exactly one binary under bin/; its content is never
+        // read at inspection, so a placeholder is enough for gate tests.
+        const QString binDir = packageDir.filePath(QStringLiteral("bin/macos-universal"));
+        if (!QDir().mkpath(binDir)) {
+            return QString();
+        }
+        QFile binary(binDir + QStringLiteral("/libfixture.dylib"));
+        if (!binary.open(QIODevice::WriteOnly | QIODevice::Truncate)
+            || binary.write(QByteArrayLiteral("not a real dylib")) < 0) {
+            return QString();
+        }
+    }
+
+    return packageDir.absolutePath();
+}
+
 void QGCPluginManagerTest::_disabledNeverActivated_test()
 {
     const QString id = QStringLiteral("org.test.disabled");
@@ -51,25 +123,6 @@ void QGCPluginManagerTest::_disabledNeverActivated_test()
     QCOMPARE(record.state, PluginState::Disabled);
     QVERIFY(record.plugin == nullptr);
     QVERIFY(manager.loadedPlugins().isEmpty());
-}
-
-void QGCPluginManagerTest::_defaultDisabledById_test()
-{
-    const QString exampleId = QStringLiteral("org.qgroundcontrol.example");
-
-    QGCPluginManager manager;
-    manager._processInspected({discoveredFixture(exampleId, QStringLiteral("Renamed Example"))});
-
-    // The Example plugin defaults to disabled, keyed by manifest id — a display-name
-    // change must not affect it
-    QVERIFY(!pluginSettings()->isPluginEnabled(exampleId));
-    QCOMPARE(manager._records.first().state, PluginState::Disabled);
-    QVERIFY(manager._records.first().plugin == nullptr);
-
-    // A different plugin merely NAMED "Example" defaults to enabled
-    const QString otherId = QStringLiteral("org.test.namedexample");
-    manager._processInspected({discoveredFixture(otherId, QStringLiteral("Example"))});
-    QVERIFY(pluginSettings()->isPluginEnabled(otherId));
 }
 
 void QGCPluginManagerTest::_incompatibleRecorded_test()
@@ -292,5 +345,117 @@ void QGCPluginManagerTest::_loggingControllerFromManifest_test()
     manager._recalcLoggingController();
     QVERIFY(!manager.hasLoggingController());
 }
+
+void QGCPluginManagerTest::_userDirPluginNeedsApprovalFirstSight_test()
+{
+    const QString id = QStringLiteral("org.test.userdirnew");
+    const QString packageDir = _writePackage(PluginInstaller::userPluginsDir(), id, QStringLiteral("qml"));
+    QVERIFY(!packageDir.isEmpty());
+
+    QGCPluginManager manager;
+    manager._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
+
+    // Enabled by default — it is the consent gate, not the enabled Fact, that blocks it
+    QVERIFY(pluginSettings()->isPluginEnabled(id));
+    QCOMPARE(manager._records.size(), 1);
+    QCOMPARE(manager._records.first().state, PluginState::NeedsApproval);
+    QVERIFY(manager._records.first().plugin == nullptr);
+    QVERIFY(manager.loadedPlugins().isEmpty());
+    QVERIFY(pluginSettings()->approvedPluginDigest(id).isEmpty());
+}
+
+void QGCPluginManagerTest::_approvalActivatesAndPersists_test()
+{
+    const QString id = QStringLiteral("org.test.userdirapprove");
+    const QString packageDir = _writePackage(PluginInstaller::userPluginsDir(), id, QStringLiteral("qml"));
+    QVERIFY(!packageDir.isEmpty());
+
+    QGCPluginManager manager;
+    manager._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
+    QCOMPARE(manager._records.first().state, PluginState::NeedsApproval);
+
+    // Approval records the consent digest and activates (qml tier: trivially)
+    manager.approvePlugin(id);
+    QCOMPARE(manager._records.first().state, PluginState::Active);
+    QVERIFY(!pluginSettings()->approvedPluginDigest(id).isEmpty());
+
+    // "Restart": a fresh manager scanning unchanged content activates without re-prompting
+    QGCPluginManager restarted;
+    restarted._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
+    QCOMPARE(restarted._records.first().state, PluginState::Active);
+
+    // Removal revokes consent — identical content arriving later starts unapproved
+    QVERIFY2(restarted.removePlugin(id).isEmpty(), "removePlugin failed");
+    QVERIFY(pluginSettings()->approvedPluginDigest(id).isEmpty());
+}
+
+void QGCPluginManagerTest::_changedContentReprompts_test()
+{
+    const QString id = QStringLiteral("org.test.userdirchanged");
+    QString packageDir = _writePackage(PluginInstaller::userPluginsDir(), id, QStringLiteral("qml"));
+    QVERIFY(!packageDir.isEmpty());
+
+    QGCPluginManager manager;
+    manager._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
+    manager.approvePlugin(id);
+    QCOMPARE(manager._records.first().state, PluginState::Active);
+
+    // The manifest changes on disk after approval: the recorded digest no longer vouches
+    packageDir = _writePackage(PluginInstaller::userPluginsDir(), id, QStringLiteral("qml"), QStringLiteral("Changed content"));
+    QVERIFY(!packageDir.isEmpty());
+
+    QGCPluginManager restarted;
+    restarted._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
+    QCOMPARE(restarted._records.first().state, PluginState::NeedsApproval);
+    QVERIFY2(restarted._records.first().errorString.contains(QStringLiteral("changed")),
+             qPrintable(restarted._records.first().errorString));
+}
+
+void QGCPluginManagerTest::_bundleDirPluginTrusted_test()
+{
+    const QString id = QStringLiteral("org.test.bundledir");
+    const QString packageDir = _writePackage(tempPath(QStringLiteral("bundle-plugins")), id, QStringLiteral("qml"));
+    QVERIFY(!packageDir.isEmpty());
+
+    // Trusted class: activates on first sight, and no consent digest is ever recorded
+    QGCPluginManager manager;
+    manager._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
+    QCOMPARE(manager._records.first().state, PluginState::Active);
+    QVERIFY(pluginSettings()->approvedPluginDigest(id).isEmpty());
+}
+
+#if defined(Q_OS_MACOS)
+void QGCPluginManagerTest::_quarantinedBinaryGated_test()
+{
+    const QString id = QStringLiteral("org.test.quarantinedbin");
+
+    // Disabled so no code path ever tries to load the placeholder binary
+    pluginSettings()->registerPlugin(id, QStringLiteral("Quarantined Binary"), false);
+    pluginSettings()->pluginEnabledFact(id)->setRawValue(false);
+
+    const QString packageDir = _writePackage(PluginInstaller::userPluginsDir(), id, QStringLiteral("sdk"));
+    QVERIFY(!packageDir.isEmpty());
+
+    QGCPluginManager manager;
+    manager._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
+    QCOMPARE(manager._records.first().state, PluginState::NeedsApproval);
+    manager.approvePlugin(id);
+    QCOMPARE(manager._records.first().state, PluginState::Disabled);
+
+    // The D15 partial case: manifest stays clean while a freshly-downloaded (quarantined)
+    // binary is swapped in. Content is unchanged, so the consent digest still matches —
+    // only the widened manifest+binary quarantine check can catch this.
+    const QString binaryPath = packageDir + QStringLiteral("/bin/macos-universal/libfixture.dylib");
+    const QByteArray quarantineValue = QByteArrayLiteral("0081;00000000;QGCTest;");
+    QCOMPARE(setxattr(binaryPath.toUtf8().constData(), "com.apple.quarantine",
+                      quarantineValue.constData(), quarantineValue.size(), 0, 0), 0);
+
+    QGCPluginManager restarted;
+    restarted._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
+    QCOMPARE(restarted._records.first().state, PluginState::NeedsApproval);
+    QVERIFY2(restarted._records.first().errorString.contains(QStringLiteral("Downloaded")),
+             qPrintable(restarted._records.first().errorString));
+}
+#endif
 
 UT_REGISTER_TEST(QGCPluginManagerTest, TestLabel::Unit)

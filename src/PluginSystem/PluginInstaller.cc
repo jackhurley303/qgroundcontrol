@@ -311,30 +311,38 @@ PluginInstallResult PluginInstaller::removePlugin(const QString& pluginId)
 
 #if defined(Q_OS_MACOS)
 
-bool PluginInstaller::isQuarantined(const QString& packageDir)
+bool PluginInstaller::isFileQuarantined(const QString& filePath)
 {
-    // One representative file (the manifest, always present) rather than a full
-    // recursive walk: this runs on every discovered package at every app startup,
-    // and the OS applies quarantine uniformly to a tree from one archive-expand event.
-    const QString manifestPath = QDir(packageDir).filePath(QString::fromLatin1(kManifestFileName));
-    return getxattr(manifestPath.toUtf8().constData(), kQuarantineAttrName, nullptr, 0, 0, 0) >= 0;
+    return getxattr(filePath.toUtf8().constData(), kQuarantineAttrName, nullptr, 0, 0, 0) >= 0;
 }
 
-bool PluginInstaller::stripQuarantine(const QString& packageDir)
+namespace {
+
+bool stripQuarantineFromFile(const QString& filePath)
 {
+    const QByteArray path = filePath.toUtf8();
+    if (getxattr(path.constData(), kQuarantineAttrName, nullptr, 0, 0, 0) < 0) {
+        return true; // not quarantined
+    }
+    if (removexattr(path.constData(), kQuarantineAttrName, 0) != 0) {
+        qCWarning(PluginInstallerLog) << "Could not strip quarantine from" << filePath;
+        return false;
+    }
+    return true;
+}
+
+} // namespace
+
+bool PluginInstaller::stripQuarantine(const QString& path)
+{
+    if (QFileInfo(path).isFile()) {
+        return stripQuarantineFromFile(path);
+    }
+
     bool allStripped = true;
-    QDirIterator it(packageDir, QDir::Files, QDirIterator::Subdirectories);
+    QDirIterator it(path, QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext()) {
-        const QString filePath = it.next();
-        const QByteArray path = filePath.toUtf8();
-        const ssize_t size = getxattr(path.constData(), kQuarantineAttrName, nullptr, 0, 0, 0);
-        if (size < 0) {
-            continue; // not quarantined
-        }
-        if (removexattr(path.constData(), kQuarantineAttrName, 0) != 0) {
-            qCWarning(PluginInstallerLog) << "Could not strip quarantine from" << filePath;
-            allStripped = false;
-        }
+        allStripped &= stripQuarantineFromFile(it.next());
     }
     return allStripped;
 }

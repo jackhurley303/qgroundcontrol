@@ -8,19 +8,19 @@
 
 **Shipped before this plan:** Stage 1 (manifest + loader gate, U1.1–U1.6), Stage 2 (SDK boundary, U2.1–U2.7 + ABI hardening), Stage 3's U3.1 (package discovery + Tier A) and U3.2 (install/remove UX). Definition-of-done #2 (Tier A runtime install) is proven; #6 (`export_dynamic` gated) is done.
 
-**Next:** fresh chat → `/implement-unit plugins/.architecture/05-completion-plan.md U3.3` — recommended: **Fable / high / thinking on** while the 2026-07-19 access window lasts (security-critical trust surface), else **Opus / high / thinking on** (`code-reviewer` gate at fable/opus to match).
+**Next:** fresh chat → `/implement-unit plugins/.architecture/05-completion-plan.md U3.4` — recommended: **Fable / medium / thinking on** while the 2026-07-19 access window lasts (rides along after U3.3's state precedence), else **Opus / medium / thinking on**.
 
-**⚠ Fable access window (through ~2026-07-19):** while it lasts, front-load the two pieces that genuinely benefit: (1) the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)'s **R1 seek-apply spike** — order-free, pull it forward now (it settles the last permanently-frozen ABI decision of the change); (2) run **U3.3** (and U3.4 if reached) on **Fable** per their briefs. After the window, their fallback settings apply and this note is dead — delete it.
+**⚠ Fable access window (through ~2026-07-19):** while it lasts, front-load the two pieces that genuinely benefit: (1) the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)'s **R1 seek-apply spike** — order-free, pull it forward now (it settles the last permanently-frozen ABI decision of the change); (2) run **U3.4** on **Fable** per its brief. After the window, its fallback settings apply and this note is dead — delete it.
 
 - [x] **U3.6** — Stage 3 hardening residue (installer validation + loader dedup) — shipped 2026-07-17
-- [ ] **U3.3** — Consent model (D10) + widened quarantine gate
+- [x] **U3.3** — Consent model (D10) + widened quarantine gate — shipped 2026-07-17
 - [ ] **U3.4** — Crash sentinel
 - [ ] **U3.5** — Release signing carries the plugin entitlement (D9)
 - [ ] **U5.1** — Golden-plugin CI (ABI watchdog)
 - [ ] **Stage 4** — QDrive burn-down Q1–Q6 — own plan + ledger in the qdrive repo: [../qdrive/docs/sdk-burndown-migration.md](../qdrive/docs/sdk-burndown-migration.md)
 - [ ] **U5.2** — SDK docs + change close-out
 
-This repo's plan has no standalone spikes to ledger: R2 rides U3.5's verify and R3 is decided inside U3.3 (see Risks); Stage 4's R1 spike is an own-chat task ledgered in the qdrive plan. Host-side companion units the qdrive plan requests get their own rows here when added.
+This repo's plan has no standalone spikes to ledger: R2 rides U3.5's verify and R3 was decided inside U3.3 as-built (consent digest = manifest version + SHA-256 over manifest + resolved binary only; QML/asset trees are deliberately excluded — a residual gap, not an oversight, flagged in `consentDigest`'s comment). Stage 4's R1 spike is an own-chat task ledgered in the qdrive plan. Host-side companion units the qdrive plan requests get their own rows here when added.
 
 ## Goal & summary
 

@@ -98,7 +98,8 @@ public:
 
     /// Install a .qgcplugin package from a zip file and add it as a new record
     /// (PluginInstaller::installFromFile, U3.2). Replaces any existing record with
-    /// the same id (deactivating it first). Activates the new record if enabled.
+    /// the same id (deactivating it first). The file-dialog pick counts as the D10
+    /// consent, so the fresh record is approved and activated if enabled.
     /// @param zipPath Absolute path to the .qgcplugin file
     /// @return Empty string on success, otherwise a human-readable error
     Q_INVOKABLE QString installPlugin(const QString& zipPath);
@@ -109,8 +110,10 @@ public:
     /// @return Empty string on success, otherwise a human-readable error
     Q_INVOKABLE QString removePlugin(const QString& pluginId);
 
-    /// Approve a plugin currently in the NeedsApproval state: strips the
-    /// com.apple.quarantine attribute (macOS) and activates it if enabled (U3.2).
+    /// Approve a plugin currently in the NeedsApproval state — the one consent flow
+    /// (D10): strips the com.apple.quarantine attribute (macOS), records the consent
+    /// digest so approval persists across restarts until the plugin's content changes,
+    /// and activates the plugin if enabled.
     /// @param pluginId The manifest id of the plugin
     Q_INVOKABLE void approvePlugin(const QString& pluginId);
 
@@ -140,7 +143,7 @@ private:
     void _removeContributionsForPlugin(const QString& pluginId);
     void _recalcReplayExtension();
     void _recalcLoggingController();
-    void _applyQuarantineGate(PluginLoadInfo& record);
+    void _applyTrustGate(PluginLoadInfo& record);
     void _activateIfEnabled(PluginLoadInfo& record);
     PluginLoadInfo* _findRecord(const QString& pluginId);
     QString _statusText(const PluginLoadInfo& record) const;

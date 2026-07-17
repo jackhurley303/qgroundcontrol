@@ -86,9 +86,11 @@ struct PluginLoadInfo {
 };
 ```
 
-`NeedsApproval` is currently set only by `QGCPluginManager`'s quarantine gate (U3.2, macOS: a
-package carrying `com.apple.quarantine`); D10's broader "every user-dir plugin starts
-unapproved" consent model is U3.3.
+`NeedsApproval` is set by `QGCPluginManager`'s trust gate (D10/D15, U3.3): every user-dir
+plugin without a recorded consent digest — including one whose content changed since it
+was approved — and, on macOS, any plugin whose manifest or resolved binary carries
+`com.apple.quarantine`. Bundle-dir plugins (inside the app bundle or exe-adjacent
+`plugins/`) are trusted and skip the consent check.
 
 #### `QGCPluginManager` — Runtime Plugin Manager (Singleton) ([QGCPluginManager.h](QGCPluginManager.h))
 Owns **one `PluginLoadInfo` record per discovered plugin, in any state** — not just the
@@ -113,9 +115,14 @@ Key surface:
 - `installPlugin(zipPath)`/`removePlugin(id)` (U3.2) — thin wrappers around
   `PluginInstaller` that also keep `_records` in sync: install re-inspects the freshly
   extracted package and adds/replaces its record; remove deactivates first, then deletes.
-  Both return an empty string on success, a human-readable error otherwise.
-- `approvePlugin(id)` (U3.2) — moves a `NeedsApproval` record to `Discovered` after
-  stripping quarantine (macOS), then activates if enabled.
+  Both return an empty string on success, a human-readable error otherwise. Picking the
+  file in the install dialog counts as the D10 consent (same intent reasoning as D14), so
+  install routes the fresh record through `approvePlugin()`.
+- `approvePlugin(id)` (U3.3) — the one consent flow: strips quarantine (macOS), records
+  the consent digest (manifest version + SHA-256 over the manifest and resolved binary,
+  in `PluginSettings`) so approval persists across restarts until the plugin's content
+  changes, then activates if enabled. Fails closed: an unreadable plugin stays
+  unapproved.
 
 #### `PluginInstaller` — Package Install/Remove ([PluginInstaller.h](PluginInstaller.h))
 A static utility backing the Plugins settings page's "Install plugin…"/"Remove" actions
@@ -128,12 +135,13 @@ A static utility backing the Plugins settings page's "Install plugin…"/"Remove
   path check rejects zip-slip attempts (`../` escapes) before any file is written.
 - `removePlugin(id)` deletes `<user-plugins-dir>/<id>/` entirely. The caller
   (`QGCPluginManager::removePlugin`) is responsible for deactivating the plugin first.
-- `isQuarantined(packageDir)`/`stripQuarantine(packageDir)` (macOS only) check/clear
-  `com.apple.quarantine` on every file in a package — for packages that arrived by some
-  other means than `installFromFile()` (e.g. dropped into the plugins directory by hand)
-  and still carry the attribute. `QGCPluginManager` gates such a package into
-  `PluginState::NeedsApproval` on discovery; `approvePlugin(id)` calls `stripQuarantine()`
-  then activates.
+- `isFileQuarantined(path)`/`stripQuarantine(path)` (macOS only) check/clear
+  `com.apple.quarantine` — for plugins that arrived by some other means than
+  `installFromFile()` (e.g. dropped into the plugins directory by hand) and still carry
+  the attribute. `QGCPluginManager`'s trust gate checks a package's manifest plus its
+  resolved binary (D15 — the only files whose quarantine status matters; QML/assets are
+  read as data) and gates hits into `PluginState::NeedsApproval`; `approvePlugin(id)`
+  strips the whole package tree (or the bare file) before activating.
 
 #### `QGCPlugin` — Runtime Plugin Base Class ([QGCPlugin.h](../PluginAPI/QGCPlugin.h))
 Base class for the loaded plugin instance itself. Code is only for behaviour:
