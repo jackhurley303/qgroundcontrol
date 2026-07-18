@@ -115,6 +115,7 @@ add_qgc_test(BluetoothLiveAdapterTest LABELS Integration Comms)
 add_qgc_test(BluetoothWorkerTest LABELS Unit Comms)
 add_qgc_test(LinkConfigurationTest LABELS Unit Comms RESOURCE_LOCK Settings TempFiles)
 add_qgc_test(QGCSerialPortInfoTest LABELS Unit Comms)
+add_qgc_test(ReplaySeekApplierTest LABELS Integration Comms Vehicle RESOURCE_LOCK MockLink)
 
 # ----------------------------------------------------------------------------
 # FactSystem

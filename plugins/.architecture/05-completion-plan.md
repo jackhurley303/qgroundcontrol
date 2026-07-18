@@ -6,15 +6,11 @@
 
 ## Status — current position / next step
 
-**Shipped:** U3.6, U3.3, U3.4, U3.5, U5.1 (all 2026-07-17); U4.2 (2026-07-18). Before this plan: Stages 1–3.2 (per-unit history in the `.feature` doc above); DoD **#2** (Tier A runtime install) and **#6** (`export_dynamic` gated) already proven.
+**Shipped:** U3.6, U3.3, U3.4, U3.5, U5.1 (all 2026-07-17); U4.2, U4.1 (both 2026-07-18). Before this plan: Stages 1–3.2 (per-unit history in the `.feature` doc above); DoD **#2** (Tier A runtime install) and **#6** (`export_dynamic` gated) already proven.
 
-**Next — U4.1, the remaining host-side companion unit** (its commit `28fd076b7` added only its brief + a gitlink bump — `ReplaySeekApplier` doesn't exist on disk yet). It unblocks the qdrive plan's **Q3**; doing it now keeps the root-repo work batched so Q2→Q3 then run consecutively with no host-side detour. Fresh chat — **Sonnet / medium / thinking on**:
+**U4.1 shipped 2026-07-18.** `ReplaySeekApplier` (`src/Comms/ReplaySeekApplier.h/.cc`) is a verbatim host-side port of `FlightReplayController`'s three replay-signal handlers, wired as a QObject child of every `LogReplayLink` at its single creation point in `LinkManager::createConnectedLink`. The only substantive change from the plugin original: `_vehicleAttachments[sysId].planPath` → `Vehicle::peekReplayPlanFile(sysId)`. New `ReplaySeekApplierTest` (`test/Comms/`) constructs a bare `LogReplayLink` + fires its signals via `QMetaObject::invokeMethod` against a MockLink vehicle — 4 slots, all green. Full `Unit`-labeled suite green (162/165 — only the 3 known keychain-timeout tests). `code-reviewer` (sonnet) found no correctness bugs; two cleanups applied (dropped a dead `friend` declaration, added an ordering-safety comment to the test). **Q3 is now unblocked.**
 
-```
-/implement-unit plugins/.architecture/05-completion-plan.md U4.1
-```
-
-**Then Stage 4 resumes in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)** — Q2 (unblocked by U4.2), then Q3 (needs U4.1); that doc's own Next carries their commands and run settings. Stage 4 is planned and executed there, not here — this doc's row ticks when that checklist completes.
+**Next — Stage 4 resumes in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)** — Q2 (unblocked by U4.2), then Q3 (unblocked by U4.1); that doc's own Next carries their commands and run settings. Stage 4 is planned and executed there, not here — this doc's row ticks when that checklist completes.
 
 **Last: U5.2** — only after Stage 4 finishes (it depends on qdrive's Change acceptance) — **Sonnet / low / thinking off**:
 
@@ -169,7 +165,7 @@ The whole-change bar, verified by `/lc-branch-cleanup --onto plugin-infrastructu
 - [x] **U3.4** — Crash sentinel — shipped 2026-07-17 (tests green; manual crash verify passed)
 - [x] **U3.5** — Release signing carries the plugin entitlement (D9) — shipped 2026-07-17 (entitlements wired + docs; manual S6m re-verify outstanding, see Status)
 - [x] **U5.1** — Golden-plugin CI (ABI watchdog) — shipped 2026-07-17
-- [ ] **U4.1** — Host-side `ReplaySeekApplier` (R1's hoist; Q3's prerequisite — added 2026-07-17 after the R1 spike passed)
+- [x] **U4.1** — Host-side `ReplaySeekApplier` (R1's hoist; Q3's prerequisite — added 2026-07-17 after the R1 spike passed) — shipped 2026-07-18
 - [x] **U4.2** — Host-side `QGCParameterService` (`qgc.parameters/1`; R2's seam, Q2's prerequisite — added 2026-07-18 after the R2 spike passed) — shipped 2026-07-18
 - [ ] **Stage 4** — QDrive burn-down Q1–Q6 — ticked in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md); this row ticks when that checklist completes. Its host-side companion units get rows here, between U5.1 and U5.2.
 - [ ] **U5.2** — SDK docs + DoD evidence
