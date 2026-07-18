@@ -6,13 +6,25 @@
 
 ## Status — current position / next step
 
-**Shipped:** U3.6, U3.3, U3.4, U3.5, U5.1 (all 2026-07-17). Before this plan: Stages 1–3.2 (per-unit history in the `.feature` doc above); DoD **#2** (Tier A runtime install) and **#6** (`export_dynamic` gated) already proven.
+**Shipped:** U3.6, U3.3, U3.4, U3.5, U5.1 (all 2026-07-17); U4.2 (2026-07-18). Before this plan: Stages 1–3.2 (per-unit history in the `.feature` doc above); DoD **#2** (Tier A runtime install) and **#6** (`export_dynamic` gated) already proven.
 
-**Next:** Stage 4 (QDrive burn-down Q1–Q6) is planned and executed in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md), not here — this doc's row ticks when that checklist completes. If no qdrive-side work is queued next, fresh chat → `/implement-unit plugins/.architecture/05-completion-plan.md U5.2` (only after Stage 4 finishes — U5.2 depends on qdrive's Change acceptance) — **Sonnet / low / thinking off**.
+**Next — U4.1, the remaining host-side companion unit** (its commit `28fd076b7` added only its brief + a gitlink bump — `ReplaySeekApplier` doesn't exist on disk yet). It unblocks the qdrive plan's **Q3**; doing it now keeps the root-repo work batched so Q2→Q3 then run consecutively with no host-side detour. Fresh chat — **Sonnet / medium / thinking on**:
+
+```
+/implement-unit plugins/.architecture/05-completion-plan.md U4.1
+```
+
+**Then Stage 4 resumes in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)** — Q2 (unblocked by U4.2), then Q3 (needs U4.1); that doc's own Next carries their commands and run settings. Stage 4 is planned and executed there, not here — this doc's row ticks when that checklist completes.
+
+**Last: U5.2** — only after Stage 4 finishes (it depends on qdrive's Change acceptance) — **Sonnet / low / thinking off**:
+
+```
+/implement-unit plugins/.architecture/05-completion-plan.md U5.2
+```
 
 **⚠ U3.5's manual S6m re-verify is outstanding** — the entitlement wiring shipped (code-reviewer clean) but the actual re-run (self-signed hardened-runtime bundle: differently-signed plugin loads *with* the entitlement, blocked *without*) needs a real signing identity and wasn't run this session. Do it before U5.2 records Change-acceptance evidence for DoD #3, or explicitly defer it there.
 
-**⚠ Fable access window (through ~2026-07-19):** U3.4 rode the window as planned; the remaining beneficiary is the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)'s **R1 seek-apply spike** — order-free, pull it forward while the window lasts (it settles the last permanently-frozen ABI decision of the change). After the window this note is dead — delete it.
+*(The Fable access-window note is retired: U4.2 — its last named beneficiary, the final permanently-frozen SDK surface — rode the window 2026-07-18, per the U3.3/U3.4 precedent of Fable impl + opus review.)*
 
 ## Goal & summary
 
@@ -121,6 +133,14 @@ Q1–Q6 land in the `plugins/qdrive` nested repo and are planned, briefed, and t
 - **Done means:** build green; qdrive replay UX verified live with the plugin's typed connects disabled (the R1 spike already rehearsed exactly this end state: attachment-rich and bare flights both passed 2026-07-17); `code-reviewer` (sonnet) clean.
 - **Run settings:** Sonnet / medium / thinking on.
 
+### U4.2 — Host-side parameter-snapshot service (`QGCParameterService`) — R2's seam, Q2's prerequisite — shipped 2026-07-18
+- **Scope (as shipped):** a new frozen SDK service `qgc.parameters/1`, cloned in shape from the shipped `QGCMissionService` (the R2 spike, 2026-07-18, proved this is the right precedent — per-vehicle snapshot/serialization is its own service keyed by system id, not a method on `qgc.vehicles`). Abstract interface `QGCParameterService` (`src/PluginAPI/`): `virtual bool parametersReady(int vehicleId) const`, `virtual bool saveVehicleParametersToFile(int vehicleId, const QString& filePath)`, signal `parametersReadyChanged(int vehicleId, bool ready)`; frozen-vtable doc-comment mirroring the other service headers; no extension-appending (that was `PlanMasterController::saveToFile` behavior — this service writes exactly to `filePath`, documented in the header). Host impl `QGCParameterServiceImpl` (`src/PluginSystem/HostServices/`) = `QGCMissionServiceImpl` with the `PlanMasterController` block replaced by `QFile`+`QTextStream`+`ParameterManager::writeParametersToStream`: resolve via `MultiVehicleManager::getVehicleById`, gate on `vehicle->parameterManager()->parametersReady()`, write the `.params` file (returning the stream/file write status, not unconditional `true` — the one real code-reviewer finding), and relay each vehicle's `parameterManager()->parametersReadyChanged` as `parametersReadyChanged(vehicle->id(), ready)`. Registered in `QGCPluginManager::_ensureHostServices()` beside the other five and added to the "Host services ready" log line; one service-table row each in `plugins/README.md` + `src/PluginSystem/README.md` (the U2.4 precedent commit updated both).
+- **Not in scope:** deleting the plugin's direct `writeParametersToStream` call / `ParameterManager.h` include (Q2's commit); any parameter *enumeration* or *write* surface beyond serialize-to-file (qdrive only needs the snapshot — no seam before its consumer, D4); exposing `.params` parsing (the plugin already handles the file by path).
+- **Files:** `src/PluginAPI/QGCParameterService.h/.cc` (new) + `src/PluginAPI/CMakeLists.txt`; `src/PluginSystem/HostServices/QGCParameterServiceImpl.h/.cc` (new) + `src/PluginSystem/CMakeLists.txt`; `src/PluginSystem/QGCPluginManager.cc` (registration + log line); `test/PluginSystem/HostVehicleServicesTest.h/.cc` (+3 slots mirroring the mission-service trio); `test/CMakeLists.txt`; `plugins/README.md` + `src/PluginSystem/README.md` (service tables).
+- **Depends on:** nothing outstanding here. The qdrive plan's Q2 depends on this unit (for `TelemetryParamsController.cc`'s full include removal).
+- **Done means (as verified):** build green; the brief's "byte-for-byte against a live snapshot" landed as a *repeatable unit test* instead — `_parameterServiceReadyAndSave_test` byte-compares the service's file output against a direct `writeParametersToStream` dump from the same MockLink vehicle (identical function, identical vehicle; the plugin-side live verify belongs to Q2); `_parameterServiceRelaysReadyChanged_test` + `_parameterServiceUnknownVehicle_test` pin the relay and negative paths. Grounding also surfaced that `HostVehicleServicesTest` was never registered with ctest (the U2.4 commit added the file but no `add_qgc_test` row) — fixed in this unit, so the mission-service trio now runs in CI too. Full Unit suite green (162/165 — only the 3 known keychain-timeout tests). `code-reviewer` (opus) found one real bug — unconditional `return true` after the file write, breaking the header's false-on-write-failure contract — fixed and re-verified; everything else verified clean.
+- **Run settings:** Fable / high / thinking on (rode the access window as redirected; opus review per the U3.4 precedent).
+
 ### U5.2 — SDK docs + DoD evidence
 - **Scope:** doxygen group for `src/PluginAPI/`; "Writing your first plugin (macOS)" tutorial (SDK zip + `plugins/template/` from U2.7); 04 §8's defect-ledger check (all closed); walk the **Change acceptance** section below and record the evidence for each item; resolve Open questions below (notably qmlApiVersion).
 - **Not in scope:** upstream PR submission (its own effort, tracked in [[project_plugin_infrastructure]] / 03's PR map); the change's close-out — that is `/lc-branch-cleanup --onto plugin-infrastructure-with-qdrive`'s job (its preflight verifies Change acceptance; it lands the branch, marks this doc COMPLETE, and compresses the memory entry).
@@ -150,6 +170,7 @@ The whole-change bar, verified by `/lc-branch-cleanup --onto plugin-infrastructu
 - [x] **U3.5** — Release signing carries the plugin entitlement (D9) — shipped 2026-07-17 (entitlements wired + docs; manual S6m re-verify outstanding, see Status)
 - [x] **U5.1** — Golden-plugin CI (ABI watchdog) — shipped 2026-07-17
 - [ ] **U4.1** — Host-side `ReplaySeekApplier` (R1's hoist; Q3's prerequisite — added 2026-07-17 after the R1 spike passed)
+- [x] **U4.2** — Host-side `QGCParameterService` (`qgc.parameters/1`; R2's seam, Q2's prerequisite — added 2026-07-18 after the R2 spike passed) — shipped 2026-07-18
 - [ ] **Stage 4** — QDrive burn-down Q1–Q6 — ticked in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md); this row ticks when that checklist completes. Its host-side companion units get rows here, between U5.1 and U5.2.
 - [ ] **U5.2** — SDK docs + DoD evidence
 

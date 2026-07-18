@@ -14,6 +14,7 @@ set(QGC_PLUGIN_API_PUBLIC_HEADERS
     QGCAppService.h
     QGCHostServices.h
     QGCMissionService.h
+    QGCParameterService.h
     QGCPlugin.h
     QGCPluginInterface.h
     QGCReplayExtension.h
@@ -28,6 +29,7 @@ qt_add_library(QGCPluginAPI SHARED
     QGCAppService.cc
     QGCHostServices.cc
     QGCMissionService.cc
+    QGCParameterService.cc
     QGCPlugin.cc
     QGCReplayExtension.cc
     QGCReplayService.cc

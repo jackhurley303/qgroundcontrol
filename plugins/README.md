@@ -183,6 +183,7 @@ never as a change to an existing interface):
 | `qgc.telemetryLogging/1` | `QGCTelemetryLoggingService` | Tlog recording control: start/stop, pending-log save/discard |
 | `qgc.vehicles/1` | `QGCVehicleService` | Connected vehicles as `QObject*` (meta-object surface): active vehicle, list, add/remove signals |
 | `qgc.missions/1` | `QGCMissionService` | Per-vehicle mission readiness + snapshot of a vehicle's current mission to a `.plan` file |
+| `qgc.parameters/1` | `QGCParameterService` | Per-vehicle parameter readiness + snapshot of a vehicle's current parameters to a `.params` file |
 | `qgc.app/1` | `QGCAppService` | Host identity (app/org name, version) and storage paths (save root, telemetry directory) |
 
 3. **Real linkage** — tier-dependent, never the `QGroundControl` target itself:

@@ -12,6 +12,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         HostServices/QGCHostServicesImpl.h
         HostServices/QGCMissionServiceImpl.cc
         HostServices/QGCMissionServiceImpl.h
+        HostServices/QGCParameterServiceImpl.cc
+        HostServices/QGCParameterServiceImpl.h
         HostServices/QGCReplayServiceImpl.cc
         HostServices/QGCReplayServiceImpl.h
         HostServices/QGCTelemetryLoggingServiceImpl.cc

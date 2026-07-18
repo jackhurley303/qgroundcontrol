@@ -161,6 +161,7 @@ registry the manager constructs (lazily, on first plugin activation) and passes 
 | `qgc.telemetryLogging/1` | [QGCTelemetryLoggingService.h](../PluginAPI/QGCTelemetryLoggingService.h) | `MAVLinkProtocol`'s tlog recording surface |
 | `qgc.vehicles/1` | [QGCVehicleService.h](../PluginAPI/QGCVehicleService.h) | `MultiVehicleManager`: active vehicle, vehicle list, add/remove signals (vehicles handed over as `QObject*`) |
 | `qgc.missions/1` | [QGCMissionService.h](../PluginAPI/QGCMissionService.h) | Per-vehicle mission readiness (`Vehicle::initialPlanRequestComplete`) and mission snapshot to a `.plan` file via a transient `PlanMasterController` |
+| `qgc.parameters/1` | [QGCParameterService.h](../PluginAPI/QGCParameterService.h) | Per-vehicle parameter readiness (`ParameterManager::parametersReady`) and parameter snapshot to a `.params` file via `ParameterManager::writeParametersToStream` |
 | `qgc.app/1` | [QGCAppService.h](../PluginAPI/QGCAppService.h) | `QCoreApplication` identity (name/org/version) and `AppSettings` storage paths |
 
 Plugins acquire a service with `host->service(id)` and `qobject_cast` to the SDK

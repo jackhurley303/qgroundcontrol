@@ -210,6 +210,7 @@ add_qgc_test(TransectStyleComplexItemTest LABELS Unit MissionManager RESOURCE_LO
 # ----------------------------------------------------------------------------
 add_subdirectory(PluginSystem)
 add_qgc_test(HostServicesTest LABELS Unit)
+add_qgc_test(HostVehicleServicesTest LABELS Integration Vehicle RESOURCE_LOCK MockLink)
 add_qgc_test(PluginContributionsTest LABELS Unit)
 add_qgc_test(PluginInstallerTest LABELS Unit)
 add_qgc_test(PluginLoaderGateTest LABELS Unit)

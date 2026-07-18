@@ -4,10 +4,13 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QTemporaryDir>
+#include <QtCore/QTextStream>
 #include <QtTest/QSignalSpy>
 
 #include "HostServices/QGCMissionServiceImpl.h"
+#include "HostServices/QGCParameterServiceImpl.h"
 #include "HostServices/QGCVehicleServiceImpl.h"
+#include "ParameterManager.h"
 #include "Vehicle.h"
 
 void HostVehicleServicesTest::_vehicleServiceExposesVehicle_test()
@@ -84,6 +87,57 @@ void HostVehicleServicesTest::_missionServiceUnknownVehicle_test()
 
     QVERIFY(!service.missionReady(bogusId));
     QVERIFY(!service.saveVehicleMissionToFile(bogusId, QStringLiteral("/nonexistent/out.plan")));
+}
+
+void HostVehicleServicesTest::_parameterServiceReadyAndSave_test()
+{
+    QGCParameterServiceImpl service;
+    const int vehicleId = vehicle()->id();
+
+    QVERIFY(waitForParametersReady());
+    QVERIFY(service.parametersReady(vehicleId));
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString paramsPath = tempDir.filePath(QStringLiteral("snapshot.params"));
+
+    QVERIFY(service.saveVehicleParametersToFile(vehicleId, paramsPath));
+    QVERIFY(QFileInfo::exists(paramsPath));
+    QVERIFY(QFileInfo(paramsPath).size() > 0);
+
+    // The service only relocates writeParametersToStream behind a file-path
+    // boundary — its output must be byte-identical to the direct call
+    QString direct;
+    QTextStream directStream(&direct);
+    vehicle()->parameterManager()->writeParametersToStream(directStream);
+
+    QFile paramsFile(paramsPath);
+    QVERIFY(paramsFile.open(QIODevice::ReadOnly));
+    QCOMPARE(QString::fromUtf8(paramsFile.readAll()), direct);
+}
+
+void HostVehicleServicesTest::_parameterServiceRelaysReadyChanged_test()
+{
+    // The service seeds its per-vehicle watch from the already-connected vehicle
+    QGCParameterServiceImpl service;
+    QSignalSpy readySpy(&service, &QGCParameterService::parametersReadyChanged);
+
+    // Fire the parameter manager's signal through the metaobject — the service
+    // must relay it keyed by vehicle id
+    QVERIFY(QMetaObject::invokeMethod(vehicle()->parameterManager(), "parametersReadyChanged", Q_ARG(bool, true)));
+
+    QCOMPARE(readySpy.count(), 1);
+    QCOMPARE(readySpy.at(0).at(0).toInt(), vehicle()->id());
+    QCOMPARE(readySpy.at(0).at(1).toBool(), true);
+}
+
+void HostVehicleServicesTest::_parameterServiceUnknownVehicle_test()
+{
+    QGCParameterServiceImpl service;
+    const int bogusId = vehicle()->id() + 1;
+
+    QVERIFY(!service.parametersReady(bogusId));
+    QVERIFY(!service.saveVehicleParametersToFile(bogusId, QStringLiteral("/nonexistent/out.params")));
 }
 
 UT_REGISTER_TEST(HostVehicleServicesTest, TestLabel::Integration, TestLabel::Vehicle)

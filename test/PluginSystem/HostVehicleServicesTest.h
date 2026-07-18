@@ -12,4 +12,7 @@ private slots:
     void _missionServiceReadyAndSave_test();
     void _missionServiceRelaysReadyChanged_test();
     void _missionServiceUnknownVehicle_test();
+    void _parameterServiceReadyAndSave_test();
+    void _parameterServiceRelaysReadyChanged_test();
+    void _parameterServiceUnknownVehicle_test();
 };

@@ -17,6 +17,7 @@
 #include "HostServices/QGCAppServiceImpl.h"
 #include "HostServices/QGCHostServicesImpl.h"
 #include "HostServices/QGCMissionServiceImpl.h"
+#include "HostServices/QGCParameterServiceImpl.h"
 #include "HostServices/QGCReplayServiceImpl.h"
 #include "HostServices/QGCTelemetryLoggingServiceImpl.h"
 #include "HostServices/QGCVehicleServiceImpl.h"
@@ -412,10 +413,11 @@ void QGCPluginManager::_ensureHostServices()
     _hostServices->registerService(QGCTelemetryLoggingServiceId, new QGCTelemetryLoggingServiceImpl(_hostServices));
     _hostServices->registerService(QGCVehicleServiceId, new QGCVehicleServiceImpl(_hostServices));
     _hostServices->registerService(QGCMissionServiceId, new QGCMissionServiceImpl(_hostServices));
+    _hostServices->registerService(QGCParameterServiceId, new QGCParameterServiceImpl(_hostServices));
     _hostServices->registerService(QGCAppServiceId, new QGCAppServiceImpl(_hostServices));
     qCDebug(QGCPluginManagerLog) << "Host services ready:"
         << QGCReplayServiceId << QGCTelemetryLoggingServiceId
-        << QGCVehicleServiceId << QGCMissionServiceId << QGCAppServiceId;
+        << QGCVehicleServiceId << QGCMissionServiceId << QGCParameterServiceId << QGCAppServiceId;
 }
 
 void QGCPluginManager::_activateRecord(PluginLoadInfo& record)
