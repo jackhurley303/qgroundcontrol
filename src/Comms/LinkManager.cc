@@ -160,12 +160,34 @@ bool LinkManager::createConnectedLink(SharedLinkConfigurationPtr &config)
     }
     config->setLink(link);
 
+    if (LogReplayLink * const replayLink = qobject_cast<LogReplayLink*>(link.get())) {
+        _activeLogReplayLink = replayLink;
+        (void) connect(replayLink, &LogReplayLink::disconnected, this, &LinkManager::_logReplayLinkDisconnected);
+        emit activeLogReplayLinkChanged();
+    }
+
     return true;
 }
 
 void LinkManager::_communicationError(const QString &title, const QString &error)
 {
     QGC::showAppMessage(error, title);
+}
+
+LogReplayLink *LinkManager::activeLogReplayLink() const
+{
+    return _activeLogReplayLink;
+}
+
+void LinkManager::_logReplayLinkDisconnected()
+{
+    LogReplayLink * const link = qobject_cast<LogReplayLink*>(sender());
+
+    // Guard against a stale clear if a newer replay link already replaced this one
+    if (link && (link == _activeLogReplayLink)) {
+        _activeLogReplayLink.clear();
+        emit activeLogReplayLinkChanged();
+    }
 }
 
 SharedLinkInterfacePtr LinkManager::mavlinkForwardingLink()

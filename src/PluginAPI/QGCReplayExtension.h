@@ -27,6 +27,10 @@
  * This interface intentionally uses QObject* for flight entry parameters so
  * the core has no dependency on plugin-specific model types.
  *
+ * The host sources the active replay link from its own state
+ * (LinkManager::activeLogReplayLink) rather than from logReplayLink() below —
+ * implementations may return nullptr from it.
+ *
  * @warning This vtable is frozen: it ships across the SDK boundary, so adding,
  * removing, or reordering virtuals breaks every built plugin silently.
  * Additions go to a new "QGCReplayExtension2"-style interface, never here.

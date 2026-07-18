@@ -12,25 +12,10 @@ Rectangle {
     color: qgcPal.window
 
     property real _margins: ScreenTools.defaultFontPixelHeight / 4
-    property var _logReplayLink: null
 
     // Plugin-agnostic accessor for the replay extension (null when no plugin is loaded)
     readonly property var  _replay:          QGroundControl.pluginManager.replayExtension
     readonly property bool _isLoadingRemote: _replay !== null && _replay.isLoadingRemote
-
-    // When the replay extension opens a flight it manages the replay link.
-    // Keep controller.link in sync so all existing timeline UI still works.
-    Connections {
-        target: _replay
-        enabled: _replay !== null
-        function onIsActiveChanged() {
-            if (_replay.isActive) {
-                controller.link = _replay.logReplayLink
-            } else {
-                controller.link = null
-            }
-        }
-    }
 
     function pickLogFile() {
         if (globals.activeVehicle) {
@@ -46,7 +31,7 @@ Rectangle {
             QGroundControl.showMessageDialog(_root, qsTr("Log Replay"), qsTr("You must close all connections prior to replaying a log."))
             return
         }
-        controller.link = QGroundControl.linkManager.startLogReplay(filePath)
+        QGroundControl.linkManager.startLogReplay(filePath)
     }
 
     QGCPalette { id: qgcPal }
@@ -57,7 +42,7 @@ Rectangle {
         nameFilters: [ qsTr("Telemetry Logs (*.%1)").arg(_logFileExtension), qsTr("All Files (*)") ]
         folder: QGroundControl.settingsManager.appSettings.telemetrySavePath
         onAcceptedForLoad: (file) => {
-            controller.link = QGroundControl.linkManager.startLogReplay(file)
+            QGroundControl.linkManager.startLogReplay(file)
             close()
         }
 
@@ -66,6 +51,8 @@ Rectangle {
 
     LogReplayLinkController {
         id: controller
+
+        link: QGroundControl.linkManager.activeLogReplayLink
 
         onPercentCompleteChanged: (percentComplete) => slider.updatePercentComplete(percentComplete)
     }

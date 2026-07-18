@@ -3,6 +3,7 @@
 #include <QtCore/QList>
 #include <QtCore/QMutex>
 #include <QtCore/QMutexLocker>
+#include <QtCore/QPointer>
 #include <QtCore/QStringList>
 #include <QtQmlIntegration/QtQmlIntegration>
 
@@ -38,6 +39,7 @@ class LinkManager : public QObject
     Q_PROPERTY(QmlObjectListModel *linkConfigurations READ _qmlLinkConfigurations CONSTANT)
     Q_PROPERTY(QStringList linkTypeStrings READ linkTypeStrings CONSTANT)
     Q_PROPERTY(bool mavlinkSupportForwardingEnabled READ mavlinkSupportForwardingEnabled NOTIFY mavlinkSupportForwardingEnabledChanged)
+    Q_PROPERTY(LogReplayLink *activeLogReplayLink READ activeLogReplayLink NOTIFY activeLogReplayLinkChanged)
 
 public:
     explicit LinkManager(QObject *parent = nullptr);
@@ -64,6 +66,7 @@ public:
     QList<SharedLinkInterfacePtr> links();
     QStringList linkTypeStrings() const;
     bool mavlinkSupportForwardingEnabled() const { return _mavlinkSupportForwardingEnabled; }
+    LogReplayLink *activeLogReplayLink() const;
 
     void loadLinkConfigurationList();
     void saveLinkConfigurationList();
@@ -110,10 +113,12 @@ public:
 signals:
     void mavlinkSupportForwardingEnabledChanged();
     void isBluetoothAvailableChanged();
+    void activeLogReplayLinkChanged();
 
 private slots:
     void _linkDisconnected();
     void _communicationError(const QString &title, const QString &error);
+    void _logReplayLinkDisconnected();
 
 private:
     QmlObjectListModel *_qmlLinkConfigurations();
@@ -139,6 +144,7 @@ private:
     QMutex _linksMutex;                             ///< Protects _rgLinks access from multiple threads
     QList<SharedLinkInterfacePtr> _rgLinks;
     QList<SharedLinkConfigurationPtr> _rgLinkConfigs;
+    QPointer<LogReplayLink> _activeLogReplayLink;
 
     static constexpr const char *_defaultUDPLinkName = "UDP Link (AutoConnect)";
     static constexpr const char *_mavlinkForwardingLinkName = "MAVLink Forwarding Link";
