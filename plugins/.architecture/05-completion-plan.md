@@ -113,6 +113,14 @@ Everything else below is work, not risk.
 ### Stage 4 — QDrive burn-down (cross-repo reference, no units here)
 Q1–Q6 land in the `plugins/qdrive` nested repo and are planned, briefed, and ticked in **[plugins/qdrive/docs/sdk-burndown-migration.md](../qdrive/docs/sdk-burndown-migration.md)** — one plan per repo. What this plan owns about Stage 4: the gitlink bumps riding each qdrive commit, and any host-side companion units the qdrive plan's Q3 (R1 seek-apply hoist / `qgc.replay/2` fallback) or Q4 (possible mission-preview seam) turn out to need — those get added here as normal units when the qdrive plan asks for them, and the qdrive unit depends on them by reference.
 
+### U4.1 — Host-side replay seek-apply (`ReplaySeekApplier`) — R1's hoist, Q3's prerequisite
+- **Scope:** promote the R1 spike's proven throwaway glue to a named host class: `ReplaySeekApplier` (`src/Comms/`, proper `.h/.cc` in the target's source list), created as a child of each `LogReplayLink` at the single creation point (`LinkManager` `TypeLogReplay` case). It consumes the three typed replay signals (`replayMissionUploaded` + the two seek-resolved signals) entirely host-side, keyed off host-owned state only: `MultiVehicleManager::activeVehicle()`, `Vehicle::peekReplayPlanFile()` (the sole substitution for the plugin's `_vehicleAttachments`), and `ParameterManager`'s cached replay initials. Per-session bookkeeping lives as members, so it resets with the link by construction. **No SDK surface change** — the typed signals never cross the boundary; `qgc.replay/1` stays frozen and sufficient.
+- **Not in scope:** deleting the plugin's handlers/connects (Q3's commit); fixing the pre-existing vanilla-replay stall (see Open questions) — U4.1 is inert for a session that never streams.
+- **Files:** `src/Comms/ReplaySeekApplier.h/.cc` (new), `src/Comms/LinkManager.cc`, `src/Comms/CMakeLists.txt`.
+- **Depends on:** nothing outstanding here. The qdrive plan's Q3 depends on this unit.
+- **Done means:** build green; qdrive replay UX verified live with the plugin's typed connects disabled (the R1 spike already rehearsed exactly this end state: attachment-rich and bare flights both passed 2026-07-17); `code-reviewer` (sonnet) clean.
+- **Run settings:** Sonnet / medium / thinking on.
+
 ### U5.2 — SDK docs + DoD evidence
 - **Scope:** doxygen group for `src/PluginAPI/`; "Writing your first plugin (macOS)" tutorial (SDK zip + `plugins/template/` from U2.7); 04 §8's defect-ledger check (all closed); walk the **Change acceptance** section below and record the evidence for each item; resolve Open questions below (notably qmlApiVersion).
 - **Not in scope:** upstream PR submission (its own effort, tracked in [[project_plugin_infrastructure]] / 03's PR map); the change's close-out — that is `/lc-branch-cleanup --onto plugin-infrastructure-with-qdrive`'s job (its preflight verifies Change acceptance; it lands the branch, marks this doc COMPLETE, and compresses the memory entry).
@@ -141,6 +149,7 @@ The whole-change bar, verified by `/lc-branch-cleanup --onto plugin-infrastructu
 - [x] **U3.4** — Crash sentinel — shipped 2026-07-17 (tests green; manual crash verify passed)
 - [x] **U3.5** — Release signing carries the plugin entitlement (D9) — shipped 2026-07-17 (entitlements wired + docs; manual S6m re-verify outstanding, see Status)
 - [x] **U5.1** — Golden-plugin CI (ABI watchdog) — shipped 2026-07-17
+- [ ] **U4.1** — Host-side `ReplaySeekApplier` (R1's hoist; Q3's prerequisite — added 2026-07-17 after the R1 spike passed)
 - [ ] **Stage 4** — QDrive burn-down Q1–Q6 — ticked in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md); this row ticks when that checklist completes. Its host-side companion units get rows here, between U5.1 and U5.2.
 - [ ] **U5.2** — SDK docs + DoD evidence
 
@@ -149,5 +158,6 @@ The whole-change bar, verified by `/lc-branch-cleanup --onto plugin-infrastructu
 - **`qmlApiVersion`: flip from optional to required for tier `qml`?** Free while zero external Tier A packages exist; breaking after. Current lean: keep optional (consistent with the manifest's permissive posture), flip only if external adoption starts. *Decide by:* U5.2, or immediately if any external Tier A package appears.
 - **Version-aware confirm on id-collision install** (D14 keeps silent replace)? *Decide by:* post-ship polish; revisit with the first real second user.
 - **Windows port tripwires** (carried from 04 §10, plus two new: `isSafeEntryName()` splits on `/` only — add a `\` guard before any Windows zip extraction; `$<TARGET_FILE:TestPluginFixture>` backslash-escaping in compile definitions). *Decide by:* the Windows port, not this change.
+- **Pre-existing defect (found 2026-07-17 by the R1 spike's negative case): host-initiated vanilla replay stalls.** A Log Replay comm link connects, bootstraps the vehicle from the first heartbeat, then streams nothing — `LogReplayWorker::connectToLog()` waits for `beginStream()`, which only `FlightReplayController` and `QGCReplayServiceImpl` ever call — so the vehicle dies to the heartbeat timeout ("communication lost"). A fork regression from the beginStream redesign, independent of the hoist (the spike glue was verified inert in this scenario). Candidate fix: the vanilla path auto-begins streaming after bootstrap when the session is neither plugin- nor service-driven. *Decide by:* before any upstream PR of the replay changes; not a Stage 4 blocker.
 
 (Stage 4's open questions — the Q3 hoist and Q4 seam decisions — live in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md).)
