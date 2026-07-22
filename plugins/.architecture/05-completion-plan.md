@@ -14,7 +14,7 @@
 
 **Q3 grounding (2026-07-18) surfaced a third host-side companion unit — U4.3.** The host's `LogReplayStatusBar.qml` drives its whole timeline UI (play/pause, seek slider, playhead/total time) off `controller.link = _replay.logReplayLink` — the raw `LogReplayLink*` from the frozen `QGCReplayExtension` vtable. `qgc.replay/1::startReplay()` returns only `bool`, so a Tier B plugin can never produce that pointer: migrating `FlightReplayController` without host work leaves the status bar dead for plugin-driven sessions (seek included), failing Q3's Done means. Neither this plan nor R1 anticipated it. Q3 is paused (nothing implemented) until U4.3 lands; its grounded migration plan is folded into the qdrive doc's Q3 brief.
 
-**Next — Stage 4 resumes in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)** — Q3 (unblocked by U4.1 + U4.3), then Q4–Q6; that doc's own Next carries their commands and run settings. Stage 4 is planned and executed there, not here — this doc's row ticks when that checklist completes.
+**Next — U5.2 (SDK docs + DoD evidence), the final unit.** Stage 4 (QDrive burn-down Q1–Q7) is **complete + live-verified 2026-07-21** in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md), so U5.2's dependency is satisfied. Run: new chat → `/implement-unit plugins/.architecture/05-completion-plan.md U5.2` — **Sonnet / low / thinking off**. (One pre-existing carry-in for U5.2's DoD #3 evidence: U3.5's manual S6m re-verify — see the ⚠ in Status.)
 
 **Last: U5.2** — only after Stage 4 finishes (it depends on qdrive's Change acceptance) — **Sonnet / low / thinking off**:
 
@@ -165,9 +165,9 @@ The whole-change bar, verified by `/lc-branch-cleanup --onto plugin-infrastructu
 - **DoD #2:** Tier A runtime install — proven (U3.2, pre-plan).
 - **DoD #3:** a hardened-runtime signed QGC loads a differently-signed plugin *with* the entitlement and blocks it *without* (U3.5's S6m re-run, evidence recorded).
 - **DoD #4 (consent half):** a user-dir plugin never executes code before explicit approval; approval survives restarts; changed content re-prompts; a boot crash quarantines the plugin on next start (U3.3 + U3.4 — shipped, tests + manual verify green).
-- **DoD #5:** QDrive is pure Tier B — authority: the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)'s own Change acceptance, complete through Q6.
+- **DoD #5:** QDrive is pure Tier B — authority: the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)'s own Change acceptance, **complete + live-verified through Q7** (Q6 flipped the tier; Q7 fixed the vendored-symbol interposition its live-verify exposed). Cross-commit load confirmed (plugin built at HEAD runs on a U4.1 host).
 - **DoD #6:** `export_dynamic` gated — done (pre-plan).
-- **Cutover discipline holds:** zero internal-tier residue in the qdrive tree (per the qdrive plan); `QGC_ENABLE_INTERNAL_PLUGINS` remains only as generic Tier C infrastructure, no longer required ON for QDrive.
+- **Cutover discipline holds ✅ (2026-07-21):** zero internal-tier residue in the qdrive tree (per the qdrive plan); `QGC_ENABLE_INTERNAL_PLUGINS` remains only as generic Tier C infrastructure and is **no longer required ON for QDrive** — QDrive now loads as a pure Tier B/SDK plugin.
 - **Docs:** SDK doxygen + tutorial build; 04 §8's defect ledger fully closed; Open questions below resolved or explicitly deferred.
 
 ## Execution order and progress
@@ -180,7 +180,7 @@ The whole-change bar, verified by `/lc-branch-cleanup --onto plugin-infrastructu
 - [x] **U4.1** — Host-side `ReplaySeekApplier` (R1's hoist; Q3's prerequisite — added 2026-07-17 after the R1 spike passed) — shipped 2026-07-18
 - [x] **U4.2** — Host-side `QGCParameterService` (`qgc.parameters/1`; R2's seam, Q2's prerequisite — added 2026-07-18 after the R2 spike passed) — shipped 2026-07-18
 - [x] **U4.3** — Host UI sources the replay link itself (`LinkManager::activeLogReplayLink`; Q3's second prerequisite — added 2026-07-18 after Q3 grounding found the status-bar handoff gap) — shipped 2026-07-18
-- [ ] **Stage 4** — QDrive burn-down Q1–Q6 — ticked in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md); this row ticks when that checklist completes. Its host-side companion units get rows here, between U5.1 and U5.2.
+- [x] **Stage 4** — QDrive burn-down Q1–Q7 — **complete + live-verified 2026-07-21** (ticked in the [qdrive plan](../qdrive/docs/sdk-burndown-migration.md)). Q1–Q6 flipped QDrive to `tier: "sdk"`; **Q7** (added after Q6's deferred DoD-#5 live-verify) fixed a runtime regression the build/test-only verification structurally couldn't catch — the vendored `QmlObjectListModel` shared the host's exported `staticMetaObject` symbol, so dyld interposed the plugin's `qobject_cast` and every list rendered empty; `Q_DECL_HIDDEN` on the vendored classes closed it. Host-side companion units (U4.1–U4.3) already ticked above.
 - [ ] **U5.2** — SDK docs + DoD evidence
 
 ## Open questions
