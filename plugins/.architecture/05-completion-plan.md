@@ -4,7 +4,9 @@
 **Profile:** `/architecture-change` (carried over from Stages 2–3 — clean-cutover: QDrive's internal-tier coupling is deleted by the end, not kept beside the SDK path).
 **Supersedes:** the *remaining-work* portions of [04-macos-implementation-plan.md](04-macos-implementation-plan.md) (its §6 U3.3–U3.5, §7, §8). 04 stays the as-built record for Stages 1–3.2, the locked decisions D1–D11, the platform mechanics (§1), and the spike ledger (§11) — units below cite it rather than duplicating it. Per-unit history for everything already shipped: [../.feature/macos-plugin-sdk.md](../.feature/macos-plugin-sdk.md).
 
-## Status — current position / next step
+## Status — COMPLETE (landed 2026-07-22)
+
+`macos-plugin-sdk` fast-forward-landed onto `plugin-infrastructure-with-qdrive` (`d286f2b68`) via `/lc-branch-cleanup`, verified against a full `QGroundControl` build (green, zero warnings). Branch deleted locally; `git push origin plugin-infrastructure-with-qdrive` + the remote branch delete are still the user's to run (see that skill's hand-off). All units shipped and DoD evidence recorded below.
 
 **Shipped:** U3.6, U3.3, U3.4, U3.5, U5.1 (all 2026-07-17); U4.2, U4.1, U4.3 (all 2026-07-18); U5.2 (2026-07-22, docs-only). Before this plan: Stages 1–3.2 (per-unit history in the `.feature` doc above); DoD **#2** (Tier A runtime install) and **#6** (`export_dynamic` gated) already proven.
 
