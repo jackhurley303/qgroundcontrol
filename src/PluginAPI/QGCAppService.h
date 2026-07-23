@@ -20,6 +20,7 @@ inline constexpr const char* QGCAppServiceId = "qgc.app/1";
 
 /**
  * @class QGCAppService
+ * @ingroup PluginAPI
  * @brief Host service exposing application identity and storage paths.
  *
  * Acquired via QGCHostServices::service(QGCAppServiceId) and cast with

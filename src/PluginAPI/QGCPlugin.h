@@ -21,6 +21,7 @@ class QGCPluginPrivate;
 
 /**
  * @class QGCPlugin
+ * @ingroup PluginAPI
  * @brief Base class for runtime QGroundControl plugins
  *
  * This is the base class for all runtime-loaded plugins. Code is only for

@@ -20,6 +20,7 @@ inline constexpr const char* QGCVehicleServiceId = "qgc.vehicles/1";
 
 /**
  * @class QGCVehicleService
+ * @ingroup PluginAPI
  * @brief Host service exposing the connected vehicles.
  *
  * Acquired via QGCHostServices::service(QGCVehicleServiceId) and cast with

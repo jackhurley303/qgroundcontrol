@@ -20,6 +20,7 @@ inline constexpr const char* QGCParameterServiceId = "qgc.parameters/1";
 
 /**
  * @class QGCParameterService
+ * @ingroup PluginAPI
  * @brief Host service for snapshotting a connected vehicle's parameters.
  *
  * Acquired via QGCHostServices::service(QGCParameterServiceId) and cast with

@@ -16,6 +16,7 @@
 
 /**
  * @class QGCHostServices
+ * @ingroup PluginAPI
  * @brief Plugin-side handle to the services the host application provides.
  *
  * The host passes an instance to QGCPlugin::init(). Plugins acquire individual

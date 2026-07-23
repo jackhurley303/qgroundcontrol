@@ -14,6 +14,7 @@
 class QGCPlugin;
 
 /// @brief Interface for QGC plugins
+/// @ingroup PluginAPI
 /// Plugins must implement this interface to be loadable by QGCPluginLoader
 ///
 /// @warning This vtable is frozen. It crosses the SDK boundary, so adding,

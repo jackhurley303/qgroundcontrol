@@ -20,6 +20,7 @@ inline constexpr const char* QGCMissionServiceId = "qgc.missions/1";
 
 /**
  * @class QGCMissionService
+ * @ingroup PluginAPI
  * @brief Host service for snapshotting a connected vehicle's mission.
  *
  * Acquired via QGCHostServices::service(QGCMissionServiceId) and cast with

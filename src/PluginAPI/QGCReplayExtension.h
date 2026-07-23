@@ -16,6 +16,7 @@
 
 /**
  * @class QGCReplayExtension
+ * @ingroup PluginAPI
  * @brief Abstract interface for plugin-provided flight replay functionality.
  *
  * Plugins that support flight replay (tlog playback with optional video sync)

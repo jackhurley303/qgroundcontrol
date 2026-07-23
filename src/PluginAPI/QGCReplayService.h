@@ -20,6 +20,7 @@ inline constexpr const char* QGCReplayServiceId = "qgc.replay/1";
 
 /**
  * @class QGCReplayService
+ * @ingroup PluginAPI
  * @brief Host service for telemetry-log (tlog) flight replay.
  *
  * Acquired via QGCHostServices::service(QGCReplayServiceId) and cast with

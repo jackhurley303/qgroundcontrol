@@ -20,6 +20,7 @@ inline constexpr const char* QGCTelemetryLoggingServiceId = "qgc.telemetryLoggin
 
 /**
  * @class QGCTelemetryLoggingService
+ * @ingroup PluginAPI
  * @brief Host service for telemetry-log (tlog) recording control.
  *
  * Acquired via QGCHostServices::service(QGCTelemetryLoggingServiceId) and
