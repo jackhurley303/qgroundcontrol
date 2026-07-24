@@ -61,7 +61,11 @@ public:
     Q_INVOKABLE void createMavlinkForwardingSupportLink();
     /// Called to signal app shutdown. Disconnects all links while turning off auto-connect.
     Q_INVOKABLE void shutdown();
-    Q_INVOKABLE LogReplayLink *startLogReplay(const QString &logFile);
+    /// Starts a log replay session on a new link.
+    ///     @param deferStreamStart true: bootstrap the vehicle but do not stream until the
+    ///         caller calls LogReplayLink::beginStream(). For callers which must complete
+    ///         their own initialization against the new vehicle before playback runs.
+    Q_INVOKABLE LogReplayLink *startLogReplay(const QString &logFile, bool deferStreamStart = false);
 
     QList<SharedLinkInterfacePtr> links();
     QStringList linkTypeStrings() const;

@@ -30,4 +30,8 @@ private slots:
     void _testUdpCopyConstruction();
     void _testUdpCopyFrom();
     void _testUdpSettingsRoundtrip();
+
+    // LogReplayConfiguration
+    void _testLogReplayDeferStreamStartDefaultsOff();
+    void _testLogReplayDeferStreamStartNotCopied();
 };

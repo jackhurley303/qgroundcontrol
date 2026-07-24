@@ -34,7 +34,9 @@ bool QGCReplayServiceImpl::startReplay(const QString& tlogPath)
         return false;
     }
 
-    LogReplayLink* link = LinkManager::instance()->startLogReplay(tlogPath);
+    // Defer streaming: the plugin drives the session and calls beginStream() once it
+    // has initialized against the vehicle this bootstraps
+    LogReplayLink* link = LinkManager::instance()->startLogReplay(tlogPath, true);
     if (!link) {
         return false;
     }

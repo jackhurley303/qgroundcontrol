@@ -126,11 +126,27 @@ void LogReplayWorker::connectToLog()
     _isConnected = true;
     emit connected();
 
+    // Suspend live logging and new connections for the whole session, bootstrap
+    // included - the reads below emit real MAVLink traffic which would otherwise
+    // be recorded to the telemetry log as if it were a live flight.
+    _setHostReplaySuspended(true);
+
     // Read messages until the first HEARTBEAT is emitted. This bootstraps
     // vehicle creation on the main thread (params + plan init) without
-    // starting the full tlog stream. beginStream() is called by
-    // FlightReplayController after init completes.
-    _readUntilHeartbeat();
+    // starting the full tlog stream.
+    if (!_readUntilHeartbeat()) {
+        // Empty or truncated log: release the hold so the app is not left
+        // refusing new connections for a session which never starts.
+        _setHostReplaySuspended(false);
+        return;
+    }
+
+    // Unless the caller drives the session itself, start streaming now. Leaving
+    // the stream stopped would strand the vehicle on its single bootstrap
+    // heartbeat until it dies to the comm-loss timeout.
+    if (!_logReplayConfig->deferStreamStart()) {
+        beginStream();
+    }
 }
 
 void LogReplayWorker::disconnectFromLog()
@@ -150,6 +166,11 @@ void LogReplayWorker::disconnectFromLog()
         _logFile.close();
     }
 
+    // Release the session hold: a replay torn down while streaming never passes
+    // through pause(), which would otherwise leave connections suspended and
+    // telemetry logging disabled for the rest of the app's lifetime.
+    _setHostReplaySuspended(false);
+
     _isConnected = false;
     emit disconnected();
 }
@@ -161,8 +182,7 @@ bool LogReplayWorker::isPlaying() const
 
 void LogReplayWorker::play()
 {
-    LinkManager::instance()->setConnectionsSuspended(tr("Connect not allowed during Flight Data replay."));
-    MAVLinkProtocol::instance()->suspendLogForReplay(true);
+    _setHostReplaySuspended(true);
 
     if (_logFile.atEnd()) {
         _resetPlaybackToBeginning();
@@ -181,18 +201,27 @@ void LogReplayWorker::play()
 
 void LogReplayWorker::pause()
 {
-    LinkManager::instance()->setConnectionsAllowed();
-    MAVLinkProtocol::instance()->suspendLogForReplay(false);
+    _setHostReplaySuspended(false);
 
     _readTickTimer->stop();
 
     emit playbackPaused();
 }
 
+void LogReplayWorker::_setHostReplaySuspended(bool suspended)
+{
+    if (suspended) {
+        LinkManager::instance()->setConnectionsSuspended(tr("Connect not allowed during Flight Data replay."));
+    } else {
+        LinkManager::instance()->setConnectionsAllowed();
+    }
+
+    MAVLinkProtocol::instance()->suspendLogForReplay(suspended);
+}
+
 void LogReplayWorker::beginStream()
 {
-    LinkManager::instance()->setConnectionsSuspended(tr("Connect not allowed during Flight Data replay."));
-    MAVLinkProtocol::instance()->suspendLogForReplay(true);
+    _setHostReplaySuspended(true);
 
     _playbackStartTimeMSecs = static_cast<quint64>(QDateTime::currentMSecsSinceEpoch());
     _playbackStartLogTimeUSecs = _logCurrentTimeUSecs;
@@ -201,7 +230,7 @@ void LogReplayWorker::beginStream()
     emit playbackStarted();
 }
 
-void LogReplayWorker::_readUntilHeartbeat()
+bool LogReplayWorker::_readUntilHeartbeat()
 {
     while (!_logFile.atEnd()) {
         QByteArray bytes;
@@ -213,15 +242,17 @@ void LogReplayWorker::_readUntilHeartbeat()
         if (_logFile.atEnd()) {
             pause();
             emit playbackAtEnd();
-            return;
+            return false;
         }
 
         _logCurrentTimeUSecs = nextTimeUSecs;
 
         if (msg.msgid == MAVLINK_MSG_ID_HEARTBEAT && msg.compid == MAV_COMP_ID_AUTOPILOT1) {
-            break;
+            return true;
         }
     }
+
+    return false;
 }
 
 void LogReplayWorker::setPlaybackSpeed(qreal playbackSpeed)

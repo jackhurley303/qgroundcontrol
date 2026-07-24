@@ -61,11 +61,20 @@ public:
     QString logFilename() const { return _logFilename; }
     void setLogFilename(const QString &logFilename);
 
+    /// true: the link bootstraps the vehicle but does not start streaming until the
+    /// caller calls LogReplayLink::beginStream(). Used by callers which must complete
+    /// their own initialization against the newly created vehicle first.
+    bool deferStreamStart() const { return _deferStreamStart; }
+    void setDeferStreamStart(bool defer) { _deferStreamStart = defer; }
+
 signals:
     void filenameChanged();
 
 private:
     QString _logFilename;
+    /// Intent of the caller which started this session only - deliberately not persisted
+    /// to settings nor carried across copyFrom(), so any other use streams immediately.
+    bool _deferStreamStart = false;
 };
 
 /*===========================================================================*/
@@ -126,7 +135,12 @@ private:
     quint64 _findLastTimestamp();
     quint64 _readNextMavlinkMessage(QByteArray &bytes);
     quint64 _readNextMavlinkMessage(QByteArray &bytes, mavlink_message_t &outMsg);
-    void _readUntilHeartbeat();
+    /// Reads up to and including the first autopilot HEARTBEAT, which bootstraps vehicle
+    /// creation without starting the full stream.
+    ///     @return true if that heartbeat was reached and playback can stream on from there
+    bool _readUntilHeartbeat();
+    /// Holds off new connections and live telemetry logging for the duration of a replay
+    void _setHostReplaySuspended(bool suspended);
     bool _loadLogFile();
     void _resetPlaybackToBeginning();
     void _signalCurrentLogTimeSecs();

@@ -1,6 +1,7 @@
 #include "LinkConfigurationTest.h"
 
 #include "LinkConfiguration.h"
+#include "LogReplayLink.h"
 #include "TCPLink.h"
 #include "UDPLink.h"
 
@@ -326,6 +327,34 @@ void LinkConfigurationTest::_testUdpSettingsRoundtrip()
         QCOMPARE(config.localPort(), quint16(14550));
         QCOMPARE(config.targetHosts().size(), 2);
     }
+}
+
+// ============================================================================
+// LogReplayConfiguration tests
+// ============================================================================
+
+void LinkConfigurationTest::_testLogReplayDeferStreamStartDefaultsOff()
+{
+    // Default must stay off: a caller which does not opt in gets a session that
+    // streams on its own, rather than a vehicle stranded on its bootstrap heartbeat.
+    LogReplayConfiguration config(QStringLiteral("Replay"));
+
+    QVERIFY(!config.deferStreamStart());
+}
+
+void LinkConfigurationTest::_testLogReplayDeferStreamStartNotCopied()
+{
+    // The flag is the intent of the caller which started one session, so a copy
+    // must fall back to the safe default rather than inherit the deferral.
+    LogReplayConfiguration source(QStringLiteral("ReplaySource"));
+    source.setLogFilename(QStringLiteral("/tmp/flight.tlog"));
+    source.setDeferStreamStart(true);
+
+    LogReplayConfiguration dest(QStringLiteral("ReplayDest"));
+    dest.copyFrom(&source);
+
+    QCOMPARE(dest.logFilename(), QStringLiteral("/tmp/flight.tlog"));
+    QVERIFY(!dest.deferStreamStart());
 }
 
 UT_REGISTER_TEST(LinkConfigurationTest, TestLabel::Unit, TestLabel::Comms)

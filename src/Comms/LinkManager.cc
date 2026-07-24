@@ -674,11 +674,12 @@ void LinkManager::freeMavlinkChannel(uint8_t channel)
     _mavlinkChannelsUsedBitMask &= ~(1 << channel);
 }
 
-LogReplayLink *LinkManager::startLogReplay(const QString &logFile)
+LogReplayLink *LinkManager::startLogReplay(const QString &logFile, bool deferStreamStart)
 {
     LogReplayConfiguration* const linkConfig = new LogReplayConfiguration(tr("Log Replay"));
     linkConfig->setLogFilename(logFile);
     linkConfig->setName(linkConfig->logFilenameShort());
+    linkConfig->setDeferStreamStart(deferStreamStart);
 
     SharedLinkConfigurationPtr sharedConfig = addConfiguration(linkConfig);
     if (createConnectedLink(sharedConfig)) {
