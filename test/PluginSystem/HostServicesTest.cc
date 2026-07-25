@@ -1,5 +1,6 @@
 #include "HostServicesTest.h"
 
+#include <QtCore/QRegularExpression>
 #include <QtTest/QSignalSpy>
 
 #include "AppSettings.h"
@@ -38,7 +39,9 @@ void HostServicesTest::_registryDuplicateFirstWins_test()
     QObject second;
 
     services.registerService(QStringLiteral("test.dup/1"), &first);
+    expectLogMessage("PluginSystem.QGCHostServices", QtWarningMsg, QRegularExpression("Service id already registered, ignoring duplicate"));
     services.registerService(QStringLiteral("test.dup/1"), &second);
+    verifyExpectedLogMessage();
 
     QCOMPARE(services.service(QStringLiteral("test.dup/1")), &first);
 }
@@ -116,7 +119,9 @@ void HostServicesTest::_replayInactiveNoOps_test()
     service.pause();
     service.beginStream();
     service.setPlaybackSpeed(2.0);
+    expectLogMessage("PluginSystem.QGCHostServices", QtWarningMsg, QRegularExpression("Ignoring non-positive playback speed"));
     service.setPlaybackSpeed(0.0);  // rejected by the documented > 0 contract
+    verifyExpectedLogMessage();
     service.movePlayhead(50.0);
     service.requestPlanReload();
     service.stopReplay();

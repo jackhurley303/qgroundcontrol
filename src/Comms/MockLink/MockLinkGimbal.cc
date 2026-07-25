@@ -78,32 +78,32 @@ bool MockLinkGimbal::handleMavlinkMessage(const mavlink_message_t &msg)
     switch (request.command) {
     case MAV_CMD_SET_MESSAGE_INTERVAL:
         if (_handleSetMessageInterval(request)) {
-            _sendCommandAck(request.command, MAV_RESULT_ACCEPTED);
+            _sendCommandAck(request.command, MAV_RESULT_ACCEPTED, request.target_component);
             return true;
         }
         return false;
 
     case MAV_CMD_REQUEST_MESSAGE:
         if (_handleRequestMessage(request)) {
-            _sendCommandAck(request.command, MAV_RESULT_ACCEPTED);
+            _sendCommandAck(request.command, MAV_RESULT_ACCEPTED, request.target_component);
             return true;
         }
         return false;
 
     case MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW:
         if (_handleGimbalManagerPitchYaw(request)) {
-            _sendCommandAck(request.command, MAV_RESULT_ACCEPTED);
+            _sendCommandAck(request.command, MAV_RESULT_ACCEPTED, request.target_component);
             return true;
         }
-        _sendCommandAck(request.command, MAV_RESULT_DENIED);
+        _sendCommandAck(request.command, MAV_RESULT_DENIED, request.target_component);
         return true;
 
     case MAV_CMD_DO_GIMBAL_MANAGER_CONFIGURE:
         if (_handleGimbalManagerConfigure(request)) {
-            _sendCommandAck(request.command, MAV_RESULT_ACCEPTED);
+            _sendCommandAck(request.command, MAV_RESULT_ACCEPTED, request.target_component);
             return true;
         }
-        _sendCommandAck(request.command, MAV_RESULT_DENIED);
+        _sendCommandAck(request.command, MAV_RESULT_DENIED, request.target_component);
         return true;
 
     default:
@@ -111,7 +111,7 @@ bool MockLinkGimbal::handleMavlinkMessage(const mavlink_message_t &msg)
     }
 }
 
-void MockLinkGimbal::_sendCommandAck(uint16_t command, uint8_t result)
+void MockLinkGimbal::_sendCommandAck(uint16_t command, uint8_t result, uint8_t sourceCompId)
 {
     QString commandName = MissionCommandTree::instance()->rawName(static_cast<MAV_CMD>(command));
     qCDebug(MockLinkGimbalLog) << "Sending command ACK -" << QString("%1(%2)").arg(commandName).arg(command) << "result:" << (result == MAV_RESULT_ACCEPTED ? "ACCEPTED" : result == MAV_RESULT_DENIED ? "DENIED" : QString::number(result));
@@ -119,8 +119,8 @@ void MockLinkGimbal::_sendCommandAck(uint16_t command, uint8_t result)
     mavlink_message_t msg{};
     (void) mavlink_msg_command_ack_pack_chan(
         _mockLink->vehicleId(),
-        MAV_COMP_ID_AUTOPILOT1,
-        _mockLink->mavlinkChannel(),
+        sourceCompId,
+        _mockLink->outgoingMavlinkChannel(),
         &msg,
         command,
         result,
@@ -274,7 +274,7 @@ void MockLinkGimbal::_sendGimbalManagerStatus()
     (void) mavlink_msg_gimbal_manager_status_pack_chan(
         _mockLink->vehicleId(),
         MAV_COMP_ID_AUTOPILOT1,
-        _mockLink->mavlinkChannel(),
+        _mockLink->outgoingMavlinkChannel(),
         &msg,
         0, // time_boot_ms
         0, // flags
@@ -312,7 +312,7 @@ void MockLinkGimbal::_sendGimbalDeviceAttitudeStatus()
     (void) mavlink_msg_gimbal_device_attitude_status_pack_chan(
         _mockLink->vehicleId(),
         kGimbalCompId,
-        _mockLink->mavlinkChannel(),
+        _mockLink->outgoingMavlinkChannel(),
         &msg,
         0, 0,   // target system, component
         0,      // time_boot_ms
@@ -343,7 +343,7 @@ void MockLinkGimbal::_sendGimbalManagerInformation()
     (void) mavlink_msg_gimbal_manager_information_pack_chan(
         _mockLink->vehicleId(),
         MAV_COMP_ID_AUTOPILOT1,
-        _mockLink->mavlinkChannel(),
+        _mockLink->outgoingMavlinkChannel(),
         &msg,
         0, // time_boot_ms
         capFlags,

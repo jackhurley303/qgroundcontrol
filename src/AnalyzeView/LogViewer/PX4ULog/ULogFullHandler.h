@@ -1,5 +1,7 @@
 #pragma once
 
+#include "LogParseResultPrivate.h"
+
 #include <QtCore/QHash>
 #include <QtCore/QPointF>
 #include <QtCore/QSet>
@@ -15,14 +17,16 @@
 
 struct LogParseResult;
 
-/// Full-scan ULog DataHandlerInterface implementation.
+/// \brief Full-scan ULog DataHandlerInterface implementation.
+///
 /// Streams through a ULog file in a single pass, collecting signal samples,
 /// parameters, log messages, events, and dropouts into a LogParseResult.
 /// Call finalize() after parsing to build mode segments and sort signal lists.
+///
 class ULogFullHandler final : public ulog_cpp::DataHandlerInterface
 {
 public:
-    explicit ULogFullHandler(LogParseResult &result);
+    explicit ULogFullHandler(LogParseResult &result, const ProgressCallback &progressCallback = nullptr); // progressCallback unused; progress is reported by the caller's chunk loop
     ~ULogFullHandler() = default;
 
     void error(const std::string &msg, bool is_recoverable) override;

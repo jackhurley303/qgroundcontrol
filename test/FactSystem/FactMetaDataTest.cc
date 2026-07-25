@@ -1,11 +1,16 @@
 #include "FactMetaDataTest.h"
 
+#include <QtCore/QJsonObject>
+#include <QtCore/QRegularExpression>
+#include <QtCore/QScopeGuard>
 #include <QtCore/QtNumeric>
 
 #include <cmath>
 #include <limits>
 
 #include "FactMetaData.h"
+#include "SettingsManager.h"
+#include "UnitsSettings.h"
 
 void FactMetaDataTest::_stringToTypeRoundTrip_test()
 {
@@ -264,7 +269,9 @@ void FactMetaDataTest::_defaultValueOutOfRange_test()
     meta.setRawMax(QVariant(100));
 
     // Attempting to set default outside range should not set it
+    expectLogMessage("FactSystem.FactMetaData", QtWarningMsg, QRegularExpression("Attempt to set default value which is outside min/max range"));
     meta.setRawDefaultValue(QVariant(200));
+    verifyExpectedLogMessage();
     QVERIFY(!meta.defaultValueAvailable());
 }
 
@@ -304,6 +311,40 @@ void FactMetaDataTest::_builtInTranslatorNorm_test()
     QCOMPARE_FUZZY(cooked.toDouble(), 50.0, 1e-5);
 }
 
+void FactMetaDataTest::_verticalMetersUnitsIntType_test()
+{
+    // "vertical m" is an artificial lookup unit. Int types don't get app settings
+    // translators, but the artificial unit string must never be shown to the user.
+    FactMetaData meta(FactMetaData::valueTypeInt32);
+    meta.setRawUnits("vertical m");
+
+    QCOMPARE(meta.cookedUnits(), QStringLiteral("m"));
+}
+
+void FactMetaDataTest::_verticalMetersUnitsFeetTranslation_test()
+{
+    // With vertical distance units set to feet, a double fact must translate to "ft"
+    // and the artificial-unit fallback must not clobber the translated units
+    Fact *const vertUnitsFact = SettingsManager::instance()->unitsSettings()->verticalDistanceUnits();
+    const QVariant savedUnits = vertUnitsFact->rawValue();
+    const auto restoreUnits = qScopeGuard([vertUnitsFact, savedUnits] {
+        vertUnitsFact->setRawValue(savedUnits);
+    });
+    // Changing units is a qgcRebootRequired setting, so the restart-app message
+    // fires — but only when the locale-dependent default isn't already feet, so
+    // it cannot be asserted deterministically with expectAppMessage()
+    ignoreLogMessage("API.QGCApplication.AppMessage", QtDebugMsg,
+                     QRegularExpression(QStringLiteral("Restart application for changes to take effect")));
+    vertUnitsFact->setRawValue(UnitsSettings::VerticalDistanceUnitsFeet);
+
+    FactMetaData meta(FactMetaData::valueTypeDouble);
+    meta.setRawUnits("vertical m");
+
+    QCOMPARE(meta.cookedUnits(), QStringLiteral("ft"));
+    QCOMPARE_FUZZY(meta.rawTranslator()(QVariant(1.0)).toDouble(), 3.28084, 1e-4);
+    QCOMPARE_FUZZY(meta.cookedTranslator()(QVariant(3.28084)).toDouble(), 1.0, 1e-4);
+}
+
 void FactMetaDataTest::_setMinMax_test()
 {
     FactMetaData meta(FactMetaData::valueTypeInt32);
@@ -315,6 +356,109 @@ void FactMetaDataTest::_setMinMax_test()
     QCOMPARE(meta.rawMax().toInt(), 10);
     QVERIFY(!meta.minIsDefaultForType());
     QVERIFY(!meta.maxIsDefaultForType());
+}
+
+void FactMetaDataTest::_maxStringLength_test()
+{
+    // Default: no limit
+    FactMetaData meta(FactMetaData::valueTypeString);
+    QCOMPARE(meta.maxStringLength(), 0);
+
+    // Parsed from JSON
+    QJsonObject json;
+    json.insert("name", "testString");
+    json.insert("type", "string");
+    json.insert("maxStringLength", 20);
+
+    FactMetaData* parsedMeta = FactMetaData::createFromJsonObject(json, {}, nullptr);
+    QCOMPARE(parsedMeta->maxStringLength(), 20);
+    delete parsedMeta;
+
+    // Copies must preserve the limit
+    meta.setMaxStringLength(16);
+    FactMetaData copy(meta);
+    QCOMPARE(copy.maxStringLength(), 16);
+}
+
+void FactMetaDataTest::_maxStringLengthNegativeRejected_test()
+{
+    // A negative maxStringLength can only be an authoring mistake; it must warn (which the
+    // resource audit turns into a CI failure) and fall back to 0 (no limit) instead of
+    // silently disabling length validation
+    QJsonObject json;
+    json.insert("name", "testString");
+    json.insert("type", "string");
+    json.insert("maxStringLength", -5);
+
+    expectLogMessage("FactSystem.FactMetaData", QtWarningMsg, QRegularExpression("Invalid maxStringLength"));
+    FactMetaData* parsedMeta = FactMetaData::createFromJsonObject(json, {}, nullptr);
+    verifyExpectedLogMessage();
+
+    QCOMPARE(parsedMeta->maxStringLength(), 0);
+    delete parsedMeta;
+
+    // The guard lives in the setter, so direct C++ callers are covered too
+    FactMetaData meta(FactMetaData::valueTypeString);
+    meta.setMaxStringLength(10);
+    expectLogMessage("FactSystem.FactMetaData", QtWarningMsg, QRegularExpression("Invalid maxStringLength"));
+    meta.setMaxStringLength(-1);
+    verifyExpectedLogMessage();
+    QCOMPARE(meta.maxStringLength(), 0);
+}
+
+void FactMetaDataTest::_maxStringLengthValidation_test()
+{
+    FactMetaData meta(FactMetaData::valueTypeString);
+    meta.setMaxStringLength(5);
+
+    QVariant typedValue;
+    QString errorString;
+
+    // Within the limit
+    QVERIFY(meta.convertAndValidateCooked(QStringLiteral("12345"), false /* convertOnly */, typedValue, errorString));
+    QVERIFY(errorString.isEmpty());
+
+    // Over the limit: rejected with an error
+    QVERIFY(!meta.convertAndValidateCooked(QStringLiteral("123456"), false /* convertOnly */, typedValue, errorString));
+    QVERIFY(!errorString.isEmpty());
+
+    // convertOnly skips validation
+    QVERIFY(meta.convertAndValidateCooked(QStringLiteral("123456"), true /* convertOnly */, typedValue, errorString));
+
+    // No limit set: any length accepted
+    FactMetaData unlimitedMeta(FactMetaData::valueTypeString);
+    QVERIFY(unlimitedMeta.convertAndValidateCooked(QString(100, u'x'), false /* convertOnly */, typedValue, errorString));
+}
+
+void FactMetaDataTest::_commentKeyAccepted_test()
+{
+    // "comment" is a documentation-only key: it must parse cleanly and have no effect
+    QJsonObject json;
+    json.insert("name", "testFact");
+    json.insert("type", "uint8");
+    json.insert("comment", "Values must stay in sync with some MAVLink enum");
+
+    FactMetaData* parsedMeta = FactMetaData::createFromJsonObject(json, {}, nullptr);
+    QCOMPARE(parsedMeta->name(), QStringLiteral("testFact"));
+    QCOMPARE(parsedMeta->type(), FactMetaData::valueTypeUint8);
+    delete parsedMeta;
+}
+
+void FactMetaDataTest::_unknownKeyRejected_test()
+{
+    // Unknown keys (e.g. typos like "enumStings") must be rejected loudly and fall back
+    // to default uint32 metadata
+    QJsonObject json;
+    json.insert("name", "testFact");
+    json.insert("type", "string");
+    json.insert("bogusKey", "anything");
+
+    expectLogMessage("FactSystem.FactMetaData", QtWarningMsg, QRegularExpression("Unknown key: bogusKey"));
+    FactMetaData* parsedMeta = FactMetaData::createFromJsonObject(json, {}, nullptr);
+    verifyExpectedLogMessage();
+
+    QCOMPARE(parsedMeta->type(), FactMetaData::valueTypeUint32);
+    delete parsedMeta;
 }
 
 UT_REGISTER_TEST(FactMetaDataTest, TestLabel::Unit)

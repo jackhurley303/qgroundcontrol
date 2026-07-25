@@ -8,6 +8,8 @@ include(CMakeDependentOption)
 # Load centralized build configuration from .github/build-config.json
 include(BuildConfig)
 
+set(QGC_CUSTOM_DIR "custom" CACHE STRING "Custom build overlay directory, relative to the source root")
+
 # ============================================================================
 # Application Metadata
 # ============================================================================
@@ -55,8 +57,35 @@ option(QGC_SPLIT_DWARF "Use -gsplit-dwarf + --gdb-index for faster Debug links (
 # Git options
 option(GIT_SUBMODULE "Update submodules during configuration" OFF)
 
+# ============================================================================
+# Dependency Resolution (system libraries vs CPM downloads)
+# ============================================================================
+# Lets packagers (FreeBSD Ports, flatpak, snap, Debian) build against system
+# libraries instead of fetching sources. These drive CPM's built-in switches:
+#   QGC_USE_SYSTEM_LIBS  -> find_package() first, fall back to CPM download.
+#   QGC_SYSTEM_LIBS_ONLY -> find_package() only; misses are hard configure errors.
+# Per-package FIND_PACKAGE_ARGUMENTS wiring is incremental (geographiclib is the
+# reference conversion): unconverted packages error under SYSTEM_LIBS_ONLY, and
+# packages needing the CPM source tree (qgc_require_cpm_added sites) fail either way.
+option(QGC_USE_SYSTEM_LIBS "Prefer system libraries (find_package) over CPM downloads" OFF)
+option(QGC_SYSTEM_LIBS_ONLY "Require system libraries; never download dependencies" OFF)
+
+if(QGC_USE_SYSTEM_LIBS OR QGC_SYSTEM_LIBS_ONLY)
+    set(CPM_USE_LOCAL_PACKAGES ON)
+endif()
+if(QGC_SYSTEM_LIBS_ONLY)
+    set(CPM_LOCAL_PACKAGES_ONLY ON)
+endif()
+
 # Link parallelism (Ninja only)
 set(QGC_LINK_PARALLEL_LEVEL 2 CACHE STRING "Maximum parallel link jobs (prevents OOM during LTO)")
+# ---- GStreamer SDK download / debug ----
+# Fail closed: only the SDK-download platforms (Android/macOS/iOS/Windows) hit this path;
+# Linux uses system pkg-config and never downloads, so ON is a no-op there.
+option(GStreamer_REQUIRE_CHECKSUM "Fail if an SDK download's checksum cannot be verified (set OFF to bypass)" ON)
+option(GStreamer_DEBUG "Print GStreamer CMake debug messages" OFF)
+set(QGC_GST_DOWNLOAD_TIMEOUT "" CACHE STRING "GStreamer SDK download wall-clock timeout (seconds, default 1200)")
+set(QGC_GST_DOWNLOAD_INACTIVITY_TIMEOUT "" CACHE STRING "GStreamer SDK download inactivity timeout (seconds, default 60)")
 
 # Coverage thresholds
 set(QGC_COVERAGE_LINE_THRESHOLD 30 CACHE STRING "Minimum line coverage percentage")
@@ -84,16 +113,14 @@ option(QGC_NO_SERIAL_LINK "Disable serial port communication" OFF)
 # Video Streaming Options
 # ============================================================================
 
-option(QGC_ENABLE_UVC "Enable UVC (USB Video Class) device support" ON)
 option(QGC_ENABLE_GST_VIDEOSTREAMING "Enable GStreamer video backend" ON)
-option(QGC_ENABLE_QT_VIDEOSTREAMING "Enable QtMultimedia video backend" OFF)
 
 # ============================================================================
 # MAVLink Configuration
 # ============================================================================
 
 set(QGC_MAVLINK_GIT_REPO "https://github.com/mavlink/mavlink.git" CACHE STRING "MAVLink repository URL")
-set(QGC_MAVLINK_GIT_TAG "b1fb5a1a32c41c6e46fea70600d626a0b5a8edbe" CACHE STRING "MAVLink repository commit/tag")
+set(QGC_MAVLINK_GIT_TAG "c409cf690454db6d3e004bd14173bc6c7ff1e0ff" CACHE STRING "MAVLink repository commit/tag")
 set(QGC_MAVLINK_DIALECT "all" CACHE STRING "MAVLink dialect")
 set(QGC_MAVLINK_VERSION "2.0" CACHE STRING "MAVLink protocol version")
 
@@ -156,13 +183,44 @@ set(QGC_IOS_TARGETED_DEVICE_FAMILY "1,2" CACHE STRING "iOS targeted device famil
 # ----------------------------------------------------------------------------
 # Linux Platform
 # ----------------------------------------------------------------------------
+# Distro-aware defaults for native (non-Docker) builds. Docker builds pass these
+# explicitly via -D (see deploy/docker/entrypoint.sh), which overrides the cache.
+include(LinuxDistro)
+
+# Fedora/Arch glibc exceeds the AppImage floor (appimagelint noise there); native
+# package generator follows the distro (DEB/RPM via CPack, Arch via makepkg).
+set(_qgc_appimagelint_default ON)
+set(_qgc_cpack_default "")
+if(QGC_LINUX_DISTRO_FAMILY STREQUAL "debian")
+    set(_qgc_cpack_default "DEB")
+elseif(QGC_LINUX_DISTRO_FAMILY STREQUAL "rhel")
+    set(_qgc_appimagelint_default OFF)
+    set(_qgc_cpack_default "RPM")
+elseif(QGC_LINUX_DISTRO_FAMILY STREQUAL "arch")
+    set(_qgc_appimagelint_default OFF)
+endif()
+
 option(QGC_CREATE_APPIMAGE "Create AppImage package after build" ON)
+option(QGC_RUN_APPIMAGELINT "Run the appimagelint distro-compatibility check after AppImage creation" ${_qgc_appimagelint_default})
 set(QGC_APPIMAGE_ICON_256_PATH "${CMAKE_SOURCE_DIR}/deploy/linux/QGroundControl_256.png" CACHE FILEPATH "AppImage 256x256 icon path")
 set(QGC_APPIMAGE_ICON_SCALABLE_PATH "${CMAKE_SOURCE_DIR}/deploy/linux/QGroundControl.svg" CACHE FILEPATH "AppImage SVG icon path")
 set(QGC_APPIMAGE_APPRUN_PATH "${CMAKE_SOURCE_DIR}/deploy/linux/AppRun" CACHE FILEPATH "AppImage AppRun script path")
 set(QGC_APPIMAGE_DESKTOP_ENTRY_PATH "${CMAKE_SOURCE_DIR}/deploy/linux/org.mavlink.qgroundcontrol.desktop.in" CACHE FILEPATH "AppImage desktop entry path")
 set(QGC_APPIMAGE_METADATA_PATH "${CMAKE_SOURCE_DIR}/deploy/linux/org.mavlink.qgroundcontrol.appdata.xml.in" CACHE FILEPATH "AppImage metadata path")
 set(QGC_APPIMAGE_APPDATA_DEVELOPER "qgroundcontrol" CACHE STRING "AppImage developer name")
+# Optional CPack native package built by the `qgc-package` target, alongside the
+# platform's default installer (AppImage / NSIS .exe / DMG). Empty = installer only.
+# WIN32/APPLE (not MACOS/LINUX) because Toolchain.cmake — which sets those — is
+# included after this file.
+if(WIN32)
+    set(_qgc_cpack_strings "" "NSIS" "IFW" "TXZ")
+elseif(APPLE)
+    set(_qgc_cpack_strings "" "DragNDrop" "Bundle" "productbuild" "IFW" "TXZ")
+else()
+    set(_qgc_cpack_strings "" "DEB" "RPM" "TXZ")
+endif()
+set(QGC_CPACK_GENERATOR "${_qgc_cpack_default}" CACHE STRING "Optional CPack generator for the qgc-package target (alongside the default installer)")
+set_property(CACHE QGC_CPACK_GENERATOR PROPERTY STRINGS ${_qgc_cpack_strings})
 
 # ----------------------------------------------------------------------------
 # Windows Platform
@@ -195,8 +253,8 @@ unset(_qmlls_ini_default)
 option(QT_QMLLINT_CONTEXT_PROPERTY_DUMP "Emit qmllint context property data (Qt 6.11+; no-op on older)" ON)
 option(QT_QML_GENERATE_QMLLINT "Run qmllint at build time" OFF)
 
-set(QGC_QT_DISABLE_DEPRECATED_UP_TO "0x060A00" CACHE STRING "Disable Qt APIs deprecated before this version")
-set(QGC_QT_ENABLE_STRICT_MODE_UP_TO "0x060A00" CACHE STRING "Enable strict Qt API mode up to this version")
+set(QGC_QT_DISABLE_DEPRECATED_UP_TO "0x060B00" CACHE STRING "Disable Qt APIs deprecated before this version")
+set(QGC_QT_ENABLE_STRICT_MODE_UP_TO "0x060B00" CACHE STRING "Enable strict Qt API mode up to this version")
 
 # Debug environment variables (uncomment to enable)
 # set(ENV{QT_DEBUG_PLUGINS} "1")

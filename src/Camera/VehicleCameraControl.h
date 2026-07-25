@@ -9,7 +9,8 @@ class QDomNode;
 class QDomNodeList;
 
 //-----------------------------------------------------------------------------
-/// Camera option exclusions
+/// \brief Camera option exclusions
+///
 class QGCCameraOptionExclusion : public QObject
 {
 public:
@@ -20,7 +21,8 @@ public:
 };
 
 //-----------------------------------------------------------------------------
-/// Camera option ranges
+/// \brief Camera option ranges
+///
 class QGCCameraOptionRange : public QObject
 {
 public:
@@ -34,7 +36,8 @@ public:
     QVariantList optVariants;
 };
 
-/// MAVLink Camera API controller - connected to a real mavlink v2 camera
+/// \brief MAVLink Camera API controller - connected to a real mavlink v2 camera
+///
 class VehicleCameraControl : public MavlinkCameraControlInterface
 {
     Q_OBJECT
@@ -295,6 +298,7 @@ protected:
     QTimer                              _streamInfoTimer;
     QTimer                              _streamStatusTimer;
     QTimer                              _cameraSettingsTimer;
+    QTimer                              _cameraSettingsRefreshTimer;
     QTimer                              _storageInfoTimer;
     QmlObjectListModel                  _streams;
     QStringList                         _streamLabels;

@@ -1,15 +1,18 @@
 #pragma once
 
+#include <QtCore/QElapsedTimer>
 #include <QtQmlIntegration/QtQmlIntegration>
 
 #include <memory>
 
 #include "LinkConfiguration.h"
+#include "MAVLinkMessageType.h"
 
 class LinkManager;
 class SigningController;
 
-/// The link interface defines the interface for all links used to communicate with the ground station application.
+/// \brief The link interface defines the interface for all links used to communicate with the ground station application.
+///
 class LinkInterface : public QObject
 {
     Q_OBJECT
@@ -33,9 +36,22 @@ public:
     bool decodedFirstMavlinkPacket() const { return _decodedFirstMavlinkPacket; }
     void setDecodedFirstMavlinkPacket(bool decodedFirstMavlinkPacket) { _decodedFirstMavlinkPacket = decodedFirstMavlinkPacket; }
     void writeBytesThreadSafe(const char *bytes, int length);
+    /// Single message-level send chokepoint: re-signs (if signing is active), serializes, then writes. All
+    /// outbound mavlink_message_t sends must route through here so signing can't be bypassed.
+    void sendMessageThreadSafe(mavlink_message_t &message);
     void addVehicleReference() { ++_vehicleReferenceCount; }
     void removeVehicleReference();
+    /// Called for each received v1 message which QGC drops. The warning is deferred by a grace
+    /// period since ArduPilot starts links in v1 and upgrades to v2 on first v2 message from QGC.
     void reportMavlinkV1Traffic();
+    /// Called when a v2 message is received: permanently suppresses the v1-only warning for this link.
+    void reportMavlinkV2Traffic() { _mavlinkV2TrafficSeen = true; }
+    bool mavlinkV1TrafficReported() const { return _mavlinkV1TrafficReported; }
+
+    /// Grace period a link is given to upgrade from MAVLink v1 to v2 (ArduPilot starts out in v1)
+    /// before the v1-only warning is reported. Settable for tests.
+    static constexpr int kMavlinkV1TrafficGraceMsecsDefault = 10000;
+    static void setMavlinkV1TrafficGraceMsecs(int msecs) { _mavlinkV1TrafficGraceMsecs = msecs; }
 
     /// Per-link signing state and confirmation state machine. Non-null after channel allocation.
     SigningController* signing() { return _signingController.get(); }
@@ -74,6 +90,9 @@ private:
     bool _decodedFirstMavlinkPacket = false;
     int _vehicleReferenceCount = 0;
     bool _mavlinkV1TrafficReported = false;
+    bool _mavlinkV2TrafficSeen = false;
+    QElapsedTimer _mavlinkV1FirstSeenTimer;
+    static inline int _mavlinkV1TrafficGraceMsecs = kMavlinkV1TrafficGraceMsecsDefault;
     /// Must `reset()` in `_freeMavlinkChannel` before LinkManager frees the channel so the
     /// controller can flush the final timestamp.
     std::unique_ptr<SigningController> _signingController;

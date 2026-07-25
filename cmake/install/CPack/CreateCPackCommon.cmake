@@ -17,6 +17,9 @@ set(CPACK_PACKAGE_DESCRIPTION ${PROJECT_DESCRIPTION})
 # set(CPACK_PACKAGE_DESCRIPTION_FILE "")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY ${PROJECT_DESCRIPTION})
 set(CPACK_PACKAGE_HOMEPAGE_URL ${PROJECT_HOMEPAGE_URL})
+# Generic maintainer contact; DEB/RPM generators inherit this when their own
+# maintainer field is unset (CPackDeb warns without it).
+set(CPACK_PACKAGE_CONTACT "Dronecode <dev@dronecode.org>")
 
 # ----------------------------------------------------------------------------
 # Package Files and Directories
@@ -31,7 +34,7 @@ elseif(WIN32)
 else()
     set(QGC_APP_ICON "${CMAKE_SOURCE_DIR}/resources/icons/qgroundcontrol.png")
 endif()
-# set(CPACK_PACKAGE_CHECKSUM "")
+set(CPACK_PACKAGE_CHECKSUM "SHA256")
 # set(CPACK_PROJECT_CONFIG_FILE "")
 
 # ----------------------------------------------------------------------------
@@ -51,6 +54,11 @@ set(CPACK_PACKAGE_EXECUTABLES ${CMAKE_PROJECT_NAME})
 # set(CPACK_STRIP_FILES
 set(CPACK_VERBATIM_VARIABLES ON)
 set(CPACK_THREADS 0)
+
+# Excludes the "appimage" component so CreateAppImage.cmake doesn't re-run during
+# .deb/.rpm staging; ALL_COMPONENTS_IN_ONE collapses the rest into one package.
+set(CPACK_COMPONENTS_ALL "Unspecified")
+set(CPACK_COMPONENTS_GROUPING ALL_COMPONENTS_IN_ONE)
 
 # ----------------------------------------------------------------------------
 # Source Package Configuration

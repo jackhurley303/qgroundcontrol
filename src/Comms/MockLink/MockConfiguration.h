@@ -10,8 +10,10 @@ class MockConfiguration : public LinkConfiguration
     Q_PROPERTY(int  firmware                             READ firmware                            WRITE setFirmware                            NOTIFY firmwareChanged)
     Q_PROPERTY(int  vehicle                              READ vehicle                             WRITE setVehicle                             NOTIFY vehicleChanged)
     Q_PROPERTY(bool sendStatus                           READ sendStatusText                      WRITE setSendStatusText                      NOTIFY sendStatusChanged)
+    Q_PROPERTY(bool apmStartFreshParams                  READ apmStartFreshParams                 WRITE setApmStartFreshParams                 NOTIFY apmStartFreshParamsChanged)
     Q_PROPERTY(bool enableCamera                         READ enableCamera                        WRITE setEnableCamera                        NOTIFY enableCameraChanged)
     Q_PROPERTY(bool enableGimbal                        READ enableGimbal                        WRITE setEnableGimbal                        NOTIFY enableGimbalChanged)
+    Q_PROPERTY(bool enableProximity                      READ enableProximity                     WRITE setEnableProximity                     NOTIFY enableProximityChanged)
     Q_PROPERTY(bool gimbalHasRollAxis                   READ gimbalHasRollAxis                   WRITE setGimbalHasRollAxis                   NOTIFY gimbalHasRollAxisChanged)
     Q_PROPERTY(bool gimbalHasPitchAxis                  READ gimbalHasPitchAxis                  WRITE setGimbalHasPitchAxis                  NOTIFY gimbalHasPitchAxisChanged)
     Q_PROPERTY(bool gimbalHasYawAxis                    READ gimbalHasYawAxis                    WRITE setGimbalHasYawAxis                    NOTIFY gimbalHasYawAxisChanged)
@@ -35,6 +37,21 @@ public:
     explicit MockConfiguration(const MockConfiguration *copy, QObject *parent = nullptr);
     ~MockConfiguration();
 
+    /// Options for the MockLink::start*MockLink helpers
+    enum Option {
+        OptionNone                = 0,
+        OptionSendStatusText      = 1 << 0,
+        OptionEnableCamera        = 1 << 1,
+        OptionEnableGimbal        = 1 << 2,
+        OptionEnableProximity     = 1 << 3,
+        OptionPreloadMission      = 1 << 4,
+        OptionStayMavlinkV1       = 1 << 5,
+        OptionAPMStartFreshParams = 1 << 6,
+        OptionFtpCapability       = 1 << 7,
+    };
+    Q_DECLARE_FLAGS(Options, Option)
+    Q_FLAG(Options)
+
     LinkType type() const final { return LinkConfiguration::TypeMock; }
     void copyFrom(const LinkConfiguration *source) final;
     void loadSettings(QSettings &settings, const QString &root) final;
@@ -57,10 +74,14 @@ public:
     void setVehicleType(MAV_TYPE vehicleType) { _vehicleType = vehicleType; emit vehicleChanged(); }
     bool sendStatusText() const { return _sendStatusText; }
     void setSendStatusText(bool sendStatusText) { _sendStatusText = sendStatusText; emit sendStatusChanged(); }
+    bool apmStartFreshParams() const { return _apmStartFreshParams; }
+    void setApmStartFreshParams(bool apmStartFreshParams) { _apmStartFreshParams = apmStartFreshParams; emit apmStartFreshParamsChanged(); }
     bool enableCamera() const { return _enableCamera; }
     void setEnableCamera(bool enableCamera) { _enableCamera = enableCamera; emit enableCameraChanged(); }
     bool enableGimbal() const { return _enableGimbal; }
     void setEnableGimbal(bool enableGimbal) { _enableGimbal = enableGimbal; emit enableGimbalChanged(); }
+    bool enableProximity() const { return _enableProximity; }
+    void setEnableProximity(bool enableProximity) { _enableProximity = enableProximity; emit enableProximityChanged(); }
 
     bool gimbalHasRollAxis() const { return _gimbalHasRollAxis; }
     void setGimbalHasRollAxis(bool value) { _gimbalHasRollAxis = value; emit gimbalHasRollAxisChanged(); }
@@ -111,12 +132,29 @@ public:
     bool startArmed() const { return _startArmed; }
     void setStartArmed(bool armed) { _startArmed = armed; }
 
+    // Test-only: when true, the simulated vehicle starts with a simple
+    // multirotor mission (takeoff, waypoint, RTL) already loaded. Not persisted.
+    bool preloadMission() const { return _preloadMission; }
+    void setPreloadMission(bool preloadMission) { _preloadMission = preloadMission; }
+
+    // Test-only: when true, outgoing traffic never upgrades from MAVLink v1 to v2,
+    // simulating a vehicle which only supports MAVLink v1. Not persisted.
+    bool stayMavlinkV1() const { return _stayMavlinkV1; }
+    void setStayMavlinkV1(bool stayV1) { _stayMavlinkV1 = stayV1; }
+
+    // Test-only: when true, the vehicle advertises MAV_PROTOCOL_CAPABILITY_FTP
+    // in AUTOPILOT_VERSION. Not persisted.
+    bool ftpCapability() const { return _ftpCapability; }
+    void setFtpCapability(bool ftpCapability) { _ftpCapability = ftpCapability; }
+
 signals:
     void firmwareChanged();
     void vehicleChanged();
     void sendStatusChanged();
+    void apmStartFreshParamsChanged();
     void enableCameraChanged();
     void enableGimbalChanged();
+    void enableProximityChanged();
     void gimbalHasRollAxisChanged();
     void gimbalHasPitchAxisChanged();
     void gimbalHasYawAxisChanged();
@@ -139,13 +177,18 @@ private:
     MAV_AUTOPILOT _firmwareType = MAV_AUTOPILOT_PX4;
     MAV_TYPE _vehicleType = MAV_TYPE_QUADROTOR;
     bool _sendStatusText = false;
+    bool _apmStartFreshParams = false;
     bool _enableCamera = false;
     bool _enableGimbal = false;
+    bool _enableProximity = false;
     FailureMode_t _failureMode = FailNone;
     bool _incrementVehicleId = true;
     uint16_t _boardVendorId = 0;
     uint16_t _boardProductId = 0;
     bool _startArmed = false;
+    bool _preloadMission = false;
+    bool _stayMavlinkV1 = false;
+    bool _ftpCapability = false;
 
     // Camera capability flags (defaults match current Camera 1 configuration)
     bool _cameraCaptureVideo = true;
@@ -170,8 +213,10 @@ private:
     static constexpr const char *_firmwareTypeKey = "FirmwareType";
     static constexpr const char *_vehicleTypeKey = "VehicleType";
     static constexpr const char *_sendStatusTextKey = "SendStatusText";
+    static constexpr const char *_apmStartFreshParamsKey = "APMStartFreshParams";
     static constexpr const char *_enableCameraKey = "EnableCamera";
     static constexpr const char *_enableGimbalKey = "EnableGimbal";
+    static constexpr const char *_enableProximityKey = "EnableProximity";
     static constexpr const char *_gimbalHasRollAxisKey = "GimbalHasRollAxis";
     static constexpr const char *_gimbalHasPitchAxisKey = "GimbalHasPitchAxis";
     static constexpr const char *_gimbalHasYawAxisKey = "GimbalHasYawAxis";
@@ -191,3 +236,5 @@ private:
     static constexpr const char *_cameraHasTrackingPointKey = "CameraHasTrackingPoint";
     static constexpr const char *_cameraHasTrackingRectangleKey = "CameraHasTrackingRectangle";
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(MockConfiguration::Options)

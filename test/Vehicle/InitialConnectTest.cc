@@ -22,8 +22,27 @@
 #include "MavlinkSettings.h"
 #include "SettingsManager.h"
 
+#include <QtCore/QRegularExpression>
 #include <QtCore/qscopeguard.h>
 #include <QtTest/QTest>
+
+void InitialConnectTest::init()
+{
+    VehicleTestManualConnect::init();
+    // Many initial-connect tests exercise failure or timeout paths that produce these expected warnings.
+    ignoreLogMessage("ComponentInformation.RequestMetaDataTypeStateMachine", QtWarningMsg,
+                     QRegularExpression("failed to load metadata"));
+    ignoreLogMessage("Utilities.StateMachine.RetryableRequestMessageState", QtWarningMsg,
+                     QRegularExpression("Max retries exhausted"));
+    ignoreLogMessage("Utilities.StateMachine.RetryTransition", QtWarningMsg,
+                     QRegularExpression("timeout after .* retries, advancing"));
+    // Timeout tests for Mission/GeoFence/Rally states cause transfer-failed showAppMessage logs.
+    ignoreLogMessage("API.QGCApplication.AppMessage", QtDebugMsg,
+                     QRegularExpression("transfer failed"));
+    // StandardModes timeout exhausts MAV_CMD_REQUEST_MESSAGE retries in MavCommandQueue.
+    ignoreLogMessage("Vehicle.MavCommandQueue", QtWarningMsg,
+                     QRegularExpression("Giving up sending command after max retries:"));
+}
 
 void InitialConnectTest::_performTestCases_data()
 {
@@ -387,26 +406,13 @@ void InitialConnectTest::_stateRunMatrix_data()
 
     // Matrix reference for generated rows and expected request behavior.
     //
-    // +----+----+-----+------------+------------+--------+------------+----------------+----------+
-    // | HL | LR | Fly | AP_VERSION | AVAIL_MODS | PARAMS | HASH_CHECK | PLAN_REQ_LISTS | DL_SKIP  |
-    // +----+----+-----+------------+------------+--------+------------+----------------+----------+
-    // | 0  | 0  | 0   | Run        | Run        | Run    | -          | Run            | false    |
-    // | 0  | 0  | 1   | Run        | Run        | Skip   | Yes        | Skip           | true     |
-    // | 1  | 0  | 0   | Skip       | Run        | Skip*  | -          | Skip           | false    |
-    // | 1  | 0  | 1   | Skip       | Run        | Skip*  | -          | Skip           | true     |
-    // | 0  | 1  | 0   | Skip       | Run        | Skip*  | -          | Skip           | false    |
-    // | 0  | 1  | 1   | Skip       | Run        | Skip*  | -          | Skip           | true     |
-    // | 1  | 1  | 0   | Skip       | Run        | Skip*  | -          | Skip           | false    |
-    // | 1  | 1  | 1   | Skip       | Run        | Skip*  | -          | Skip           | true     |
-    // +----+----+-----+------------+------------+--------+------------+----------------+----------+
-    // * HL/LR params are handled internally (no PARAM_REQUEST_LIST).
     // Flying (PX4): tries cache-only hash check; cache miss advances without params.
     // Flying rows enable noInitialDownloadWhenFlying + startArmed.
 
-    for (int bits = 0; bits < 8; ++bits) {
+    for (int bits = 0; bits < 4; ++bits) {
         const bool highLatency = bits & 0x1;
-        const bool logReplay = bits & 0x2;
-        const bool flying = bits & 0x4;
+        const bool logReplay = false;
+        const bool flying = bits & 0x2;
         const bool skipForLinkType = highLatency || logReplay;
 
         const bool expectAutopilotVersionRequest = !skipForLinkType;

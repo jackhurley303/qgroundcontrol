@@ -8,6 +8,7 @@
 #include "Fixtures/RAIIFixtures.h"
 
 #include <QtCore/QSettings>
+#include <QtTest/QSignalSpy>
 
 // ============================================================================
 // LinkConfiguration base tests (exercised via TCPConfiguration)
@@ -198,6 +199,63 @@ void LinkConfigurationTest::_testTcpSettingsRoundtrip()
     }
 }
 
+void LinkConfigurationTest::_testTcpHostnameRoundtrip()
+{
+    TestFixtures::TempDirFixture tmpDir;
+    QVERIFY(tmpDir.isValid());
+    const QString iniPath = tmpDir.path() + QStringLiteral("/settings.ini");
+
+    const QString root = QStringLiteral("LinkConfigTest_TCPHost");
+    QSettings settings(iniPath, QSettings::IniFormat);
+
+    {
+        TCPConfiguration config(QStringLiteral("TCPSave"));
+        config.setHost(QStringLiteral("my-drone.local"));
+        config.setPort(5760);
+        config.saveSettings(settings, root);
+    }
+
+    {
+        TCPConfiguration config(QStringLiteral("TCPLoad"));
+        config.loadSettings(settings, root);
+        QCOMPARE(config.host(), QStringLiteral("my-drone.local"));
+        QCOMPARE(config.port(), quint16(5760));
+    }
+}
+
+void LinkConfigurationTest::_testSuppressAutoReconnectNotPersisted()
+{
+    TestFixtures::TempDirFixture tmpDir;
+    QVERIFY(tmpDir.isValid());
+    const QString iniPath = tmpDir.path() + QStringLiteral("/settings.ini");
+
+    const QString root = QStringLiteral("LinkConfigTest_Suppress");
+    QSettings settings(iniPath, QSettings::IniFormat);
+
+    TCPConfiguration config(QStringLiteral("SuppressTest"));
+    QVERIFY(!config.suppressAutoReconnect());
+
+    config.setSuppressAutoReconnect(true);
+    QVERIFY(config.suppressAutoReconnect());
+    config.saveSettings(settings, root);
+
+    TCPConfiguration loaded(QStringLiteral("SuppressLoad"));
+    loaded.loadSettings(settings, root);
+    QVERIFY(!loaded.suppressAutoReconnect());
+}
+
+void LinkConfigurationTest::_testReconnectBackoff()
+{
+    TCPConfiguration config(QStringLiteral("BackoffTest"));
+    QVERIFY(config.reconnectReady());
+
+    config.noteReconnectAttempt();
+    QVERIFY(!config.reconnectReady());
+
+    config.resetReconnectBackoff();
+    QVERIFY(config.reconnectReady());
+}
+
 // ============================================================================
 // UDPConfiguration tests
 // ============================================================================
@@ -355,6 +413,74 @@ void LinkConfigurationTest::_testLogReplayDeferStreamStartNotCopied()
 
     QCOMPARE(dest.logFilename(), QStringLiteral("/tmp/flight.tlog"));
     QVERIFY(!dest.deferStreamStart());
+}
+
+void LinkConfigurationTest::_testUdpHostnamePreservedWhenUnresolved()
+{
+    ignoreLogMessage("Comms.UDPLink", QtWarningMsg, QRegularExpression("Could not resolve host"));
+    UDPConfiguration config(QStringLiteral("UDPUnresolved"));
+    config.addHost(QStringLiteral("drone.invalid"), 14550);
+
+    const auto targets = config.targetHosts();
+    QCOMPARE(targets.size(), 1);
+    const auto target = targets.constFirst();
+    QCOMPARE(target->hostname, QStringLiteral("drone.invalid"));
+    QVERIFY(target->address.isNull());
+    QCOMPARE(config.hostList().constFirst(), QStringLiteral("drone.invalid:14550"));
+}
+
+void LinkConfigurationTest::_testUdpHostnameRoundtrip()
+{
+    ignoreLogMessage("Comms.UDPLink", QtWarningMsg, QRegularExpression("Could not resolve host"));
+    TestFixtures::TempDirFixture tmpDir;
+    QVERIFY(tmpDir.isValid());
+    const QString iniPath = tmpDir.path() + QStringLiteral("/settings.ini");
+
+    const QString root = QStringLiteral("LinkConfigTest_UDPHost");
+    QSettings settings(iniPath, QSettings::IniFormat);
+
+    {
+        UDPConfiguration config(QStringLiteral("UDPSave"));
+        config.setLocalPort(14550);
+        config.addHost(QStringLiteral("drone.invalid"), 14550);
+        config.saveSettings(settings, root);
+    }
+
+    {
+        UDPConfiguration config(QStringLiteral("UDPLoad"));
+        config.loadSettings(settings, root);
+        QCOMPARE(config.targetHosts().size(), 1);
+        QCOMPARE(config.targetHosts().constFirst()->hostname, QStringLiteral("drone.invalid"));
+    }
+}
+
+void LinkConfigurationTest::_testUdpRemoveByHostname()
+{
+    ignoreLogMessage("Comms.UDPLink", QtWarningMsg, QRegularExpression("Could not resolve host"));
+    UDPConfiguration config(QStringLiteral("UDPRemoveByName"));
+    config.addHost(QStringLiteral("drone.invalid"), 14550);
+    QCOMPARE(config.targetHosts().size(), 1);
+
+    config.removeHost(QStringLiteral("drone.invalid:14550"));
+    QCOMPARE(config.targetHosts().size(), 0);
+    QVERIFY(config.hostList().isEmpty());
+}
+
+void LinkConfigurationTest::_testUdpResolveHostsUpdatesAddress()
+{
+    UDPConfiguration config(QStringLiteral("UDPResolve"));
+    config.addHost(QStringLiteral("localhost"), 14550);
+
+    auto targets = config.targetHosts();
+    QCOMPARE(targets.size(), 1);
+    QCOMPARE(targets.constFirst()->hostname, QStringLiteral("localhost"));
+
+    config.resolveHosts();
+
+    targets = config.targetHosts();
+    const QHostAddress resolved = targets.constFirst()->address;
+    QVERIFY(!resolved.isNull());
+    QVERIFY(resolved.isLoopback());
 }
 
 UT_REGISTER_TEST(LinkConfigurationTest, TestLabel::Unit, TestLabel::Comms)

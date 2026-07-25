@@ -18,6 +18,10 @@ on:
         default: '50'
         type: string
 
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.build_type || 'default' }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   actions: read
@@ -43,9 +47,10 @@ jobs:
           egress-policy: audit
 
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Build Setup
         uses: ./.github/actions/build-setup
@@ -63,7 +68,7 @@ jobs:
       - name: Install ClangBuildAnalyzer
         run: |
           set -euo pipefail
-          curl -fsSL \
+          curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors --max-time 300 \
             https://github.com/aras-p/ClangBuildAnalyzer/releases/download/v1.6.0/ClangBuildAnalyzer-linux-x64 \
             -o /tmp/ClangBuildAnalyzer
           chmod +x /tmp/ClangBuildAnalyzer

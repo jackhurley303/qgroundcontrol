@@ -6,6 +6,8 @@
 #include "UnitTest.h"
 #include "Vehicle.h"
 
+#include <QtCore/QRegularExpression>
+
 void MissionCommandTreeTest::init()
 {
     UnitTest::init();
@@ -176,6 +178,7 @@ void MissionCommandTreeTest::testOverride()
 
 void MissionCommandTreeTest::testAllTrees()
 {
+    ignoreLogMessage("FirmwarePlugin.ParameterMetaData", QtWarningMsg, QRegularExpression("Skipping invalid enum value"));
     QList<MAV_AUTOPILOT> firmwareList;
     QList<MAV_TYPE> vehicleList;
     firmwareList << MAV_AUTOPILOT_GENERIC << MAV_AUTOPILOT_PX4 << MAV_AUTOPILOT_ARDUPILOTMEGA;
@@ -188,7 +191,7 @@ void MissionCommandTreeTest::testAllTrees()
                 // VTOL in ArduPilot shows up as plane so we can test this pair
                 continue;
             }
-            qDebug() << firmwareType << vehicleType;
+            qCDebug(UnitTestLog) << firmwareType << vehicleType;
             Vehicle* const vehicle = new Vehicle(firmwareType, vehicleType, this);
             QVERIFY(MissionCommandTree::instance()->getUIInfo(vehicle, QGCMAVLink::VehicleClassMultiRotor,
                                                               MAV_CMD_NAV_WAYPOINT) != nullptr);

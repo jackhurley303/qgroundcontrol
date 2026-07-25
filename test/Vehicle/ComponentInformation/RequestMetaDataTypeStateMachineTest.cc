@@ -2,6 +2,7 @@
 
 #include <QtCore/QDir>
 #include <QtCore/QFile>
+#include <QtCore/QRegularExpression>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QUuid>
 #include <QtTest/QSignalSpy>
@@ -134,6 +135,9 @@ void RequestMetaDataTypeStateMachineTest::_requestCompletesForArduPilot()
 
 void RequestMetaDataTypeStateMachineTest::_requestSkipsCompInfoOnHighLatencyLink()
 {
+    // High-latency link skips metadata requests, resulting in the expected failure warning.
+    ignoreLogMessage("ComponentInformation.RequestMetaDataTypeStateMachine", QtWarningMsg,
+                     QRegularExpression("failed to load metadata"));
     _disconnectMockLink();
 
     LinkManager::instance()->setConnectionsAllowed();

@@ -16,24 +16,30 @@ from __future__ import annotations
 import argparse
 import functools
 import os
+import re
 import shutil
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 
 _tools_dir = Path(__file__).resolve().parents[1]
 if str(_tools_dir) not in sys.path:
     sys.path.insert(0, str(_tools_dir))
 
+from _bootstrap import ensure_tools_dir
+
+ensure_tools_dir(__file__)
+
 from common.file_traversal import find_repo_root
+from common.io import read_toml
+from common.platform import is_windows
 
 
 @functools.lru_cache(maxsize=1)
 def load_package_groups() -> dict[str, list[str]]:
     """Load dependency groups from tools/pyproject.toml."""
     pyproject_path = find_repo_root() / "tools" / "pyproject.toml"
-    data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+    data = read_toml(pyproject_path)
     optional = data.get("project", {}).get("optional-dependencies", {})
     if not isinstance(optional, dict):
         raise ValueError("project.optional-dependencies is missing from tools/pyproject.toml")
@@ -44,12 +50,7 @@ def load_package_groups() -> dict[str, list[str]]:
             groups[group] = [str(pkg) for pkg in packages]
 
     groups["all"] = sorted(
-        {
-            package
-            for group, packages in groups.items()
-            if group != "all"
-            for package in packages
-        }
+        {package for group, packages in groups.items() if group != "all" for package in packages}
     )
     return groups
 
@@ -76,14 +77,14 @@ def get_venv_path() -> Path:
 
 def get_activate_script(venv_path: Path) -> Path:
     """Get path to activate script based on platform."""
-    if sys.platform == "win32":
+    if is_windows():
         return venv_path / "Scripts" / "activate.bat"
     return venv_path / "bin" / "activate"
 
 
 def get_python_executable(venv_path: Path) -> Path:
     """Get path to Python executable in venv."""
-    if sys.platform == "win32":
+    if is_windows():
         return venv_path / "Scripts" / "python.exe"
     return venv_path / "bin" / "python"
 
@@ -112,15 +113,17 @@ def install_packages(venv_path: Path, packages: list[str]) -> None:
 
     if has_uv():
         print("Using uv (fast mode)")
-        cmd = ["uv", "pip", "install", "--python", str(python)] + packages
+        cmd = ["uv", "pip", "install", "--python", str(python), *packages]
     else:
-        print("Using pip (install uv for faster installs: curl -LsSf https://astral.sh/uv/install.sh | sh)")
+        print(
+            "Using pip (install uv for faster installs: curl -LsSf https://astral.sh/uv/install.sh | sh)"
+        )
         # Upgrade pip first
         subprocess.run(
             [str(python), "-m", "pip", "install", "--quiet", "--upgrade", "pip"],
             check=True,
         )
-        cmd = [str(python), "-m", "pip", "install"] + packages
+        cmd = [str(python), "-m", "pip", "install", *packages]
 
     subprocess.run(cmd, check=True)
 
@@ -150,7 +153,7 @@ def sync_groups_with_uv(venv_path: Path, group_spec: str) -> None:
 
     env = os.environ.copy()
     env["VIRTUAL_ENV"] = str(venv_path)
-    scripts_dir = venv_path / ("Scripts" if sys.platform == "win32" else "bin")
+    scripts_dir = venv_path / ("Scripts" if is_windows() else "bin")
     env["PATH"] = f"{scripts_dir}{os.pathsep}{env.get('PATH', '')}"
     subprocess.run(cmd, check=True, env=env)
 
@@ -161,6 +164,25 @@ def list_packages(venv_path: Path) -> None:
     subprocess.run([str(python), "-m", "pip", "list"])
 
 
+def check_installed(packages: list[str]) -> int:
+    """Exit 0 only if every package's distribution resolves in the running interpreter."""
+    import importlib.metadata as metadata
+
+    missing: list[str] = []
+    for req in packages:
+        name = re.split(r"[<>=!~;\[ ]", req, maxsplit=1)[0].strip()
+        if not name:
+            continue
+        try:
+            metadata.version(name)
+        except metadata.PackageNotFoundError:
+            missing.append(name)
+    if missing:
+        print(f"Missing from environment: {', '.join(missing)}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def get_packages_for_groups(group_spec: str) -> list[str]:
     """Get packages for comma-separated group specification."""
     package_groups = load_package_groups()
@@ -169,7 +191,9 @@ def get_packages_for_groups(group_spec: str) -> list[str]:
 
     for group in groups:
         if group not in package_groups:
-            raise ValueError(f"Unknown group: {group}. Valid groups: {', '.join(package_groups.keys())}")
+            raise ValueError(
+                f"Unknown group: {group}. Valid groups: {', '.join(package_groups.keys())}"
+            )
         packages.update(package_groups[group])
 
     return sorted(packages)
@@ -182,13 +206,13 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Groups:
+  scripts   Code-generator deps (defusedxml, httpx, jinja2)
   precommit Pre-commit hooks only
   test      Python test tools (pytest, jinja2, pyyaml)
   ci        Pre-commit hooks, meson, ninja (default)
   qt        Qt installation tools (aqtinstall)
   coverage  Code coverage tools (gcovr)
   dev       Development tools (jinja2, pyyaml, pymavlink)
-  lsp       LSP server (pygls, lsprotocol)
   all       Everything
 
 Examples:
@@ -217,6 +241,11 @@ To install uv (recommended, 10-100x faster than pip):
         action="store_true",
         help="Show what would be installed without installing",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Verify the running interpreter has the group's packages; exit 1 if any missing",
+    )
 
     return parser.parse_args(args)
 
@@ -234,14 +263,24 @@ def main() -> int:
                 print(f"    - {pkg}")
         return 0
 
-    try:
-        packages = get_packages_for_groups(args.group)
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
+    # uv sync reads pyproject/uv.lock itself, so the recommended bootstrap path
+    # avoids parsing TOML here — keeping system-Python 3.10 working without tomli.
+    uv = has_uv()
+
+    packages: list[str] = []
+    if not uv or args.check or args.dry_run:
+        try:
+            packages = get_packages_for_groups(args.group)
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+    if args.check:
+        return check_installed(packages)
 
     print(f"Setting up Python environment with group: {args.group}")
-    print(f"Packages: {', '.join(packages)}")
+    if packages:
+        print(f"Packages: {', '.join(packages)}")
 
     if args.dry_run:
         print("\nDry run - no changes made")
@@ -251,7 +290,7 @@ def main() -> int:
 
     try:
         create_venv(venv_path)
-        if has_uv():
+        if uv:
             print("Using uv sync (locked mode)")
             sync_groups_with_uv(venv_path, args.group)
         else:
@@ -266,7 +305,7 @@ def main() -> int:
     print()
     print("Done! Activate the environment with:")
     activate_script = get_activate_script(venv_path)
-    if sys.platform == "win32":
+    if is_windows():
         print(f"  {activate_script}")
     else:
         print(f"  source {activate_script}")

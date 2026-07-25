@@ -19,7 +19,6 @@ endif()
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-# Add qml module
 qt_add_library(PX4FirmwareModule STATIC)
 
 qt_add_qml_module(PX4FirmwareModule

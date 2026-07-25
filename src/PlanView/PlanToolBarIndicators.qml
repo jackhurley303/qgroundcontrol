@@ -122,6 +122,7 @@ RowLayout {
     QGCPalette { id: qgcPal }
 
     QGCButton {
+        objectName: "planToolbar_openButton"
         text: qsTr("Open")
         iconSource: "/qmlimages/Plan.svg"
         enabled: !_planMasterController.syncInProgress
@@ -129,6 +130,7 @@ RowLayout {
     }
 
     QGCButton {
+        objectName: "planToolbar_saveButton"
         text: qsTr("Save")
         iconSource: "/res/SaveToDisk.svg"
         enabled: !_syncInProgress && _hasPlanItems
@@ -138,15 +140,17 @@ RowLayout {
 
     QGCButton {
         id: uploadButton
+        objectName: "planToolbar_uploadButton"
         text: qsTr("Upload")
         iconSource: "/res/UploadToVehicle.svg"
-        enabled: !_syncInProgress && _hasPlanItems
+        enabled: !_syncInProgress && _hasPlanItems && !_controllerOffline
         visible: !_syncInProgress
-        primary: _uploadDirty
+        primary: _uploadDirty && !_controllerOffline
         onClicked: { toolbarButtonClicked(); _uploadClicked() }
     }
 
     QGCButton {
+        objectName: "planToolbar_clearButton"
         text: qsTr("Clear")
         iconSource: "/res/TrashCan.svg"
         enabled: !_syncInProgress

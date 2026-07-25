@@ -17,20 +17,17 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
+env:
+  # build-mode:manual can't produce overlay DBs (those need build-mode:none); disable the
+  # overlay attempt so CodeQL doesn't log the "falling back to a full database" message.
+  CODEQL_ACTION_OVERLAY_ANALYSIS: "false"
+
 permissions:
   contents: read
-  id-token: write
-  attestations: write
-  security-events: write
   actions: read
-  checks: write
-
-env:
-  IS_STABLE_BUILD: ${{ (github.ref_type == 'tag' || contains(github.ref, 'Stable')) && 'true' || 'false' }}
 
 jobs:
   changes:
-    if: github.event_name == 'pull_request'
     uses: ./.github/workflows/_detect-changes.yml
     with:
       platform: linux
@@ -38,30 +35,48 @@ jobs:
   build:
     name: Release ${{ matrix.arch }}
     needs: changes
-    if: always() && !cancelled() && (needs.changes.outputs.should_build == 'true' || needs.changes.result == 'skipped')
-    runs-on: ${{ matrix.os }}
+    if: needs.changes.outputs.should_build == 'true'
+    runs-on: ${{ matrix.runs_on }}
     timeout-minutes: 120
+
+    # security-events: write is scoped here (CodeQL runs only in this job),
+    # not at workflow level — the debug/changes jobs cannot upload SARIF.
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      security-events: write
+      actions: read
+      checks: write
 
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04-arm, ubuntu-22.04]
         include:
-          - os: ubuntu-24.04-arm
+          - arch: linux_gcc_arm64
+            runs_on: ${{ github.repository_owner == 'mavlink' && format('runs-on={0}/runner=linux-arm64-builder', github.run_id) || 'ubuntu-24.04-arm' }}
             package: QGroundControl-aarch64
             host: linux_arm64
-            arch: linux_gcc_arm64
 
-          - os: ubuntu-22.04
+          - arch: linux_gcc_64
+            runs_on: ${{ github.repository_owner == 'mavlink' && format('runs-on={0}/runner=linux-x64-builder-60gb', github.run_id) || 'ubuntu-24.04' }}
             package: QGroundControl-x86_64
             host: linux
-            arch: linux_gcc_64
 
     defaults:
       run:
         shell: bash
 
     steps:
+      - name: Enable RunsOn magic cache
+        if: github.repository_owner == 'mavlink'
+        uses: runs-on/action@v2
+        with:
+          metrics: cpu,network,memory,disk,io
+          show_costs: summary
+
+      # harden-runner is x86_64 Linux only — skip on the ubuntu-24.04-arm matrix entry.
+      # macOS/Windows runners no-op silently, so other workflows don't need the guard.
       - name: Harden Runner
         if: runner.arch != 'ARM64'
         uses: step-security/harden-runner@v2
@@ -69,9 +84,10 @@ jobs:
           egress-policy: audit
 
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 1 || 0 }}
+          persist-credentials: false
 
       - name: Build Setup
         uses: ./.github/actions/build-setup
@@ -84,18 +100,21 @@ jobs:
         uses: ./.github/actions/install-dependencies
 
       - name: Initialize CodeQL
-        if: github.event_name != 'pull_request' && runner.arch != 'ARM64'
+        if: (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && runner.arch != 'ARM64'
         uses: github/codeql-action/init@v4
         with:
           languages: c-cpp
+          # c-cpp can't use overlay DBs (those require build-mode: none, interpreted-only); declare manual to match the cmake-build step below and silence the "undefined build-mode" fallback warning.
+          build-mode: manual
           config-file: ./.github/codeql/codeql-config.yml
+          trap-caching: false
+          dependency-caching: false
 
       - name: Configure
         uses: ./.github/actions/cmake-configure
         with:
           build-dir: ${{ runner.temp }}/build
           build-type: Release
-          stable: ${{ env.IS_STABLE_BUILD }}
 
       - name: Build
         uses: ./.github/actions/cmake-build
@@ -107,7 +126,7 @@ jobs:
 
       - name: Perform CodeQL Analysis
         id: codeql
-        if: github.event_name != 'pull_request' && runner.arch != 'ARM64'
+        if: (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && runner.arch != 'ARM64'
         continue-on-error: true
         uses: github/codeql-action/analyze@v4
         with:
@@ -123,14 +142,14 @@ jobs:
           binary-path: ${{ runner.temp }}/build/Release/QGroundControl
 
       - name: Analyze binary size
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.arch == 'linux_gcc_64'
         uses: ./.github/actions/size-analysis
         with:
           binary-path: ${{ runner.temp }}/build/Release/QGroundControl
           output-file: ${{ runner.temp }}/build/metrics.json
 
       - name: Upload metrics artifact
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.arch == 'linux_gcc_64'
         uses: actions/upload-artifact@v7
         with:
           name: size-metrics
@@ -139,8 +158,10 @@ jobs:
           retention-days: 90
 
       - name: Create AppImage
-        working-directory: ${{ runner.temp }}/build
-        run: cmake --install . --config Release
+        uses: ./.github/actions/cmake-install
+        with:
+          build-dir: ${{ runner.temp }}/build
+          build-type: Release
 
       - name: Verify AppImage
         uses: ./.github/actions/verify-executable
@@ -160,33 +181,41 @@ jobs:
 
   debug-matrix:
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.outputs.should_build == 'true' || needs.changes.result == 'skipped') }}
+    if: needs.changes.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 1
     outputs:
       include: ${{ steps.build.outputs.include }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/scripts/linux_debug_matrix.py
+            .github/scripts/ci_bootstrap.py
+            tools/_bootstrap.py
+            tools/common/__init__.py
+            tools/common/file_traversal.py
+            tools/common/gh_actions.py
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+          persist-credentials: false
       - name: Build matrix
         id: build
         env:
           IS_PR: ${{ github.event_name == 'pull_request' && '1' || '0' }}
-        # Sanitizers add ~30-50min and rarely catch what coverage tests miss;
-        # gate them on push/merge_group so PR feedback stays fast.
-        run: |
-          coverage='{"job_name":"Test + Coverage linux_gcc_64 Debug","mode":"coverage","timeout_minutes":60,"configure_extra":"","exclude_labels":"Flaky|Network"}'
-          sanitizers='{"job_name":"Sanitizers linux_gcc_64 Debug (ASan+UBSan)","mode":"sanitizers","timeout_minutes":120,"configure_extra":"-DQGC_ENABLE_ASAN=ON -DQGC_ENABLE_UBSAN=ON","exclude_labels":"Flaky|Network|NoSanitizer"}'
-          if [ "$IS_PR" = "1" ]; then
-            echo "include=[${coverage}]" >> "$GITHUB_OUTPUT"
-          else
-            echo "include=[${coverage},${sanitizers}]" >> "$GITHUB_OUTPUT"
-          fi
+        run: python3 .github/scripts/linux_debug_matrix.py
 
   debug-validation:
     name: ${{ matrix.job_name }}
     needs: [changes, debug-matrix]
-    if: ${{ !cancelled() && (needs.changes.outputs.should_build == 'true' || needs.changes.result == 'skipped') }}
-    runs-on: ubuntu-22.04
+    if: needs.changes.outputs.should_build == 'true'
+    runs-on: ${{ github.repository_owner == 'mavlink' && format('runs-on={0}/runner=linux-x64-tester', github.run_id) || 'ubuntu-24.04' }}
     timeout-minutes: ${{ matrix.timeout_minutes }}
+
+    # checks: write scoped here: only this job reports test results (dorny/test-reporter).
+    permissions:
+      contents: read
+      checks: write
 
     strategy:
       fail-fast: false
@@ -198,13 +227,22 @@ jobs:
         shell: bash
 
     steps:
+      - name: Enable RunsOn magic cache
+        if: github.repository_owner == 'mavlink'
+        uses: runs-on/action@v2
+        with:
+          metrics: cpu,network,memory,disk,io
+          show_costs: summary
+
       - name: Harden Runner
         uses: step-security/harden-runner@v2
         with:
           egress-policy: audit
 
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Build Setup
         uses: ./.github/actions/build-setup
@@ -231,7 +269,6 @@ jobs:
           build-type: Debug
           testing: 'true'
           coverage: ${{ matrix.mode == 'coverage' && 'true' || 'false' }}
-          stable: ${{ env.IS_STABLE_BUILD }}
           extra-args: ${{ matrix.configure_extra }}
 
       - name: Build
@@ -240,8 +277,9 @@ jobs:
           build-dir: ${{ runner.temp }}/build
           build-type: Debug
 
-      - name: Run Unit Tests
-        id: tests
+      # Split by label so Unit parallelizes; Integration serializes on shared MockLink/LinkManager state.
+      - name: Run Unit Tests (parallel)
+        id: unit_tests
         uses: ./.github/actions/run-unit-tests
         env:
           ASAN_OPTIONS: ${{ matrix.mode == 'sanitizers' && 'detect_leaks=1:halt_on_error=1:check_initialization_order=1' || '' }}
@@ -249,44 +287,78 @@ jobs:
           UBSAN_OPTIONS: ${{ matrix.mode == 'sanitizers' && format('print_stacktrace=1:halt_on_error=1:suppressions={0}/build/ubsan_suppressions.txt', runner.temp) || '' }}
         with:
           build-dir: ${{ runner.temp }}/build
-          junit-output: junit-results-linux-${{ matrix.mode }}.xml
-          ctest-output: test-output-linux-${{ matrix.mode }}.txt
-          include-labels: 'Unit|Integration'
+          junit-output: junit-results-linux-${{ matrix.mode }}-unit.xml
+          ctest-output: test-output-linux-${{ matrix.mode }}-unit.txt
+          include-labels: 'Unit'
           exclude-labels: ${{ matrix.exclude_labels }}
           # Coverage requires serial execution (gcov writes race); sanitizers don't.
           parallel: ${{ matrix.mode == 'coverage' && '1' || 'auto' }}
 
-      - name: Analyze Unit Test Durations
-        if: always() && !cancelled() && steps.tests.conclusion != 'skipped'
+      - name: Run Integration Tests (serial)
+        id: integration_tests
+        if: always() && !cancelled() && steps.unit_tests.conclusion != 'cancelled'
+        uses: ./.github/actions/run-unit-tests
+        env:
+          ASAN_OPTIONS: ${{ matrix.mode == 'sanitizers' && 'detect_leaks=1:halt_on_error=1:check_initialization_order=1' || '' }}
+          LSAN_OPTIONS: ${{ matrix.mode == 'sanitizers' && format('suppressions={0}/build/asan_suppressions.txt', runner.temp) || '' }}
+          UBSAN_OPTIONS: ${{ matrix.mode == 'sanitizers' && format('print_stacktrace=1:halt_on_error=1:suppressions={0}/build/ubsan_suppressions.txt', runner.temp) || '' }}
+        with:
+          build-dir: ${{ runner.temp }}/build
+          junit-output: junit-results-linux-${{ matrix.mode }}-integration.xml
+          ctest-output: test-output-linux-${{ matrix.mode }}-integration.txt
+          include-labels: 'Integration'
+          exclude-labels: ${{ matrix.exclude_labels }}
+          parallel: '1'
+
+      - name: Analyze Unit Test Durations (unit)
+        if: always() && !cancelled() && steps.unit_tests.conclusion != 'skipped'
         uses: ./.github/actions/test-duration-report
         with:
-          junit-path: ${{ runner.temp }}/build/junit-results-linux-${{ matrix.mode }}.xml
-          report-json-path: ${{ runner.temp }}/build/test-duration-linux-${{ matrix.mode }}.json
+          junit-path: ${{ runner.temp }}/build/junit-results-linux-${{ matrix.mode }}-unit.xml
+          report-json-path: ${{ runner.temp }}/build/test-duration-linux-${{ matrix.mode }}-unit.json
           top-n: '20'
           slow-threshold-seconds: '60'
 
-      - name: Report Test Results
-        if: always() && !cancelled() && steps.tests.conclusion != 'skipped'
+      - name: Analyze Unit Test Durations (integration)
+        if: always() && !cancelled() && steps.integration_tests.conclusion != 'skipped'
+        uses: ./.github/actions/test-duration-report
+        with:
+          junit-path: ${{ runner.temp }}/build/junit-results-linux-${{ matrix.mode }}-integration.xml
+          report-json-path: ${{ runner.temp }}/build/test-duration-linux-${{ matrix.mode }}-integration.json
+          top-n: '20'
+          slow-threshold-seconds: '60'
+
+      - name: Report Test Results (unit)
+        if: always() && !cancelled() && steps.unit_tests.conclusion != 'skipped'
         uses: ./.github/actions/test-report
         with:
           name: Unit Tests (${{ matrix.mode }})
           build-dir: ${{ runner.temp }}/build
-          junit-file: junit-results-linux-${{ matrix.mode }}.xml
-          output-file: test-output-linux-${{ matrix.mode }}.txt
-          artifact-name: test-results-linux-${{ matrix.mode }}
+          junit-file: junit-results-linux-${{ matrix.mode }}-unit.xml
+          output-file: test-output-linux-${{ matrix.mode }}-unit.txt
+          artifact-name: test-results-linux-${{ matrix.mode }}-unit
           retention-days: 7
-          trunk-org-slug: ${{ vars.TRUNK_ORG_SLUG }}
-          trunk-token: ${{ secrets.TRUNK_TOKEN }}
+
+      - name: Report Test Results (integration)
+        if: always() && !cancelled() && steps.integration_tests.conclusion != 'skipped'
+        uses: ./.github/actions/test-report
+        with:
+          name: Integration Tests (${{ matrix.mode }})
+          build-dir: ${{ runner.temp }}/build
+          junit-file: junit-results-linux-${{ matrix.mode }}-integration.xml
+          output-file: test-output-linux-${{ matrix.mode }}-integration.txt
+          artifact-name: test-results-linux-${{ matrix.mode }}-integration
+          retention-days: 7
 
       - name: Upload Test Artifacts
-        if: always() && !cancelled() && steps.tests.conclusion != 'skipped'
+        if: always() && !cancelled() && (steps.unit_tests.conclusion != 'skipped' || steps.integration_tests.conclusion != 'skipped')
         uses: actions/upload-artifact@v7
         with:
           name: test-artifacts-linux-${{ matrix.mode }}
           path: |
-            ${{ runner.temp }}/build/test-output-linux-${{ matrix.mode }}.txt
-            ${{ runner.temp }}/build/junit-results-linux-${{ matrix.mode }}.xml
-            ${{ runner.temp }}/build/test-duration-linux-${{ matrix.mode }}.json
+            ${{ runner.temp }}/build/test-output-linux-${{ matrix.mode }}-*.txt
+            ${{ runner.temp }}/build/junit-results-linux-${{ matrix.mode }}-*.xml
+            ${{ runner.temp }}/build/test-duration-linux-${{ matrix.mode }}-*.json
           retention-days: 7
 
       - name: Verify coverage data files exist
@@ -306,14 +378,17 @@ jobs:
         with:
           build-dir: ${{ runner.temp }}/build
           mode: report-only
+          codecov-token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Verify Coverage Thresholds
         if: matrix.mode == 'coverage'
         working-directory: ${{ runner.temp }}/build
         run: |
-          line_thresh=$(cmake -L -N . 2>/dev/null | sed -n 's/^QGC_COVERAGE_LINE_THRESHOLD:STRING=//p')
-          branch_thresh=$(cmake -L -N . 2>/dev/null | sed -n 's/^QGC_COVERAGE_BRANCH_THRESHOLD:STRING=//p')
+          line_thresh=$(python3 "${GITHUB_WORKSPACE}/.github/scripts/cmake_helper.py" \
+            cache-var --build-dir . --name QGC_COVERAGE_LINE_THRESHOLD --default 30)
+          branch_thresh=$(python3 "${GITHUB_WORKSPACE}/.github/scripts/cmake_helper.py" \
+            cache-var --build-dir . --name QGC_COVERAGE_BRANCH_THRESHOLD --default 20)
           python3 "${GITHUB_WORKSPACE}/.github/scripts/verify_coverage_thresholds.py" \
             --coverage-xml coverage.xml \
-            --line-threshold "${line_thresh:-30}" \
-            --branch-threshold "${branch_thresh:-20}"
+            --line-threshold "${line_thresh}" \
+            --branch-threshold "${branch_thresh}"

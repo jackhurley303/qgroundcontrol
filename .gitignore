@@ -6,10 +6,12 @@
 # IDEs & Editors
 # ------------------------------------------------------------------------------
 .idea/
+.qt/
 .qtcreator/
 .fleet/
 .vs/
 .settings/
+.codex/
 
 # VS Code - track .default files, ignore personal overrides
 .vscode/*
@@ -27,6 +29,7 @@ tags
 # Build System & CMake
 # ------------------------------------------------------------------------------
 build*/
+!.github/actions/build*/
 cmake-build-*/
 out/
 CMakeFiles
@@ -120,6 +123,12 @@ ios/iOSForAppStore-Info.plist
 android/local.properties
 .gradle/
 *.class
+# GStreamer plugin Java + fonts/CA assets copied in by the copyjavasource_<abi> /
+# copyfontsres_<abi> / copycacertificatesres_<abi> CMake targets
+# (cmake/GStreamer/platform/Android.cmake) at build time — version-matched, regenerated.
+android/src/org/freedesktop/
+android/assets/fontconfig/
+android/assets/ssl/
 
 # Linux
 *.nfs
@@ -167,6 +176,7 @@ Qt*-linux*.tar.*
 # Python tooling caches
 .ruff_cache/
 .pytest_cache/
+.import_linter_cache/
 .venv/
 
 # Vale prose linter (downloaded via `vale sync`)
@@ -177,3 +187,4 @@ Qt*-linux*.tar.*
 .direnv/
 .tool-versions
 .python-version
+!tools/.python-version

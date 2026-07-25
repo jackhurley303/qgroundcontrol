@@ -1,7 +1,7 @@
 name: PR Checks
 
 on:
-  pull_request_target:
+  pull_request_target:  # zizmor: ignore[dangerous-triggers] reads PR metadata, posts comments/labels; only checks out trusted base ref
     types: [opened, edited, synchronize, reopened, closed]
 
 concurrency:
@@ -10,8 +10,6 @@ concurrency:
 
 permissions:
   contents: read
-  pull-requests: write
-  models: read
 
 jobs:
   title:
@@ -19,6 +17,12 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.action != 'closed'
     timeout-minutes: 5
+
+    # pull-requests: write (post title suggestion), models: read (ai-inference) used only here.
+    permissions:
+      contents: read
+      pull-requests: write
+      models: read
 
     steps:
       - name: Harden Runner
@@ -55,11 +59,12 @@ jobs:
         if: |
           steps.title_check.outcome == 'failure' &&
           github.event.pull_request.user.type != 'Bot'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           sparse-checkout: .github/prompts
           sparse-checkout-cone-mode: false
+          persist-credentials: false
 
       - name: Get changed files
         id: files
@@ -255,11 +260,29 @@ jobs:
     if: github.event.action != 'closed'
     timeout-minutes: 5
 
+    # pull-requests: write scoped here: this job applies PR size labels.
+    permissions:
+      contents: read
+      pull-requests: write
+
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@v2
         with:
           egress-policy: audit
+
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/scripts/gh_pr_size_label.py
+            .github/scripts/ci_bootstrap.py
+            tools/_bootstrap.py
+            tools/common/__init__.py
+            tools/common/file_traversal.py
+            tools/common/gh_actions.py
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Get current size label
         id: current
@@ -267,10 +290,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_REPO: ${{ github.repository }}
-        run: |
-          CURRENT_LABEL=$(gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/labels" \
-            --jq '.[] | select(.name | startswith("size/")) | .name' | head -1)
-          echo "label=${CURRENT_LABEL}" >> "$GITHUB_OUTPUT"
+        run: python3 .github/scripts/gh_pr_size_label.py current
 
       - name: Label PR by size
         continue-on-error: true
@@ -309,27 +329,18 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           OLD_LABEL: ${{ steps.current.outputs.label }}
           GH_REPO: ${{ github.repository }}
-        run: |
-          # Get all current size labels
-          CURRENT_LABELS=$(gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/labels" \
-            --jq '.[] | select(.name | startswith("size/")) | .name')
-
-          # Count size labels - if more than one, remove the old one
-          LABEL_COUNT=$(echo "$CURRENT_LABELS" | grep -c . || echo 0)
-
-          if [[ "$LABEL_COUNT" -gt 1 && -n "$OLD_LABEL" ]]; then
-            # Multiple size labels exist - remove the old one
-            ENCODED_LABEL="${OLD_LABEL//\//%2F}"
-            gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/labels/${ENCODED_LABEL}" \
-              -X DELETE 2>/dev/null || true
-          fi
-          # If only one label exists, size didn't change - nothing to remove
+        run: python3 .github/scripts/gh_pr_size_label.py prune
 
   label:
     name: Label PR by Files
     runs-on: ubuntu-latest
     if: github.event.action != 'closed'
     timeout-minutes: 5
+
+    # pull-requests: write scoped here: actions/labeler applies path-based labels.
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
       - name: Harden Runner

@@ -14,6 +14,9 @@
 #include <QtPositioning/QGeoCoordinate>
 #include <QtQmlIntegration/QtQmlIntegration>
 
+#include <array>
+#include <atomic>
+
 #include "QGCMAVLink.h"
 #include "VehicleFactGroup.h"
 #include "VehicleSigningController.h"  // Q_PROPERTY needs the full QObject type for moc/QML metatype registration
@@ -23,6 +26,7 @@ class Actuators;
 class HealthAndArmingCheckReport;
 class MAVLinkStreamConfig;
 class QGCMapCircle;
+class QJsonDocument;
 class QmlObjectListModel;
 class SysStatusSensorInfo;
 class VehicleLinkManager;
@@ -353,6 +357,9 @@ public:
     Q_INVOKABLE void sendPlan(QString planFile);
     Q_INVOKABLE void setEstimatorOrigin(const QGeoCoordinate& centerCoord);
 
+    /// Fallback for setEstimatorOrigin which sends the deprecated SET_GPS_GLOBAL_ORIGIN message.
+    void setEstimatorOrigin_SET_GPS_GLOBAL_ORIGIN(const QGeoCoordinate& centerCoord);
+
     /// Used to check if running current version is equal or higher than the one being compared.
     //  returns 1 if current > compare, 0 if current == compare, -1 if current < compare
     Q_INVOKABLE int versionCompare(const QString& compare) const;
@@ -414,6 +421,9 @@ public:
     void updateFlightDistance(double distance);
 
     void sendJoystickDataThreadSafe (float roll, float pitch, float yaw, float thrust, quint16 buttons, quint16 buttons2, float pitchExtension, float rollExtension, float aux1, float aux2, float aux3, float aux4, float aux5, float aux6);
+    /// Sends RC_CHANNELS_OVERRIDE for joystick aux axes mapped to RC channels 5–10 only.
+    static constexpr int kAuxRcOverrideChannelCount = 6; ///< Number of RC channels overridden (channels 5–10)
+    void sendJoystickAuxRcOverrideThreadSafe(const std::array<uint16_t, kAuxRcOverrideChannelCount> &channelValues, const std::array<bool, kAuxRcOverrideChannelCount> &channelEnabled, bool useRcOverride);
 
     // Property accesors
     int id() const{ return _systemID; }
@@ -630,6 +640,14 @@ public:
         bool showError,
         float param1 = 0.0f, float param2 = 0.0f, float param3 = 0.0f, float param4 = 0.0f, float param5 = 0.0f, float param6 = 0.0f, float param7 = 0.0f);
 
+    /// Sends the command as a COMMAND_INT and calls the fallback lambda function in
+    /// case the command is MAV_RESULT_UNSUPPORTED
+    void sendMavCommandIntWithLambdaFallback(
+        std::function<void()> lambda,
+        int compId, MAV_CMD command, MAV_FRAME frame,
+        bool showError,
+        float param1 = 0.0f, float param2 = 0.0f, float param3 = 0.0f, float param4 = 0.0f, double param5 = 0.0, double param6 = 0.0, float param7 = 0.0f);
+
 
     static QString requestMessageResultHandlerFailureCodeToString(RequestMessageResultHandlerFailureCode_t failureCode);
 
@@ -720,7 +738,7 @@ public:
 
     double loadProgress                 () const { return _loadProgress; }
 
-    void setActuatorsMetadata(uint8_t compid, const QString& metadataJsonFileName);
+    void setActuatorsMetadata(uint8_t compid, const QString& metadataJsonFileName, const QJsonDocument& metadataJson);
 
     GimbalController* gimbalController  () { return _gimbalController; }
 
@@ -944,6 +962,7 @@ private:
     bool            _readyToFly                             = false;
     bool            _allSensorsHealthy                      = true;
     VehicleSigningController* _signingController            = nullptr;
+    std::atomic<bool> _joystickAuxRcOverrideActive           = false;
 
     std::unique_ptr<SysStatusSensorInfo> _sysStatusSensorInfo;
 
@@ -1156,7 +1175,7 @@ private:
     void _handleCommandRequestOperatorControl(const mavlink_command_long_t commandLong);
     static void _requestOperatorControlAckHandler(void* resultHandlerData, int compId, const mavlink_command_ack_t& ack, MavCmdResultFailureCode_t failureCode);
 
-    Q_PROPERTY(uint8_t sysidInControl                        READ sysidInControl                        NOTIFY gcsControlStatusChanged)
+    Q_PROPERTY(uint8_t gcsMain                               READ gcsMain                               NOTIFY gcsControlStatusChanged)
     Q_PROPERTY(bool    gcsControlStatusFlags_SystemManager   READ gcsControlStatusFlags_SystemManager   NOTIFY gcsControlStatusChanged)
     Q_PROPERTY(bool    gcsControlStatusFlags_TakeoverAllowed READ gcsControlStatusFlags_TakeoverAllowed NOTIFY gcsControlStatusChanged)
     Q_PROPERTY(bool    firstControlStatusReceived            READ firstControlStatusReceived            NOTIFY gcsControlStatusChanged)
@@ -1164,7 +1183,7 @@ private:
     Q_PROPERTY(int     requestOperatorControlRemainingMsecs  READ requestOperatorControlRemainingMsecs  CONSTANT)
     Q_PROPERTY(bool    sendControlRequestAllowed             READ sendControlRequestAllowed             NOTIFY sendControlRequestAllowedChanged)
 
-    uint8_t sysidInControl() const { return _sysid_in_control; }
+    uint8_t gcsMain() const { return _gcsMain; }
     bool    gcsControlStatusFlags_SystemManager() const { return _gcsControlStatusFlags_SystemManager; }
     bool    gcsControlStatusFlags_TakeoverAllowed() const { return _gcsControlStatusFlags_TakeoverAllowed; }
     bool    firstControlStatusReceived() const { return _firstControlStatusReceived; }
@@ -1173,7 +1192,7 @@ private:
     bool    sendControlRequestAllowed() const { return _sendControlRequestAllowed; }
     void    requestOperatorControlStartTimer(int requestTimeoutMsecs);
 
-    uint8_t _sysid_in_control = 0;
+    uint8_t _gcsMain = 0;
     uint8_t _gcsControlStatusFlags = 0;
     bool    _gcsControlStatusFlags_SystemManager = 0;
     bool    _gcsControlStatusFlags_TakeoverAllowed = 0;

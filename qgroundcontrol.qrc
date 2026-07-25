@@ -20,6 +20,8 @@
         <file alias="GimbalController.SettingsGroup.json">src/Settings/GimbalController.SettingsGroup.json</file>
         <file alias="Joystick.SettingsGroup.json">src/Settings/Joystick.SettingsGroup.json</file>
         <file alias="JoystickManager.SettingsGroup.json">src/Settings/JoystickManager.SettingsGroup.json</file>
+        <file alias="LogManager.SettingsGroup.json">src/Settings/LogManager.SettingsGroup.json</file>
+        <file alias="LogViewer.SettingsGroup.json">src/Settings/LogViewer.SettingsGroup.json</file>
         <file alias="Maps.SettingsGroup.json">src/Settings/Maps.SettingsGroup.json</file>
         <file alias="MavCmdInfoCommon.json">src/MissionManager/MavCmdInfoCommon.json</file>
         <file alias="MavCmdInfoFixedWing.json">src/MissionManager/MavCmdInfoFixedWing.json</file>

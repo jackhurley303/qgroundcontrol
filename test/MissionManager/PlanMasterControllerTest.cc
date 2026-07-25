@@ -6,12 +6,15 @@
 #include "MultiSignalSpy.h"
 #include "MultiVehicleManager.h"
 #include "PlanMasterController.h"
+#include "QmlObjectListModel.h"
 #include "SettingsManager.h"
+#include "TakeoffMissionItem.h"
 #include "Vehicle.h"
 
 #include <QtCore/QDateTime>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
+#include <QtCore/QRegularExpression>
 #include <QtCore/QTemporaryDir>
 #include <QtTest/QSignalSpy>
 
@@ -38,8 +41,52 @@ void PlanMasterControllerTest::_testMissionPlannerFileLoad()
     QCOMPARE(_masterController->missionController()->visualItems()->count(), 6);
 }
 
+void PlanMasterControllerTest::_testTakeoffTextFileLoad()
+{
+    // Plain-text mission file with home position, takeoff and one waypoint (#13167)
+    static const char* kTakeoffMission =
+        "QGC WPL 110\r\n"
+        "0\t1\t0\t16\t0\t0\t0\t0\t34.577822\t-112.469101\t584.380005\t1\r\n"
+        "1\t0\t3\t22\t20.000000\t0.000000\t0.000000\t0.000000\t0.000000\t0.000000\t30.000000\t1\r\n"
+        "2\t0\t3\t16\t0.000000\t0.000000\t0.000000\t0.000000\t34.469587\t-112.534801\t90.000000\t1\r\n";
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString filename = tempDir.filePath(QStringLiteral("TakeoffMission.waypoints"));
+    QFile file(filename);
+    // No QIODevice::Text: write the CRLF line endings verbatim on all platforms to match
+    // the original repro file from the issue.
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    QVERIFY(file.write(kTakeoffMission) != -1);
+    file.close();
+
+    SettingsManager::instance()->appSettings()->offlineEditingFirmwareClass()->setRawValue(QGCMAVLink::FirmwareClassArduPilot);
+
+    _masterController->loadFromFile(filename);
+
+    QmlObjectListModel* visualItems = _masterController->missionController()->visualItems();
+    QCOMPARE(visualItems->count(), 3); // Mission settings, takeoff, waypoint
+
+    // The original bug caused the takeoff item to consume the following waypoint line,
+    // resulting in a single takeoff item carrying the waypoint's values.
+    TakeoffMissionItem* takeoffItem = visualItems->value<TakeoffMissionItem*>(1);
+    QVERIFY(takeoffItem);
+    QCOMPARE(static_cast<MAV_CMD>(takeoffItem->command()), MAV_CMD_NAV_TAKEOFF);
+    QCOMPARE(takeoffItem->missionItem().param7(), 30.0);
+
+    SimpleMissionItem* waypointItem = visualItems->value<SimpleMissionItem*>(2);
+    QVERIFY(waypointItem);
+    QVERIFY(!waypointItem->isTakeoffItem());
+    QCOMPARE(static_cast<MAV_CMD>(waypointItem->command()), MAV_CMD_NAV_WAYPOINT);
+    QCOMPARE(waypointItem->missionItem().param7(), 90.0);
+}
+
 void PlanMasterControllerTest::_testActiveVehicleChanged()
 {
+    // The test emits missionManager->error() twice to verify signal propagation.
+    // Each emission triggers a showAppMessage debug log via PlanMasterController.
+    ignoreLogMessage("API.QGCApplication.AppMessage", QtDebugMsg,
+                     QRegularExpression("Mission transfer failed"));
     // There was a defect where the PlanMasterController would, upon a new active vehicle,
     // overzelously disconnect all subscribers interested in the outgoing active vechicle.
     Vehicle* outgoingManagerVehicle = _masterController->managerVehicle();
@@ -52,19 +99,17 @@ void PlanMasterControllerTest::_testActiveVehicleChanged()
     // Since MissionManager works with actual vehicles (which we don't have in the test cycle)
     // we have to be a bit creative emulating a signal emitted by a MissionManager.
     emit outgoingManagerVehicle->missionManager()->error(0, "");
-    auto missionManagerErrorSignalMask = spyMissionManager.mask("error");
-    QVERIFY(spyMissionManager.onlyEmittedOnceByMask(missionManagerErrorSignalMask));
+    QVERIFY(spyMissionManager.onlyEmittedOnce("error"));
     spyMissionManager.clearSignal("error");
     QVERIFY(spyMissionManager.noneEmitted());
 
     _connectMockLink(MAV_AUTOPILOT_PX4);
-    auto masterControllerMgrVehicleChanged = spyMasterController.mask("managerVehicleChanged");
-    QVERIFY(spyMasterController.emittedOnceByMask(masterControllerMgrVehicleChanged));
+    QVERIFY(spyMasterController.emittedOnce("managerVehicleChanged"));
 
     emit outgoingManagerVehicle->missionManager()->error(0, "");
     // This signal was affected by the defect - it wouldn't reach the subscriber. Here
     // we make sure it does.
-    QVERIFY(spyMissionManager.onlyEmittedOnceByMask(missionManagerErrorSignalMask));
+    QVERIFY(spyMissionManager.onlyEmittedOnce("error"));
 }
 
 void PlanMasterControllerTest::_testDirtyFlagsMatrix_data()
@@ -73,7 +118,7 @@ void PlanMasterControllerTest::_testDirtyFlagsMatrix_data()
     //
     // | State \ Action | Upload OK | Clear | SaveDirty=true | Load plan | Save file OK | Clear save-dirty | Download w/ items | Download empty |
     // |----------------|-----------|-------|----------------|-----------|--------------|------------------|-------------------|----------------|
-    // | dirtyForSave   | unchanged | false | true           | false     | false        | false            | true              | false          |
+    // | dirtyForSave   | unchanged | false | true           | false     | false        | false            | false             | false          |
     // | dirtyForUpload | false     | false | true           | true      | unchanged    | unchanged        | false             | false          |
 
     // Data columns:
@@ -107,7 +152,7 @@ void PlanMasterControllerTest::_testDirtyFlagsMatrix_data()
         { SaveFalseOnSuccessfulLoad,          "save false on successful load",       DirtyStateFalse,     DirtyStateTrue },
         { ClearSaveDirtyPreservesUploadTrue,  "clear save dirty keeps upload true",  DirtyStateFalse,     DirtyStateUnchanged },
         { ClearSaveDirtyPreservesUploadFalse, "clear save dirty keeps upload false", DirtyStateFalse,     DirtyStateUnchanged },
-        { DownloadWithItemsDirtyForSave,      "download with items marks save dirty",DirtyStateTrue,      DirtyStateFalse },
+        { DownloadWithItemsNotDirtyForSave,   "download with items stays clean",     DirtyStateFalse,     DirtyStateFalse },
         { DownloadEmptyNotDirtyForSave,       "download empty keeps save clean",     DirtyStateFalse,     DirtyStateFalse },
     };
 
@@ -155,7 +200,7 @@ void PlanMasterControllerTest::_testDirtyFlagsMatrix()
     QVERIFY(initialDirtyForUpload != DirtyStateUnchanged);
 
     // Pre-load items for scenarios that need containsItems() == true
-    if (scenario == DownloadWithItemsDirtyForSave) {
+    if (scenario == DownloadWithItemsNotDirtyForSave) {
         _masterController->loadFromFile(":/unittest/MissionPlanner.waypoints");
     }
 
@@ -221,7 +266,7 @@ void PlanMasterControllerTest::_testDirtyFlagsMatrix()
     case ClearSaveDirtyPreservesUploadFalse:
         _masterController->_setDirtyForSave(false);
         break;
-    case DownloadWithItemsDirtyForSave: {
+    case DownloadWithItemsNotDirtyForSave: {
         QVERIFY(_masterController->containsItems());
         const bool invoked = QMetaObject::invokeMethod(_masterController, "_loadRallyPointsComplete", Qt::DirectConnection);
         QVERIFY(invoked);

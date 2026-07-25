@@ -58,25 +58,34 @@ if(CMAKE_PROJECT_VERSION_PATCH LESS 10)
     set(ANDROID_PATCH_VERSION "0${CMAKE_PROJECT_VERSION_PATCH}")
 endif()
 
-# Version code format: BBMIPPDDD (B=Bitness, M=Major, I=Minor, P=Patch, D=Dev) - Dev not currently supported and always 000
-set(ANDROID_VERSION_CODE "${ANDROID_BITNESS_CODE}${CMAKE_PROJECT_VERSION_MAJOR}${CMAKE_PROJECT_VERSION_MINOR}${ANDROID_PATCH_VERSION}000")
+# Dev field (last 3 digits) = commits since tag, so daily builds get unique,
+# increasing codes; tagged releases stay at 000. Clamp at the field width (999).
+set(ANDROID_DEV_VERSION "${QGC_APP_VERSION_DEV}")
+if(NOT ANDROID_DEV_VERSION MATCHES "^[0-9]+$")
+    set(ANDROID_DEV_VERSION 0)
+endif()
+if(ANDROID_DEV_VERSION GREATER 999)
+    message(WARNING "QGC: Android dev version ${ANDROID_DEV_VERSION} exceeds 999; clamping. Cut a release tag to reset the counter.")
+    set(ANDROID_DEV_VERSION 999)
+endif()
+string(LENGTH "${ANDROID_DEV_VERSION}" _qgc_dev_len)
+if(_qgc_dev_len EQUAL 1)
+    set(ANDROID_DEV_VERSION "00${ANDROID_DEV_VERSION}")
+elseif(_qgc_dev_len EQUAL 2)
+    set(ANDROID_DEV_VERSION "0${ANDROID_DEV_VERSION}")
+endif()
+
+# Version code format: BBMIPPDDD (B=Bitness, M=Major, I=Minor, P=Patch, D=Dev)
+set(ANDROID_VERSION_CODE "${ANDROID_BITNESS_CODE}${CMAKE_PROJECT_VERSION_MAJOR}${CMAKE_PROJECT_VERSION_MINOR}${ANDROID_PATCH_VERSION}${ANDROID_DEV_VERSION}")
 message(STATUS "QGC: Android version code: ${ANDROID_VERSION_CODE}")
 
-set(QGC_ANDROID_PROPERTIES_FILE "${CMAKE_BINARY_DIR}/qgc-android-config.properties")
-set(QGC_ANDROID_PROPERTIES_CONTENT
-    "QGC_ANDROID_COMPILE_SDK_VERSION=${QGC_QT_ANDROID_COMPILE_SDK_VERSION}\n"
-    "QGC_ANDROID_TARGET_SDK_VERSION=${QGC_QT_ANDROID_TARGET_SDK_VERSION}\n"
-    "QGC_ANDROID_MIN_SDK_VERSION=${QGC_QT_ANDROID_MIN_SDK_VERSION}\n"
-    "QGC_ANDROID_VERSION_CODE=${ANDROID_VERSION_CODE}\n"
-    "QGC_ANDROID_VERSION_NAME=${CMAKE_PROJECT_VERSION}\n"
-    "QGC_CPM_JAVA_SRC_DIR=${CMAKE_BINARY_DIR}/extra_java_sources\n"
-)
-string(JOIN "" QGC_ANDROID_PROPERTIES_CONTENT ${QGC_ANDROID_PROPERTIES_CONTENT})
-file(GENERATE
-    OUTPUT "${QGC_ANDROID_PROPERTIES_FILE}"
-    CONTENT "${QGC_ANDROID_PROPERTIES_CONTENT}"
-)
-message(STATUS "QGC: Android shared properties: ${QGC_ANDROID_PROPERTIES_FILE}")
+# ----------------------------------------------------------------------------
+# Extra Java Sources (CPM-deployed dependencies)
+# ----------------------------------------------------------------------------
+# CPM Java dependencies are copied into this directory by src/Android/CMakeLists.txt
+# and picked up by android/build.gradle as a supplementary source set. Gradle
+# derives the same location as the sibling 'extra_java_sources' of its project dir.
+set(QGC_ANDROID_EXTRA_JAVA_SOURCES_DIR "${CMAKE_BINARY_DIR}/extra_java_sources")
 
 set_target_properties(${CMAKE_PROJECT_NAME}
     PROPERTIES
@@ -91,34 +100,25 @@ set_target_properties(${CMAKE_PROJECT_NAME}
         QT_ANDROID_VERSION_CODE ${ANDROID_VERSION_CODE}
         QT_ANDROID_APP_NAME "${CMAKE_PROJECT_NAME}"
         QT_ANDROID_APP_ICON "@mipmap/ic_launcher"
-        # QT_QML_IMPORT_PATH
+        QT_ANDROID_LEGACY_PACKAGING $<BOOL:${QGC_ENABLE_ASAN}>
         QT_QML_ROOT_PATH "${CMAKE_SOURCE_DIR}"
+        # QT_QML_IMPORT_PATH
         # QT_ANDROID_SYSTEM_LIBS_PREFIX
 )
+
+# set(QT_ANDROID_POST_BUILD_GRADLE_CLEANUP ON)
 
 # if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 #     set(QT_ANDROID_APPLICATION_ARGUMENTS)
 # endif()
 
-set(QGC_CPM_JAVA_SRC_DIR "${CMAKE_BINARY_DIR}/extra_java_sources")
-list(APPEND QT_ANDROID_MULTI_ABI_FORWARD_VARS QGC_STABLE_BUILD QT_HOST_PATH QGC_CPM_JAVA_SRC_DIR QGC_ANDROID_PROPERTIES_FILE)
+# Forward Python3_EXECUTABLE so per-ABI sub-configures use the same interpreter (jinja2 lives in workspace .venv, not hostedtoolcache python).
+list(APPEND QT_ANDROID_MULTI_ABI_FORWARD_VARS QGC_STABLE_BUILD QT_HOST_PATH Python3_EXECUTABLE)
 
 # ----------------------------------------------------------------------------
 # Android OpenSSL Libraries
 # ----------------------------------------------------------------------------
-CPMAddPackage(
-    NAME android_openssl
-    URL https://github.com/KDAB/android_openssl/archive/b71f1470962019bd89534a2919f5925f93bc5779.zip
-    URL_HASH SHA256=9277d62ecdb4809801e2c369e0a639c154e0d9137e8d60863b44bf07d16ed5b3
-)
-
-if(android_openssl_ADDED)
-    include(${android_openssl_SOURCE_DIR}/android_openssl.cmake)
-    add_android_openssl_libraries(${CMAKE_PROJECT_NAME})
-    message(STATUS "QGC: Android OpenSSL libraries added")
-else()
-    message(WARNING "QGC: Failed to add Android OpenSSL libraries")
-endif()
+include(AndroidOpenSSL)
 
 # ----------------------------------------------------------------------------
 # Android Permissions

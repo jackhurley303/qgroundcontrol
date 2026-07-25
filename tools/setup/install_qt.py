@@ -16,16 +16,23 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 _tools_dir = str(Path(__file__).resolve().parent.parent)
 if _tools_dir not in sys.path:
     sys.path.insert(0, _tools_dir)
 
-from common.gh_actions import write_github_output
+from _bootstrap import ensure_tools_dir
+
+ensure_tools_dir(__file__)
+
+from common import pip_install
+from common.gh_actions import gh_error, gh_warning, write_github_output
 
 # aqtinstall creates directories that differ from the arch parameter.
 # This mapping resolves the actual on-disk directory name.
@@ -38,6 +45,24 @@ _ARCH_DIR_PREFIXES = [
     ("win64_", ""),
 ]
 
+# Allowlist gates --aqt-source before pip sees it (extra-index-url flag injection, hostile git host).
+_AQT_SOURCE_ALLOWLIST = re.compile(
+    r"^(?:aqtinstall(?:==[0-9][0-9A-Za-z.\-]*)?"
+    r"|git\+https://github\.com/miurahr/aqtinstall(?:\.git)?@[0-9a-f]{7,40})$"
+)
+
+
+def validate_aqt_source(spec: str) -> str:
+    """Return `spec` unchanged if it matches the allowlist; sys.exit(1) otherwise."""
+    if not spec or _AQT_SOURCE_ALLOWLIST.match(spec):
+        return spec
+    gh_error(
+        f"--aqt-source '{spec}' is not allowed. "
+        "Must be 'aqtinstall' (optionally ==<version>) or "
+        "'git+https://github.com/miurahr/aqtinstall@<sha>'."
+    )
+    sys.exit(1)
+
 
 def resolve_arch_dir(arch: str) -> str:
     """Map a Qt arch identifier to the on-disk directory name aqtinstall creates."""
@@ -45,7 +70,7 @@ def resolve_arch_dir(arch: str) -> str:
         return _ARCH_DIR_MAP[arch]
     for prefix, replacement in _ARCH_DIR_PREFIXES:
         if arch.startswith(prefix):
-            return replacement + arch[len(prefix):]
+            return replacement + arch[len(prefix) :]
     if arch == "clang_64":
         return "macos"
     return arch
@@ -64,11 +89,33 @@ def resolve_qt_root(outdir: Path, version: str, arch_dir: str) -> Path:
         available = "none"
         version_dir = outdir / version
         if version_dir.is_dir():
-            available = ", ".join(sorted(p.name for p in version_dir.iterdir() if p.is_dir())) or "none"
-        print(f"::error::Qt root not found at {qt_root}")
+            available = (
+                ", ".join(sorted(p.name for p in version_dir.iterdir() if p.is_dir())) or "none"
+            )
+        gh_error(f"Qt root not found at {qt_root}")
         print(f"Expected arch_dir '{arch_dir}' from arch, available: {available}")
         sys.exit(1)
     return qt_root
+
+
+_AQT_MAX_ATTEMPTS = 3
+_AQT_RETRY_DELAY_SECONDS = 15
+
+
+def _run_aqt_with_retries(args: list[str]) -> None:
+    """Run aqt, retrying transient CDN download/extraction failures (exit 254, "bad path")."""
+    for attempt in range(1, _AQT_MAX_ATTEMPTS + 1):
+        result = subprocess.run(args, check=False)
+        if result.returncode == 0:
+            return
+        if attempt == _AQT_MAX_ATTEMPTS:
+            raise subprocess.CalledProcessError(result.returncode, args)
+        gh_warning(
+            f"aqtinstall failed (exit {result.returncode}), "
+            f"attempt {attempt}/{_AQT_MAX_ATTEMPTS}; retrying in "
+            f"{_AQT_RETRY_DELAY_SECONDS}s"
+        )
+        time.sleep(_AQT_RETRY_DELAY_SECONDS)
 
 
 def install_qt(
@@ -79,15 +126,24 @@ def install_qt(
     outdir: Path,
     modules: str = "",
     archives: str = "",
+    aqt_source: str = "",
 ) -> Path:
-    """Install Qt using aqtinstall and return the resolved root directory."""
+    """Install Qt using aqtinstall and return the resolved root directory.
+
+    `aqt_source` overrides the PyPI `aqtinstall` package with a pip-compatible
+    spec (e.g. `git+https://github.com/miurahr/aqtinstall.git@<sha>`); we force
+    a reinstall so any aqt already on PATH from the runner image is replaced.
+    """
     aqt = shutil.which("aqt")
-    if not aqt:
-        from common import pip_install
-        pip_install(["aqtinstall"])
+    if not aqt or aqt_source:
+        if aqt_source:
+            validate_aqt_source(aqt_source)
+            pip_install(["--force-reinstall", aqt_source])
+        else:
+            pip_install(["aqtinstall"])
         aqt = shutil.which("aqt")
         if not aqt:
-            print("::error::aqtinstall not found after pip install")
+            gh_error("aqtinstall not found after pip install")
             sys.exit(1)
 
     args = [aqt, "install-qt", host, target, version, arch, "--outputdir", str(outdir)]
@@ -98,7 +154,7 @@ def install_qt(
         args.extend(["--archives", *archives.split()])
 
     print(f"Running: {' '.join(args)}")
-    subprocess.run(args, check=True)
+    _run_aqt_with_retries(args)
 
     arch_dir = resolve_arch_dir(arch)
     return resolve_qt_root(outdir, version, arch_dir)
@@ -130,7 +186,7 @@ def resolve_android_qt_root(abis: str, roots: dict[str, str]) -> str:
     for abi, key in _ANDROID_ABI_ORDER:
         if abi in abi_set and roots.get(key):
             return roots[key]
-    print(f"::error::Failed to resolve an installed Android Qt root for ABIs: {abis}")
+    gh_error(f"Failed to resolve an installed Android Qt root for ABIs: {abis}")
     sys.exit(1)
 
 
@@ -149,6 +205,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     install_p.add_argument("--host", default="linux")
     install_p.add_argument("--target", default="desktop")
     install_p.add_argument("--outdir", type=Path, default=Path(".qt"))
+    install_p.add_argument(
+        "--aqt-source",
+        default="",
+        help="Override the pip spec used to install aqtinstall (e.g. git+https://...@<sha>).",
+    )
     _add_arch_args(install_p)
 
     cache_p = sub.add_parser("cache-key", help="Output arch_dir and cache digest")
@@ -157,7 +218,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     resolve_p = sub.add_parser("resolve-arch", help="Print resolved arch directory name")
     resolve_p.add_argument("--arch", required=True)
 
-    android_p = sub.add_parser("resolve-android-root", help="Pick primary Android Qt root from installed ABIs")
+    paths_p = sub.add_parser(
+        "resolve-paths", help="Output qt_root_dir/qt_bin_dir for an installed Qt"
+    )
+    paths_p.add_argument("--outdir", type=Path, required=True)
+    paths_p.add_argument("--version", required=True)
+    paths_p.add_argument("--arch-dir", required=True)
+
+    android_p = sub.add_parser(
+        "resolve-android-root", help="Pick primary Android Qt root from installed ABIs"
+    )
     android_p.add_argument("--abis", required=True, help="Semicolon-separated ABI list")
     android_p.add_argument("--arm64", default="")
     android_p.add_argument("--armv7", default="")
@@ -172,6 +242,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "resolve-arch":
         print(resolve_arch_dir(args.arch))
+        return 0
+
+    if args.command == "resolve-paths":
+        qt_root = args.outdir / args.version / args.arch_dir
+        write_github_output(
+            {
+                "qt_root_dir": str(qt_root),
+                "qt_bin_dir": str(qt_root / "bin"),
+            }
+        )
+        print(f"qt_root_dir={qt_root}")
         return 0
 
     if args.command == "resolve-android-root":
@@ -199,13 +280,16 @@ def main(argv: list[str] | None = None) -> int:
         outdir=args.outdir,
         modules=args.modules,
         archives=args.archives,
+        aqt_source=args.aqt_source,
     )
 
-    write_github_output({
-        "arch_dir": arch_dir,
-        "qt_root_dir": str(qt_root),
-        "qt_bin_dir": str(qt_root / "bin"),
-    })
+    write_github_output(
+        {
+            "arch_dir": arch_dir,
+            "qt_root_dir": str(qt_root),
+            "qt_bin_dir": str(qt_root / "bin"),
+        }
+    )
     print(f"Qt installed at {qt_root}")
     return 0
 

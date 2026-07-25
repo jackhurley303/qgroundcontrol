@@ -14,9 +14,10 @@ from ci_bootstrap import ensure_tools_dir
 
 ensure_tools_dir(__file__)
 
+from common.format import format_bytes
 from common.gh_actions import list_run_artifacts, list_workflow_runs_for_sha, parse_csv_list
 from common.github_runs import select_latest_runs_by_name
-
+from common.io import read_json, write_json
 
 _DISTRIBUTABLE_PREFIXES = (
     "QGroundControl",
@@ -42,27 +43,6 @@ def _is_distributable_artifact(name: str) -> bool:
     if any(name.startswith(prefix) for prefix in _EXCLUDED_PREFIXES):
         return False
     return any(name.startswith(prefix) for prefix in _DISTRIBUTABLE_PREFIXES)
-
-def latest_successful_runs(
-    runs: list[dict[str, Any]],
-    platforms: list[str],
-    *,
-    event: str = "",
-) -> dict[str, dict[str, Any]]:
-    return select_latest_runs_by_name(
-        runs,
-        set(platforms),
-        event=event,
-        status="completed",
-        conclusion="success",
-    )
-
-
-def format_size_human(size_bytes: int) -> str:
-    size_mb = size_bytes / 1024 / 1024
-    if size_mb >= 1024:
-        return f"{(size_mb / 1024):.2f} GB"
-    return f"{size_mb:.2f} MB"
 
 
 def collect_artifacts(
@@ -92,7 +72,7 @@ def collect_artifacts(
                     {
                         "name": name,
                         "size_bytes": size_bytes,
-                        "size_human": format_size_human(size_bytes),
+                        "size_human": format_bytes(size_bytes),
                     }
                 )
         else:
@@ -102,15 +82,17 @@ def collect_artifacts(
         max_workers = min(len(run_ids), 4)
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
             future_to_run = {
-                pool.submit(list_run_artifacts, repo, run_id): run_id
-                for run_id in run_ids
+                pool.submit(list_run_artifacts, repo, run_id): run_id for run_id in run_ids
             }
             for future in concurrent.futures.as_completed(future_to_run):
                 run_id = future_to_run[future]
                 try:
                     run_artifacts = future.result()
                 except Exception as exc:
-                    print(f"Warning: failed to list artifacts for run {run_id}: {exc}", file=sys.stderr)
+                    print(
+                        f"Warning: failed to list artifacts for run {run_id}: {exc}",
+                        file=sys.stderr,
+                    )
                     continue
                 for artifact in run_artifacts:
                     name = str(artifact.get("name", ""))
@@ -122,7 +104,7 @@ def collect_artifacts(
                         {
                             "name": name,
                             "size_bytes": size_bytes,
-                            "size_human": format_size_human(size_bytes),
+                            "size_human": format_bytes(size_bytes),
                         }
                     )
 
@@ -177,8 +159,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.runs_file:
         try:
-            with open(args.runs_file, encoding="utf-8") as f:
-                loaded_runs = json.load(f)
+            loaded_runs = read_json(Path(args.runs_file))
         except (json.JSONDecodeError, OSError) as e:
             print(f"Error: failed to read runs file {args.runs_file}: {e}", file=sys.stderr)
             return 1
@@ -196,7 +177,7 @@ def main(argv: list[str] | None = None) -> int:
         artifacts_path = Path(args.artifacts_file)
         if artifacts_path.exists():
             try:
-                data = json.loads(artifacts_path.read_text(encoding="utf-8"))
+                data = read_json(artifacts_path)
             except (json.JSONDecodeError, OSError):
                 data = {}
             runs_data = data.get("runs", {})
@@ -211,7 +192,9 @@ def main(argv: list[str] | None = None) -> int:
                             artifact for artifact in run_artifacts if isinstance(artifact, dict)
                         ]
 
-    latest = latest_successful_runs(runs, platforms, event=event)
+    latest = select_latest_runs_by_name(
+        runs, set(platforms), event=event, status="completed", conclusion="success"
+    )
     artifacts = collect_artifacts(
         args.repo,
         latest,
@@ -221,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
 
     output_path = Path(args.output_file)
     if artifacts:
-        output_path.write_text(json.dumps({"artifacts": artifacts}, indent=2), encoding="utf-8")
+        write_json(output_path, {"artifacts": artifacts})
         print(f"Wrote {len(artifacts)} artifacts to {output_path}")
     else:
         print("No artifacts found")

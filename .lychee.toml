@@ -21,9 +21,14 @@ exclude = [
     '192\.168\.',
     '10\.\d+\.',
 
-    # Flaky/slow external sites (timeouts)
+    # Flaky/slow external sites (timeouts, intermittent 5xx)
     '^https?://www\.gnu\.org/',
     '^https?://logs\.px4\.io',
+    '^https?://review\.px4\.io',
+    '^https?://discuss\.px4\.io',
+
+    # Dynamic build artifact (CDN returns 502 when build is mid-publish)
+    '^https://d176tv9ibo4jno\.cloudfront\.net/',
 
     # Dead/restructured external sites
     '^https?://www\.cplusplus\.com/',

@@ -49,10 +49,11 @@ MissionController::MissionController(PlanMasterController* masterController, QOb
     _updateTimer.setSingleShot(true);
 
     connect(&_updateTimer,                                      &QTimer::timeout,                                       this, &MissionController::_updateTimeout);
-    connect(_planViewSettings->takeoffItemNotRequired(),        &Fact::rawValueChanged,                                 this, &MissionController::_forceRecalcOfAllowedBits);
+    connect(_planViewSettings->takeoffItemNotRequired(),        &Fact::rawValueChanged,                                 this, &MissionController::_recalcPlanViewState);
     connect(_planViewSettings->allowMultipleLandingPatterns(),  &Fact::rawValueChanged,                                 this, &MissionController::multipleLandPatternsAllowedChanged);
     connect(_masterController,                                  &PlanMasterController::managerVehicleChanged,           this, &MissionController::multipleLandPatternsAllowedChanged);
-    connect(this,                                               &MissionController::multipleLandPatternsAllowedChanged, this, &MissionController::_forceRecalcOfAllowedBits);
+    connect(this,                                               &MissionController::multipleLandPatternsAllowedChanged, this, &MissionController::_recalcPlanViewState);
+    connect(this,                                               &MissionController::homePositionSetChanged,             this, &MissionController::_recalcPlanViewState);
     connect(this,                                               &MissionController::missionPlannedDistanceChanged,      this, &MissionController::recalcTerrainProfile);
 
     // The follow is used to compress multiple recalc calls in a row to into a single call.
@@ -389,31 +390,18 @@ VisualMissionItem* MissionController::insertCancelROIMissionItem(int visualItemI
 
 VisualMissionItem* MissionController::insertComplexMissionItem(QString itemName, QGeoCoordinate mapCenterCoordinate, int visualItemIndex, bool makeCurrentItem)
 {
-    ComplexMissionItem* newItem = nullptr;
-
-    if (itemName == SurveyComplexItem::canonicalName) {
-        newItem = new SurveyComplexItem(_masterController, _flyView, QString() /* kmlOrShpFile */);
-        newItem->setCoordinate(mapCenterCoordinate);
-
-        double                              prevAltitude;
-        QGroundControlQmlGlobal::AltitudeFrame    prevAltFrame;
-        if (globalAltitudeFrame() == QGroundControlQmlGlobal::AltitudeFrameMixed) {
-            // We are in mixed altitude frames, so copy from previous. Otherwise alt mode will be set from global setting in constructor.
-            if (_findPreviousAltitude(visualItemIndex, &prevAltitude, &prevAltFrame)) {
-                qobject_cast<SurveyComplexItem*>(newItem)->cameraCalc()->setDistanceMode(prevAltFrame);
-            }
-        }
-    } else if (itemName == FixedWingLandingComplexItem::canonicalName) {
-        newItem = new FixedWingLandingComplexItem(_masterController, _flyView);
-    } else if (itemName == VTOLLandingComplexItem::canonicalName) {
-        newItem = new VTOLLandingComplexItem(_masterController, _flyView);
-    } else if (itemName == StructureScanComplexItem::canonicalName) {
-        newItem = new StructureScanComplexItem(_masterController, _flyView, QString() /* kmlOrShpFile */);
-    } else if (itemName == CorridorScanComplexItem::canonicalName) {
-        newItem = new CorridorScanComplexItem(_masterController, _flyView, QString() /* kmlOrShpFile */);
-    } else {
-        qWarning() << "Internal error: Unknown complex item:" << itemName;
+    ComplexMissionItem* newItem = QGCCorePlugin::instance()->createComplexMissionItem(itemName, _masterController, _flyView);
+    if (!newItem) {
         return nullptr;
+    }
+    newItem->setCoordinate(mapCenterCoordinate);
+
+    if (globalAltitudeFrame() == QGroundControlQmlGlobal::AltitudeFrameMixed) {
+        double prevAltitude;
+        QGroundControlQmlGlobal::AltitudeFrame prevAltFrame;
+        if (_findPreviousAltitude(visualItemIndex, &prevAltitude, &prevAltFrame)) {
+            newItem->applyPreviousAltitudeFrame(prevAltFrame, prevAltitude);
+        }
     }
 
     _insertComplexMissionItemWorker(mapCenterCoordinate, newItem, visualItemIndex, makeCurrentItem);
@@ -423,16 +411,8 @@ VisualMissionItem* MissionController::insertComplexMissionItem(QString itemName,
 
 VisualMissionItem* MissionController::insertComplexMissionItemFromKMLOrSHP(QString itemName, QString file, int visualItemIndex, bool makeCurrentItem)
 {
-    ComplexMissionItem* newItem = nullptr;
-
-    if (itemName == SurveyComplexItem::canonicalName) {
-        newItem = new SurveyComplexItem(_masterController, _flyView, file);
-    } else if (itemName == StructureScanComplexItem::canonicalName) {
-        newItem = new StructureScanComplexItem(_masterController, _flyView, file);
-    } else if (itemName == CorridorScanComplexItem::canonicalName) {
-        newItem = new CorridorScanComplexItem(_masterController, _flyView, file);
-    } else {
-        qWarning() << "Internal error: Unknown complex item:" << itemName;
+    ComplexMissionItem* newItem = QGCCorePlugin::instance()->createComplexMissionItem(itemName, _masterController, _flyView, file);
+    if (!newItem) {
         return nullptr;
     }
 
@@ -714,54 +694,19 @@ bool MissionController::_loadJsonMissionFileV2(const QJsonObject& json, QmlObjec
             }
             QString complexItemType = itemObject[ComplexMissionItem::jsonComplexItemTypeKey].toString();
 
-            if (complexItemType == SurveyComplexItem::jsonComplexItemTypeValue) {
-                qCDebug(MissionControllerLog) << "Loading Survey: nextSequenceNumber" << nextSequenceNumber;
-                SurveyComplexItem* surveyItem = new SurveyComplexItem(_masterController, _flyView, QString() /* kmlOrShpFile */);
-                if (!surveyItem->load(itemObject, nextSequenceNumber++, errorString)) {
-                    return false;
-                }
-                nextSequenceNumber = surveyItem->lastSequenceNumber() + 1;
-                qCDebug(MissionControllerLog) << "Survey load complete: nextSequenceNumber" << nextSequenceNumber;
-                visualItems->append(surveyItem);
-            } else if (complexItemType == FixedWingLandingComplexItem::jsonComplexItemTypeValue) {
-                qCDebug(MissionControllerLog) << "Loading Fixed Wing Landing Pattern: nextSequenceNumber" << nextSequenceNumber;
-                FixedWingLandingComplexItem* landingItem = new FixedWingLandingComplexItem(_masterController, _flyView);
-                if (!landingItem->load(itemObject, nextSequenceNumber++, errorString)) {
-                    return false;
-                }
-                nextSequenceNumber = landingItem->lastSequenceNumber() + 1;
-                qCDebug(MissionControllerLog) << "FW Landing Pattern load complete: nextSequenceNumber" << nextSequenceNumber;
-                visualItems->append(landingItem);
-            } else if (complexItemType == VTOLLandingComplexItem::jsonComplexItemTypeValue) {
-                qCDebug(MissionControllerLog) << "Loading VTOL Landing Pattern: nextSequenceNumber" << nextSequenceNumber;
-                VTOLLandingComplexItem* landingItem = new VTOLLandingComplexItem(_masterController, _flyView);
-                if (!landingItem->load(itemObject, nextSequenceNumber++, errorString)) {
-                    return false;
-                }
-                nextSequenceNumber = landingItem->lastSequenceNumber() + 1;
-                qCDebug(MissionControllerLog) << "VTOL Landing Pattern load complete: nextSequenceNumber" << nextSequenceNumber;
-                visualItems->append(landingItem);
-            } else if (complexItemType == StructureScanComplexItem::jsonComplexItemTypeValue) {
-                qCDebug(MissionControllerLog) << "Loading Structure Scan: nextSequenceNumber" << nextSequenceNumber;
-                StructureScanComplexItem* structureItem = new StructureScanComplexItem(_masterController, _flyView, QString() /* kmlOrShpFile */);
-                if (!structureItem->load(itemObject, nextSequenceNumber++, errorString)) {
-                    return false;
-                }
-                nextSequenceNumber = structureItem->lastSequenceNumber() + 1;
-                qCDebug(MissionControllerLog) << "Structure Scan load complete: nextSequenceNumber" << nextSequenceNumber;
-                visualItems->append(structureItem);
-            } else if (complexItemType == CorridorScanComplexItem::jsonComplexItemTypeValue) {
-                qCDebug(MissionControllerLog) << "Loading Corridor Scan: nextSequenceNumber" << nextSequenceNumber;
-                CorridorScanComplexItem* corridorItem = new CorridorScanComplexItem(_masterController, _flyView, QString() /* kmlOrShpFile */);
-                if (!corridorItem->load(itemObject, nextSequenceNumber++, errorString)) {
-                    return false;
-                }
-                nextSequenceNumber = corridorItem->lastSequenceNumber() + 1;
-                qCDebug(MissionControllerLog) << "Corridor Scan load complete: nextSequenceNumber" << nextSequenceNumber;
-                visualItems->append(corridorItem);
-            } else {
+            qCDebug(MissionControllerLog) << "Loading complex item type:" << complexItemType << "nextSequenceNumber:" << nextSequenceNumber;
+            ComplexMissionItem* complexItem = QGCCorePlugin::instance()->createComplexMissionItem(complexItemType, _masterController, _flyView);
+            if (!complexItem) {
                 errorString = tr("Unsupported complex item type: %1").arg(complexItemType);
+                return false;
             }
+            if (!complexItem->load(itemObject, nextSequenceNumber++, errorString)) {
+                delete complexItem;
+                return false;
+            }
+            nextSequenceNumber = complexItem->lastSequenceNumber() + 1;
+            qCDebug(MissionControllerLog) << "Complex item load complete nextSequenceNumber:" << nextSequenceNumber;
+            visualItems->append(complexItem);
         } else {
             errorString = tr("Unknown item type: %1").arg(itemType);
             return false;
@@ -1985,6 +1930,7 @@ void MissionController::setCurrentPlanViewSeqNum(int sequenceNumber, bool force)
     if (_visualItems && (force || sequenceNumber != _currentPlanViewSeqNum)) {
         qCDebug(MissionControllerLog) << "setCurrentPlanViewSeqNum";
         bool    foundLand =             false;
+        bool    onlyInsertTakeoffValid = false;
         int     takeoffSeqNum =         -1;
         int     landSeqNum =            -1;
         int     lastFlyThroughSeqNum =  -1;
@@ -1993,9 +1939,9 @@ void MissionController::setCurrentPlanViewSeqNum(int sequenceNumber, bool force)
         _currentPlanViewItem  =         nullptr;
         _currentPlanViewSeqNum =        -1;
         _currentPlanViewVIIndex =       -1;
-        _onlyInsertTakeoffValid =       false;
         _isInsertTakeoffValid =         true;
         _isInsertLandValid =            true;
+        _isInsertROIValid =             false;
         _isROIActive =                  false;
         _isROIBeginCurrentItem =        false;
         _flyThroughCommandsAllowed =    true;
@@ -2003,7 +1949,7 @@ void MissionController::setCurrentPlanViewSeqNum(int sequenceNumber, bool force)
 
         bool noItemsAddedYet = _visualItems->count() == 1;
         if (_masterController->controllerVehicle()->supports()->takeoffMissionCommand() && !_planViewSettings->takeoffItemNotRequired()->rawValue().toBool() && noItemsAddedYet) {
-            _onlyInsertTakeoffValid = true;
+            onlyInsertTakeoffValid = true;
         }
 
         for (int viIndex=0; viIndex<_visualItems->count(); viIndex++) {
@@ -2143,12 +2089,19 @@ void MissionController::setCurrentPlanViewSeqNum(int sequenceNumber, bool force)
         }
 
         // These are not valid when only takeoff is allowed
-        _isInsertLandValid =            _isInsertLandValid && !_onlyInsertTakeoffValid;
-        _flyThroughCommandsAllowed =    _flyThroughCommandsAllowed && !_onlyInsertTakeoffValid;
+        _isInsertLandValid =            _isInsertLandValid && !onlyInsertTakeoffValid;
+        _flyThroughCommandsAllowed =    _flyThroughCommandsAllowed && !onlyInsertTakeoffValid;
 
-        // These 10 properties are all recomputed together above, so a single signal is sufficient.
+        // Nothing can be inserted until the home position has been set
+        const bool homePosSet = homePositionSet();
+        _isInsertTakeoffValid =         _isInsertTakeoffValid && homePosSet;
+        _isInsertLandValid =            _isInsertLandValid && homePosSet;
+        _flyThroughCommandsAllowed =    _flyThroughCommandsAllowed && homePosSet;
+        _isInsertROIValid =             homePosSet && !onlyInsertTakeoffValid;
+
+        // These properties are all recomputed together above, so a single signal is sufficient.
         // QML property bindings list planViewStateChanged as their NOTIFY signal which means
-        // one emit re-evaluates all dependent bindings in one pass instead of 10 separate updates.
+        // one emit re-evaluates all dependent bindings in one pass instead of many separate updates.
         // splitSegmentChanged is kept separate because PlanView.qml has an explicit onSplitSegmentChanged handler.
         emit planViewStateChanged();
         emit splitSegmentChanged();
@@ -2411,9 +2364,8 @@ bool MissionController::isEmpty(void) const
     return _visualItems->count() <= 1;
 }
 
-void MissionController::_forceRecalcOfAllowedBits(void)
+void MissionController::_recalcPlanViewState(void)
 {
-    // Force a recalc of allowed bits
     setCurrentPlanViewSeqNum(_currentPlanViewSeqNum, true /* force */);
 }
 

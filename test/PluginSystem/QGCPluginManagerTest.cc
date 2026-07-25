@@ -3,6 +3,7 @@
 #include <QtCore/QDir>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
+#include <QtCore/QRegularExpression>
 #include <QtCore/QSettings>
 #include <QtCore/QStandardPaths>
 
@@ -143,7 +144,9 @@ void QGCPluginManagerTest::_incompatibleRecorded_test()
     fixture.errorString = QStringLiteral("requires host version >= 9.9");
 
     QGCPluginManager manager;
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("requires host version"));
     manager._processInspected({fixture});
+    verifyExpectedLogMessage();
 
     const PluginLoadInfo& record = manager._records.first();
     QCOMPARE(record.state, PluginState::Incompatible);
@@ -159,7 +162,9 @@ void QGCPluginManagerTest::_settingsKeyedById_test()
     const QString name = QStringLiteral("Alpha Display");
 
     QGCPluginManager manager;
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Failed to activate plugin"));
     manager._processInspected({discoveredFixture(id, name)});
+    verifyExpectedLogMessage();
 
     // Fact is keyed by manifest id, not display name
     Fact* fact = pluginSettings()->pluginEnabledFact(id);
@@ -187,7 +192,9 @@ void QGCPluginManagerTest::_failedWithoutIdNotRegistered_test()
     const QStringList idsBefore = pluginSettings()->registeredPluginIds();
 
     QGCPluginManager manager;
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("no plugin metadata found"));
     manager._processInspected({fixture});
+    verifyExpectedLogMessage();
 
     // Record kept for display purposes, but no settings key without an id
     QCOMPARE(manager._records.size(), 1);
@@ -203,10 +210,12 @@ void QGCPluginManagerTest::_duplicateIdFails_test()
     pluginSettings()->registerPlugin(id, QStringLiteral("Duplicate Plugin"), false);
 
     QGCPluginManager manager;
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("duplicate plugin id"));
     manager._processInspected({
         discoveredFixture(id, QStringLiteral("Duplicate Plugin")),
         discoveredFixture(id, QStringLiteral("Duplicate Plugin")),
     });
+    verifyExpectedLogMessage();
 
     QCOMPARE(manager._records.size(), 2);
     QCOMPARE(manager._records[0].state, PluginState::Disabled);
@@ -225,7 +234,9 @@ void QGCPluginManagerTest::_setPluginEnabledPersistsAndReconciles_test()
     QCOMPARE(manager._records.first().state, PluginState::Disabled);
 
     // Enabling persists the Fact and attempts activation, which fails on the bogus path
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Failed to activate plugin"));
     manager.setPluginEnabled(id, true);
+    verifyExpectedLogMessage();
     QVERIFY(pluginSettings()->isPluginEnabled(id));
     QCOMPARE(manager._records.first().state, PluginState::Failed);
     QVERIFY(!manager._records.first().errorString.isEmpty());
@@ -236,7 +247,9 @@ void QGCPluginManagerTest::_setPluginEnabledPersistsAndReconciles_test()
     QVERIFY(manager._records.first().plugin == nullptr);
 
     // Unknown id warns without side effects
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Plugin not found"));
     manager.setPluginEnabled(QStringLiteral("org.test.unknown"), true);
+    verifyExpectedLogMessage();
     QCOMPARE(manager._records.size(), 1);
 }
 
@@ -245,7 +258,9 @@ void QGCPluginManagerTest::_reloadUnknownId_test()
     QGCPluginManager manager;
     manager._processInspected({});
 
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Plugin not found for reload"));
     manager.reloadPlugin(QStringLiteral("org.test.nope"));
+    verifyExpectedLogMessage();
     QVERIFY(manager._records.isEmpty());
 }
 
@@ -261,7 +276,9 @@ void QGCPluginManagerTest::_reloadKeepsIdentityOnFailedInspect_test()
 
     // Re-inspection of the bogus path fails; the record must keep its manifest id
     // so the settings key and id lookups stay coherent
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Reload inspection failed"));
     manager.reloadPlugin(id);
+    verifyExpectedLogMessage();
     QCOMPARE(manager._records.size(), 1);
     QCOMPARE(manager._records.first().manifest.id, id);
     QCOMPARE(manager._records.first().state, PluginState::Failed);
@@ -442,8 +459,12 @@ void QGCPluginManagerTest::_crashSentinelQuarantines_test()
     settings.setValue(QString::fromLatin1(kLoadingPluginIdKey), id);
 
     QGCPluginManager manager;
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Previous run crashed while loading plugin"));
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("QGC crashed while loading this plugin last run"));
     manager._checkCrashSentinel();
     manager._processInspected({discoveredFixture(id, QStringLiteral("Crashed Plugin"))});
+    verifyExpectedLogMessage();
+    verifyExpectedLogMessage();
 
     // Quarantined with no activation attempt (an attempt on the bogus path would
     // have flipped the state to Failed), despite the enabled-by-default Fact
@@ -458,7 +479,9 @@ void QGCPluginManagerTest::_crashSentinelQuarantines_test()
 
     // Re-enable clears the marker and retries: activation is now attempted and
     // fails on the bogus path — proving the gate opened
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Failed to activate plugin"));
     manager.setPluginEnabled(id, true);
+    verifyExpectedLogMessage();
     QCOMPARE(manager._records.first().state, PluginState::Failed);
     settings.sync();
     QVERIFY(settings.value(QString::fromLatin1(kCrashedPluginIdKey)).toString().isEmpty());
@@ -474,8 +497,12 @@ void QGCPluginManagerTest::_crashSentinelOutranksConsent_test()
     settings.setValue(QString::fromLatin1(kLoadingPluginIdKey), id);
 
     QGCPluginManager manager;
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Previous run crashed while loading plugin"));
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("QGC crashed while loading this plugin last run"));
     manager._checkCrashSentinel();
     manager._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
+    verifyExpectedLogMessage();
+    verifyExpectedLogMessage();
 
     // Crash quarantine outranks the consent gate: a plugin that crashed the host
     // must not be runnable by mere approval
@@ -494,7 +521,9 @@ void QGCPluginManagerTest::_sentinelClearedAfterActivation_test()
     const QString id = QStringLiteral("org.test.sentinelclear");
 
     QGCPluginManager manager;
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Failed to activate plugin"));
     manager._processInspected({discoveredFixture(id, QStringLiteral("Sentinel Plugin"))});
+    verifyExpectedLogMessage();
 
     // Activation was attempted (and failed on the bogus path); a completed attempt
     // — even a failed one — must leave no lingering sentinel to blame next boot

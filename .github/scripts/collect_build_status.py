@@ -4,8 +4,7 @@
 from __future__ import annotations
 
 import argparse
-import json
-import os
+from pathlib import Path
 from typing import Any
 
 from ci_bootstrap import ensure_tools_dir
@@ -14,14 +13,8 @@ ensure_tools_dir(__file__)
 
 from common.gh_actions import list_workflow_runs_for_sha, parse_csv_list, write_github_output
 from common.github_runs import select_latest_runs_by_name
-
-
-def latest_runs_by_name(
-    runs: list[dict[str, Any]],
-    names: set[str],
-    event: str,
-) -> dict[str, dict[str, Any]]:
-    return select_latest_runs_by_name(runs, names, event=event)
+from common.io import read_json, write_json
+from common.markdown import md_table
 
 
 def platform_status(
@@ -60,17 +53,18 @@ def precommit_status(run: dict[str, Any] | None) -> dict[str, str]:
 
 
 def render_table(platforms: list[str], states: dict[str, dict[str, str]]) -> str:
-    lines = ["| Platform | Status | Details |", "|----------|--------|--------|"]
+    rows = []
     for name in platforms:
         info = states[name]
         link = f"[View]({info['url']})" if info["url"] else "-"
-        lines.append(f"| {name} | {info['status']} | {link} |")
-    return "\n".join(lines)
-
+        rows.append([name, info["status"], link])
+    return md_table(["Platform", "Status", "Details"], rows)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Collect build status for PR build-results comment.")
+    parser = argparse.ArgumentParser(
+        description="Collect build status for PR build-results comment."
+    )
     parser.add_argument("--repo", required=True, help="Repository in owner/repo format")
     parser.add_argument("--head-sha", required=True, help="Commit SHA to inspect")
     parser.add_argument(
@@ -82,6 +76,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--event",
         default="pull_request",
         help="Workflow event name to consider (default: pull_request)",
+    )
+    parser.add_argument(
+        "--runs-input",
+        default="",
+        help="Path to read pre-fetched workflow runs JSON; skips the API call",
     )
     parser.add_argument(
         "--runs-cache",
@@ -97,13 +96,15 @@ def main(argv: list[str] | None = None) -> int:
     target_names = set(platforms)
     target_names.add("pre-commit")
 
-    runs = list_workflow_runs_for_sha(args.repo, args.head_sha)
+    if args.runs_input:
+        runs = read_json(Path(args.runs_input))
+    else:
+        runs = list_workflow_runs_for_sha(args.repo, args.head_sha)
 
     if args.runs_cache:
-        with open(args.runs_cache, "w", encoding="utf-8") as f:
-            json.dump(runs, f)
+        write_json(Path(args.runs_cache), runs)
 
-    latest = latest_runs_by_name(runs, target_names, args.event)
+    latest = select_latest_runs_by_name(runs, target_names, event=args.event)
 
     states = {name: platform_status(latest.get(name)) for name in platforms}
     precommit = precommit_status(latest.get("pre-commit"))
@@ -112,19 +113,23 @@ def main(argv: list[str] | None = None) -> int:
     platform_conclusions = [states[name]["conclusion"] for name in platforms]
     all_complete = all(c in {"success", "failure", "cancelled"} for c in platform_conclusions)
     all_success = all(c == "success" for c in platform_conclusions)
-    summary = "All builds passed." if all_complete and all_success else (
-        "Some builds failed." if all_complete else "Some builds still in progress."
+    summary = (
+        "All builds passed."
+        if all_complete and all_success
+        else ("Some builds failed." if all_complete else "Some builds still in progress.")
     )
 
-    write_github_output({
-        "table": table,
-        "summary": summary,
-        "all_complete": "true" if all_complete else "false",
-        "precommit_status": precommit["status"],
-        "precommit_url": precommit["url"],
-        "precommit_conclusion": precommit["conclusion"],
-        "precommit_run_id": precommit["run_id"],
-    })
+    write_github_output(
+        {
+            "table": table,
+            "summary": summary,
+            "all_complete": "true" if all_complete else "false",
+            "precommit_status": precommit["status"],
+            "precommit_url": precommit["url"],
+            "precommit_conclusion": precommit["conclusion"],
+            "precommit_run_id": precommit["run_id"],
+        }
+    )
 
     print(table)
     print(summary)

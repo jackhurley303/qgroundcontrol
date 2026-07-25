@@ -1276,12 +1276,13 @@ void Vehicle::_handlePing(LinkInterface* link, mavlink_message_t& message)
 }
 
 void Vehicle::setActuatorsMetadata([[maybe_unused]] uint8_t compid,
-                                   const QString &metadataJsonFileName)
+                                   const QString &metadataJsonFileName,
+                                   const QJsonDocument &metadataJson)
 {
     if (!_actuators) {
         _actuators = new Actuators(this, this);
     }
-    _actuators->load(metadataJsonFileName);
+    _actuators->load(metadataJsonFileName, metadataJson);
 }
 
 void Vehicle::_handleHeartbeat(mavlink_message_t& message)
@@ -1409,11 +1410,8 @@ bool Vehicle::sendMessageOnLinkThreadSafe(LinkInterface* link, mavlink_message_t
     // Give the plugin a chance to adjust
     _firmwarePlugin->adjustOutgoingMavlinkMessageThreadSafe(this, link, &message);
 
-    // Write message into buffer, prepending start sign
-    uint8_t buffer[MAVLINK_MAX_PACKET_LEN];
-    int len = mavlink_msg_to_send_buffer(buffer, &message);
-
-    link->writeBytesThreadSafe((const char*)buffer, len);
+    // Single send chokepoint: LinkInterface re-signs, serializes, and writes.
+    link->sendMessageThreadSafe(message);
     _messagesSent++;
     emit messagesSentChanged();
 
@@ -2234,6 +2232,11 @@ void Vehicle::sendMavCommandIntWithHandler(const MavCmdAckHandlerInfo_t* ackHand
 void Vehicle::sendMavCommandWithLambdaFallback(std::function<void()> lambda, int compId, MAV_CMD command, bool showError, float param1, float param2, float param3, float param4, float param5, float param6, float param7)
 {
     _mavCmdQueue->sendCommandWithLambdaFallback(std::move(lambda), compId, command, showError, param1, param2, param3, param4, param5, param6, param7);
+}
+
+void Vehicle::sendMavCommandIntWithLambdaFallback(std::function<void()> lambda, int compId, MAV_CMD command, MAV_FRAME frame, bool showError, float param1, float param2, float param3, float param4, double param5, double param6, float param7)
+{
+    _mavCmdQueue->sendCommandIntWithLambdaFallback(std::move(lambda), compId, command, frame, showError, param1, param2, param3, param4, param5, param6, param7);
 }
 
 bool Vehicle::isMavCommandPending(int targetCompId, MAV_CMD command)
@@ -3102,6 +3105,95 @@ void Vehicle::sendJoystickDataThreadSafe(float roll, float pitch, float yaw, flo
     sendMessageOnLinkThreadSafe(sharedLink.get(), message);
 }
 
+// Sends RC_CHANNELS_OVERRIDE for joystick aux axes mapped to RC channels 5–10 only.
+// Channels 1–4 (attitude axes) always carry UINT16_MAX (ignore) and channels 11–18 are unused.
+void Vehicle::sendJoystickAuxRcOverrideThreadSafe(const std::array<uint16_t, kAuxRcOverrideChannelCount> &channelValues, const std::array<bool, kAuxRcOverrideChannelCount> &channelEnabled, bool useRcOverride)
+{
+    SharedLinkInterfacePtr sharedLink = vehicleLinkManager()->primaryLink().lock();
+    if (!sharedLink) {
+        qCDebug(VehicleLog) << "sendJoystickAuxRcOverrideThreadSafe: primary link gone!";
+        return;
+    }
+
+    if (sharedLink->linkConfiguration()->isHighLatency()) {
+        return;
+    }
+
+    bool anyEnabledChannel = false;
+    for (bool enabled : channelEnabled) {
+        if (enabled) {
+            anyEnabledChannel = true;
+            break;
+        }
+    }
+
+    if (!useRcOverride || !anyEnabledChannel) {
+        // Atomically transition true → false so only one thread sends the release packet.
+        bool expected = true;
+        if (!_joystickAuxRcOverrideActive.compare_exchange_strong(expected, false)) {
+            return;
+        }
+
+        mavlink_message_t releaseMessage;
+        mavlink_msg_rc_channels_override_pack_chan(
+            static_cast<uint8_t>(MAVLinkProtocol::instance()->getSystemId()),
+            static_cast<uint8_t>(MAVLinkProtocol::getComponentId()),
+            sharedLink->mavlinkChannel(),
+            &releaseMessage,
+            static_cast<uint8_t>(_systemID),
+            static_cast<uint8_t>(_defaultComponentId),
+            UINT16_MAX,                         // chan1: ignore (not overriding attitude axes)
+            UINT16_MAX,                         // chan2: ignore
+            UINT16_MAX,                         // chan3: ignore
+            UINT16_MAX,                         // chan4: ignore
+            0,                                  // chan5: release (MAVLink standard: 0 = release override)
+            0,                                  // chan6: release
+            0,                                  // chan7: release
+            0,                                  // chan8: release
+            static_cast<uint16_t>(UINT16_MAX - 1),  // chan9: release (extension field: UINT16_MAX-1 = release)
+            static_cast<uint16_t>(UINT16_MAX - 1),  // chan10: release
+            0,                                  // chan11–18: not used
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0);
+        sendMessageOnLinkThreadSafe(sharedLink.get(), releaseMessage);
+        return;
+    }
+
+    mavlink_message_t message;
+    mavlink_msg_rc_channels_override_pack_chan(
+        static_cast<uint8_t>(MAVLinkProtocol::instance()->getSystemId()),
+        static_cast<uint8_t>(MAVLinkProtocol::getComponentId()),
+        sharedLink->mavlinkChannel(),
+        &message,
+        static_cast<uint8_t>(_systemID),
+        static_cast<uint8_t>(_defaultComponentId),
+        UINT16_MAX,                         // chan1: ignore (not overriding attitude axes)
+        UINT16_MAX,                         // chan2: ignore
+        UINT16_MAX,                         // chan3: ignore
+        UINT16_MAX,                         // chan4: ignore
+        channelEnabled[0] ? channelValues[0] : static_cast<uint16_t>(0),           // chan5: value or release
+        channelEnabled[1] ? channelValues[1] : static_cast<uint16_t>(0),           // chan6: value or release
+        channelEnabled[2] ? channelValues[2] : static_cast<uint16_t>(0),           // chan7: value or release
+        channelEnabled[3] ? channelValues[3] : static_cast<uint16_t>(0),           // chan8: value or release
+        channelEnabled[4] ? channelValues[4] : static_cast<uint16_t>(UINT16_MAX - 1),  // chan9: value or release (extension field)
+        channelEnabled[5] ? channelValues[5] : static_cast<uint16_t>(UINT16_MAX - 1),  // chan10: value or release (extension field)
+        0,                                  // chan11–18: not used
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0);
+    sendMessageOnLinkThreadSafe(sharedLink.get(), message);
+    _joystickAuxRcOverrideActive = true;
+}
+
 void Vehicle::triggerSimpleCamera()
 {
     sendMavCommand(_defaultComponentId,
@@ -3122,6 +3214,24 @@ void Vehicle::sendGripperAction(GRIPPER_ACTIONS gripperAction)
 }
 
 void Vehicle::setEstimatorOrigin(const QGeoCoordinate& centerCoord)
+{
+    // Prefer MAV_CMD_DO_SET_GLOBAL_ORIGIN (sent as COMMAND_INT, supersedes SET_GPS_GLOBAL_ORIGIN).
+    sendMavCommandIntWithLambdaFallback(
+        [this, centerCoord]() {  // fallback: deprecated SET_GPS_GLOBAL_ORIGIN message
+            setEstimatorOrigin_SET_GPS_GLOBAL_ORIGIN(centerCoord);
+        },
+        defaultComponentId(),
+        MAV_CMD_DO_SET_GLOBAL_ORIGIN,
+        MAV_FRAME_GLOBAL,
+        false,                                          // showError
+        0.0f, 0.0f, 0.0f, 0.0f,                         // param 1-4 empty
+        centerCoord.latitude(),                         // param5: latitude (deg) -> degE7
+        centerCoord.longitude(),                        // param6: longitude (deg) -> degE7
+        static_cast<float>(centerCoord.altitude())      // param7: altitude (m)
+    );
+}
+
+void Vehicle::setEstimatorOrigin_SET_GPS_GLOBAL_ORIGIN(const QGeoCoordinate& centerCoord)
 {
     SharedLinkInterfacePtr sharedLink = vehicleLinkManager()->primaryLink().lock();
     if (!sharedLink) {
@@ -3162,7 +3272,7 @@ void Vehicle::startTimerRevertAllowTakeover()
     disconnect(&_timerRevertAllowTakeover, &QTimer::timeout, nullptr, nullptr);
 
     connect(&_timerRevertAllowTakeover, &QTimer::timeout, this, [this](){
-        if (MAVLinkProtocol::instance()->getSystemId() == _sysid_in_control) {
+        if (MAVLinkProtocol::instance()->getSystemId() == _gcsMain) {
             this->requestOperatorControl(false);
         }
     });
@@ -3258,8 +3368,8 @@ void Vehicle::_handleControlStatus(const mavlink_message_t& message)
         updateControlStatusSignals = true;
     }
 
-    if (_sysid_in_control != controlStatus.sysid_in_control) {
-        _sysid_in_control = controlStatus.sysid_in_control;
+    if (_gcsMain != controlStatus.gcs_main) {
+        _gcsMain = controlStatus.gcs_main;
         updateControlStatusSignals = true;
     }
 

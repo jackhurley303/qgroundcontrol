@@ -7,7 +7,7 @@ qt_add_library(QGroundControlModule STATIC)
 # ----------------------------------------------------------------------------
 # QML Resources
 # ----------------------------------------------------------------------------
-set_source_files_properties(UI/MainWindow.qml
+set_source_files_properties(MainWindow/MainWindow.qml
     PROPERTIES
         QT_RESOURCE_ALIAS MainWindow.qml
 )
@@ -17,13 +17,13 @@ qt_add_qml_module(QGroundControlModule
     VERSION 1.0
     RESOURCE_PREFIX /qml
     QML_FILES
-        UI/MainWindow.qml
+        MainWindow/MainWindow.qml
+        MainWindow/MainWindowSavedState.qml
     IMPORTS
         QGC
     NO_PLUGIN
 )
 
-# iOS has no Qt SerialPort module — force no-serial-link before subdirectories read it.
 if(IOS)
     set(QGC_NO_SERIAL_LINK ON CACHE BOOL "Disable serial port communication" FORCE)
 endif()
@@ -59,7 +59,9 @@ add_subdirectory(PositionManager)
 add_subdirectory(QmlControls)
 add_subdirectory(Settings)
 add_subdirectory(Terrain)
-add_subdirectory(UI)
+add_subdirectory(AppSettings)
+add_subdirectory(FirstRunPromptDialogs)
+add_subdirectory(Toolbar)
 add_subdirectory(Vehicle)
 add_subdirectory(VideoManager)
 add_subdirectory(Viewer3D)
@@ -104,6 +106,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
         Qt6::Core
         Qt6::CorePrivate
         Qt6::Gui
+        Qt6::GuiPrivate
         Qt6::HttpServer
         Qt6::Network
         Qt6::StateMachine
@@ -168,7 +171,6 @@ target_compile_definitions(${CMAKE_PROJECT_NAME}
         $<$<BOOL:${QGC_DISABLE_APM_MAVLINK}>:QGC_NO_ARDUPILOT_DIALECT>
 )
 
-# Build configuration-specific definitions
 target_compile_definitions(${CMAKE_PROJECT_NAME}
     PRIVATE
         QT_DISABLE_DEPRECATED_UP_TO=${QGC_QT_DISABLE_DEPRECATED_UP_TO}

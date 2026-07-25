@@ -17,24 +17,11 @@ qt_version: 6.10.1
 Source code for _QGroundControl_ is kept on [GitHub](https://github.com/mavlink/qgroundcontrol).
 它采用 [Apache 2.0 和 GPLv3 双重授权](https://github.com/mavlink/qgroundcontrol/blob/master/.github/COPYING.md)。
 
-要获取源文件, 请执行以下操作:
+To get the source files, clone the repo (or your fork):
 
-1. 克隆存储库 (或您的分叉), 包括子模块：
-
-   ```sh
-   git clone --recursive -j8 https://github.com/mavlink/qgroundcontrol.git
-   ```
-
-2. 2.更新子模块（每次拉新源代码时都这样做）：
-
-   ```sh
-   git submodule update --recursive
-   ```
-
-:::tip
-提示：不能使用Github以zip形式下载源文件，因为zip压缩包中不包含相应的子模块源代码。 你必须使用git工具！
-你必须使用git工具！
-:::
+```sh
+git clone -j8 https://github.com/mavlink/qgroundcontrol.git
+```
 
 ## 构建QGroundControl开发环境
 
@@ -85,11 +72,11 @@ QGC 已通过指定 Qt 版本（{{ $frontmatter.qt_version }}）的全面测试�
 
 1. 安装附加软件包(特殊平台)
 
-   - **Ubuntu:** `python3 ./qgroundcontrol/tools/setup/install_dependencies.py --platform debian`
+   - **Ubuntu:** `python3 ./qgroundcontrol/tools/setup/install_dependencies --platform debian`
    - **Fedora:** `sudo dnf install speech-dispatcher SDL2-devel SDL2 systemd-devel patchelf`
    - **Arch Linux:** `pacman -Sy speech-dispatcher patchelf`
-   - **Mac:** `python3 ./qgroundcontrol/tools/setup/install_dependencies.py --platform macos`
-   - **Windows:** `python3 ./qgroundcontrol/tools/setup/install_dependencies.py --platform windows`
+   - **Mac:** `python3 ./qgroundcontrol/tools/setup/install_dependencies --platform macos`
+   - **Windows:** `python3 ./qgroundcontrol/tools/setup/install_dependencies --platform windows`
    - **Android:** Installing dependencies for android is quite involved. You are better off using Qt documentation for android setup instructions. Read [Qt 6 for Android](https://doc.qt.io/qt-6/android.html) carefully to the extend. Continue with [Gettting Started with Qt 6 for Android](https://doc.qt.io/qt-6/android-getting-started.html).
 
 2. Install OS-Specific Functionalities
@@ -106,9 +93,7 @@ QGC 已通过指定 Qt 版本（{{ $frontmatter.qt_version }}）的全面测试�
 
 安装 [Visual Studio 2022 Community Edition](https://visualstudio.microsoft.com/downloads/)。
 
-进行安装时，选择 _使用 C++ 进行桌面开发_ ：
-
-![Visual Studio 2019 - 选择基于 C++ 的桌面开发环境](../../../assets/dev_getting_started/visual_studio_select_features.png)
+When installing, select _Desktop development with C++_.
 
 ::: info
 Visual Studio is ONLY used to get the compiler. Building _QGroundControl_ is done using [Qt Creator](#qt-creator) or [cmake](#cmake) directly as outlined below.
@@ -126,13 +111,11 @@ Visual Studio is ONLY used to get the compiler. Building _QGroundControl_ is don
 
 3. Build using the "hammer" icon. After that, in order to deploy the build, use the "play" icon. Or use the menu Build on top for a detailed alternative.
 
-   ![QtCreator Build Button](../../../assets/dev_getting_started/qt_creator_build_qgc.png)
-
 #### 在CLI（命令行界面）使用 CMake {#cmake} 进行构建
 
 构建默认的 QGC 示例命令并在此后运行它：
 
-1. 请确保您克隆了仓库并先更新子模块，见上文 _源代码_ 章节并切换到仓库文件夹：
+1. Make sure you cloned the repository before, see chapter _Source Code_ above and switch into the repository folder:
 
    ```sh
    cd qgroundcontrol
@@ -176,7 +159,7 @@ Visual Studio is ONLY used to get the compiler. Building _QGroundControl_ is don
 ### 所有支持的操作系统的额外构建备注
 
 - **并行构建：** 对于非Windows构建，您可以使用 "-j#" 选项来运行并行构建。
-- **如果你在运行 _QGroundControll_**时遇到此错误: `/usr/lib/x86_64-linux-gnu/libstdc++.so.6: version 'GLIBCXX_3.4.20' not found.`，你需要更新到最新的 _gcc_ ，或者通过使用 `sudo apt-get install libstdc++6` 安装最新的 _libstdc++.6_ 。
+- **如果你在运行 _QGroundControll_**&#x65F6;遇到此错误: `/usr/lib/x86_64-linux-gnu/libstdc++.so.6: version 'GLIBCXX_3.4.20' not found.`，你需要更新到最新的 _gcc_ ，或者通过使用 `sudo apt-get install libstdc++6` 安装最新的 _libstdc++.6_ 。
 - **单元测试:** 若要运行 [单元测试](../contribute/unit_tests.md)，使用 `QGC_UNITEST_BUILD` 定义在 `debug` 模式下构建，然后复制 `deposition / qgroundcontrol-start。 运行测试前，将 `deploy/qgroundcontrol-start.sh\` 脚本复制到debug目录中。
 
 ## 构建 QGC 安装文件

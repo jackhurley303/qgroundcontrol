@@ -2,9 +2,11 @@
 
 #include "PX4/px4_custom_mode.h"
 #include "LinkInterface.h"
+#include "MAVLinkEnums.h"
 #include "MAVLinkMessageType.h"
 #include "QGCMAVLinkTypes.h"
 #include "MockConfiguration.h"
+#include "MockLinkPX4Calibration.h"
 #include "MockLinkMissionItemHandler.h"
 
 #include <QtCore/QElapsedTimer>
@@ -13,6 +15,7 @@
 #include <QtCore/QSet>
 #include <QtPositioning/QGeoCoordinate>
 
+#include <array>
 #include <atomic>
 
 class MockLinkCamera;
@@ -55,6 +58,13 @@ public:
     /// Sends the specified mavlink message to QGC
     void respondWithMavlinkMessage(const mavlink_message_t &msg);
 
+    /// Sends a STATUSTEXT message to QGC
+    ///     @param severity MAV_SEVERITY value
+    void sendStatusTextMessage(uint8_t severity, const QString &text);
+
+    /// Test API: places the simulated vehicle into the given pose during calibration
+    void setCalibrationPose(MockLinkPX4Calibration::Pose pose) const { _mockLinkPX4Calibration->setPose(pose); }
+
     MockLinkFTP *mockLinkFTP() const;
 
     /// Set the armed state of the simulated vehicle
@@ -80,8 +90,14 @@ public:
     /// Reset the state of the MissionItemHandler to no items, no transactions in progress.
     void resetMissionItemHandler() const { _missionItemHandler->reset(); }
 
+    /// Test-only: seeds a simple multirotor mission (takeoff, waypoint, RTL) onto the simulated vehicle.
+    void loadSimpleMultirotorMission() const { _missionItemHandler->loadSimpleMultirotorMission(); }
+
     /// Returns the filename for the simulated log file. Only available after a download is requested.
     QString logDownloadFile() const { return _logDownloadFilename; }
+
+    /// Vehicle-side channel used to encode outgoing (mock vehicle -> QGC) messages. Signing state lives here.
+    uint8_t outgoingMavlinkChannel() const { return _outgoingMavlinkChannel; }
 
     void clearReceivedMavCommandCounts() { _receivedMavCommandCountMap.clear(); _receivedMavCommandByCompCountMap.clear(); _receivedRequestMessageByCompAndMsgCountMap.clear(); }
     int receivedMavCommandCount(MAV_CMD command) const { return _receivedMavCommandCountMap.value(command, 0); }
@@ -89,8 +105,16 @@ public:
     int receivedRequestMessageCount(int compId, int messageId) const { return _receivedRequestMessageByCompAndMsgCountMap.value(compId).value(messageId, 0); }
     void clearReceivedRequestMessageCounts() { _receivedRequestMessageCountMap.clear(); _receivedRequestMessageByCompAndMsgCountMap.clear(); }
     int receivedRequestMessageCount(uint32_t messageId) const { return _receivedRequestMessageCountMap.value(messageId, 0); }
-    void clearReceivedMavlinkMessageCounts() { _receivedMavlinkMessageCountMap.clear(); _hashCheckRequestCount = 0; _missionItemHandler->clearRequestListCounts(); }
+    void clearReceivedMavlinkMessageCounts() { _receivedMavlinkMessageCountMap.clear(); _lastReceivedMavlinkMessageMap.clear(); _hashCheckRequestCount = 0; _missionItemHandler->clearRequestListCounts(); }
     int receivedMavlinkMessageCount(uint32_t messageId) const { return _receivedMavlinkMessageCountMap.value(messageId, 0); }
+    /// Returns the last received message with the given id. Returns false if none received.
+    bool lastReceivedMavlinkMessage(uint32_t messageId, mavlink_message_t &message) const {
+        if (!_lastReceivedMavlinkMessageMap.contains(messageId)) {
+            return false;
+        }
+        message = _lastReceivedMavlinkMessageMap.value(messageId);
+        return true;
+    }
     int receivedMissionRequestListCount(MAV_MISSION_TYPE type) const { return _missionItemHandler->requestListCount(type); }
 
     enum RequestMessageFailureMode_t {
@@ -136,19 +160,49 @@ public:
 
     void setHashCheckNoResponse(bool noResponse) { _hashCheckNoResponse = noResponse; }
 
+    /// Controls whether SYS_AUTOSTART is also reset when a MAV_CMD_PREFLIGHT_STORAGE
+    /// param1=2 (reset params to defaults) command is received. Defaults to false so
+    /// the simulated airframe doesn't change.
+    void setResetSysAutostartOnParamReset(bool reset) { _resetSysAutostartOnParamReset = reset; }
+
     /// Returns the number of standalone PARAM_REQUEST_READ requests for _HASH_CHECK received
     int hashCheckRequestCount() const { return _hashCheckRequestCount; }
 
     /// Change a float parameter value directly on MockLink (for testing cache invalidation)
     void setMockParamValue(int componentId, const QString &paramName, float value);
 
-    static MockLink *startPX4MockLink(bool sendStatusText, bool enableCamera, bool enableGimbal, MockConfiguration::FailureMode_t failureMode = MockConfiguration::FailNone);
-    static MockLink *startGenericMockLink(bool sendStatusText, bool enableCamera, bool enableGimbal, MockConfiguration::FailureMode_t failureMode = MockConfiguration::FailNone);
-    static MockLink *startNoInitialConnectMockLink(bool sendStatusText, bool enableCamera, bool enableGimbal, MockConfiguration::FailureMode_t failureMode = MockConfiguration::FailNone);
-    static MockLink *startAPMArduCopterMockLink(bool sendStatusText, bool enableCamera, bool enableGimbal, MockConfiguration::FailureMode_t failureMode = MockConfiguration::FailNone);
-    static MockLink *startAPMArduPlaneMockLink(bool sendStatusText, bool enableCamera, bool enableGimbal, MockConfiguration::FailureMode_t failureMode = MockConfiguration::FailNone);
-    static MockLink *startAPMArduSubMockLink(bool sendStatusText, bool enableCamera, bool enableGimbal, MockConfiguration::FailureMode_t failureMode = MockConfiguration::FailNone);
-    static MockLink *startAPMArduRoverMockLink(bool sendStatusText, bool enableCamera, bool enableGimbal, MockConfiguration::FailureMode_t failureMode = MockConfiguration::FailNone);
+    /// Simulates ArduPilot streaming MAG_CAL_REPORT(MAG_CAL_FAILED) after a failed onboard
+    /// compass cal. Like real ArduPilot, the failed report keeps streaming until
+    /// MAV_CMD_DO_CANCEL_MAG_CAL is received; MAV_CMD_DO_START_MAG_CAL does not stop it.
+    void startAPMStaleFailedMagCalReportStreaming();
+
+    /// Returns true while the stale failed MAG_CAL_REPORT stream is active
+    bool apmStaleFailedMagCalReportStreamingActive() const;
+
+    /// When enabled, MAV_CMD_DO_START_MAG_CAL is rejected with MAV_RESULT_FAILED
+    /// instead of starting the compass cal simulation.
+    void setAPMMagCalStartFailureMode(bool fail) { _apmMagCalStartFailureMode = fail; }
+
+    /// Change an int32 parameter value directly on MockLink. Used to simulate the
+    /// firmware storing calibration results (e.g. CAL_MAG0_ID).
+    void setInt32ParamValue(int componentId, const QString &paramName, int32_t value) { _mapParamName2Value[componentId][paramName] = QVariant::fromValue(value); }
+
+    /// Returns the current MockLink-side value of a parameter. Used by unit tests
+    /// to verify that PARAM_SET writes reached the simulated firmware.
+    QVariant paramValue(int componentId, const QString &paramName) const { return _mapParamName2Value.value(componentId).value(paramName); }
+
+    /// Override the OPEN_DRONE_ID_ARM_STATUS the simulated RID device sends at 1Hz.
+    /// status is a MAV_ODID_ARM_STATUS value.
+    void setRemoteIDArmStatus(uint8_t status, const QString& error);
+
+    static MockLink *startPX4MockLink(MockConfiguration::Options options = MockConfiguration::OptionNone, MockConfiguration::FailureMode_t failureMode = MockConfiguration::FailNone);
+    static MockLink *startPX4MockLinkWithMission(MockConfiguration::Options options = MockConfiguration::OptionNone, MockConfiguration::FailureMode_t failureMode = MockConfiguration::FailNone);
+    static MockLink *startGenericMockLink(MockConfiguration::Options options = MockConfiguration::OptionNone, MockConfiguration::FailureMode_t failureMode = MockConfiguration::FailNone);
+    static MockLink *startNoInitialConnectMockLink(MockConfiguration::Options options = MockConfiguration::OptionNone, MockConfiguration::FailureMode_t failureMode = MockConfiguration::FailNone);
+    static MockLink *startAPMArduCopterMockLink(MockConfiguration::Options options = MockConfiguration::OptionNone, MockConfiguration::FailureMode_t failureMode = MockConfiguration::FailNone);
+    static MockLink *startAPMArduPlaneMockLink(MockConfiguration::Options options = MockConfiguration::OptionNone, MockConfiguration::FailureMode_t failureMode = MockConfiguration::FailNone);
+    static MockLink *startAPMArduSubMockLink(MockConfiguration::Options options = MockConfiguration::OptionNone, MockConfiguration::FailureMode_t failureMode = MockConfiguration::FailNone);
+    static MockLink *startAPMArduRoverMockLink(MockConfiguration::Options options = MockConfiguration::OptionNone, MockConfiguration::FailureMode_t failureMode = MockConfiguration::FailNone);
 
     // Special commands for testing Vehicle::sendMavCommandWithHandler
     static constexpr MAV_CMD MAV_CMD_MOCKLINK_ALWAYS_RESULT_ACCEPTED = MAV_CMD_USER_1;
@@ -183,12 +237,12 @@ private:
     bool _allocateMavlinkChannel() final;
     void _freeMavlinkChannel() final;
 
-    uint8_t _getMavlinkAuxChannel() const { return _mavlinkAuxChannel; }
-    bool _mavlinkAuxChannelIsSet() const;
-    uint8_t _getMavlinkVehicleChannel() const { return _mavlinkVehicleChannel; }
-    bool _mavlinkVehicleChannelIsSet() const;
+    bool _incomingMavlinkChannelIsSet() const;
+    bool _outgoingMavlinkChannelIsSet() const;
 
     void _loadParams();
+    void _resetParamsToDefaults();
+    void _applyAPMFreshFlashState();
 
     /// Convert from a parameter variant to the float value from mavlink_param_union_t
     float _floatUnionForParam(int componentId, const QString &paramName);
@@ -209,12 +263,15 @@ private:
     void _handleParamRequestRead(const mavlink_message_t &msg);
     void _handleFTP(const mavlink_message_t &msg);
     void _handleCommandLong(const mavlink_message_t &msg);
+    void _handleCommandInt(const mavlink_message_t &msg);
     void _handleInProgressCommandLong(const mavlink_command_long_t &request);
     void _handleCommandLongSetMessageInterval(const mavlink_command_long_t &request, bool &acccepted);
     void _handleManualControl(const mavlink_message_t &msg);
+    void _handleRCChannelsOverride(const mavlink_message_t &msg);
     void _handlePreFlightCalibration(const mavlink_command_long_t &request);
     void _handleTakeoff(const mavlink_command_long_t &request);
     void _handleLogRequestList(const mavlink_message_t &msg);
+    void _handleLogErase(const mavlink_message_t &msg);
     void _handleLogRequestData(const mavlink_message_t &msg);
     void _handleParamMapRC(const mavlink_message_t &msg);
     void _handleSetupSigning(const mavlink_message_t &msg);
@@ -233,6 +290,8 @@ private:
     void _sendVibration();
     void _sendSysStatus();
     void _sendBatteryStatus();
+    void _sendNamedValueFloats();
+    void _sendDistanceSensors();
     void _sendChunkedStatusText(uint16_t chunkId, bool missingChunks);
     void _sendStatusTextMessages();
     void _respondWithAutopilotVersion();
@@ -240,16 +299,25 @@ private:
     void _sendADSBVehicles();
     void _sendGeneralMetaData();
     void _sendRemoteIDArmStatus();
+    void _sendEscInfo();
+    void _sendEscStatus();
+    void _sendRadioStatus();
     void _sendAvailableModesMonitor();
+    void _sendAttitudeQuaternion();
+    void _sendAttitudeTarget();
+    void _sendLocalPositionNed();
+    void _sendPositionTargetLocalNed();
 
     void _paramRequestListWorker();
     void _logDownloadWorker();
     void _availableModesWorker();
+    void _apmCompassCalWorker();
+    void _apmAccelCalWorker();
     void _sendAvailableMode(uint8_t modeIndexOneBased);
     int  _availableModesCount() const;
     void _moveADSBVehicle(int vehicleIndex);
 
-    static MockLink *_startMockLinkWorker(const QString &configName, MAV_AUTOPILOT firmwareType, MAV_TYPE vehicleType, bool sendStatusText, bool enableCamera, bool enableGimbal, MockConfiguration::FailureMode_t failureMode);
+    static MockLink *_startMockLinkWorker(const QString &configName, MAV_AUTOPILOT firmwareType, MAV_TYPE vehicleType, MockConfiguration::Options options, MockConfiguration::FailureMode_t failureMode);
     static MockLink *_startMockLink(MockConfiguration *mockConfig);
 
     /// Creates a file with random contents of the specified size.
@@ -263,9 +331,13 @@ private:
     const MAV_AUTOPILOT _firmwareType = MAV_AUTOPILOT_PX4;
     const MAV_TYPE _vehicleType = MAV_TYPE_QUADROTOR;
     const bool _sendStatusText = false;
+    const bool _apmStartFreshParams = false;
     const bool _enableCamera = false;
     const bool _enableGimbal = false;
+    const bool _enableProximity = false;
     const MockConfiguration::FailureMode_t _failureMode = MockConfiguration::FailNone;
+    const bool _stayMavlinkV1 = false;  ///< Test-only: never upgrade outgoing traffic to MAVLink v2
+    const bool _ftpCapability = false;  ///< Test-only: advertise MAV_PROTOCOL_CAPABILITY_FTP
     const uint8_t _vehicleSystemId = 0;
     const double _vehicleLatitude = 0.0;
     const double _vehicleLongitude = 0.0;
@@ -277,12 +349,13 @@ private:
     MockLinkMissionItemHandler *const _missionItemHandler = nullptr;
     MockLinkCamera *const _mockLinkCamera = nullptr;
     MockLinkGimbal *const _mockLinkGimbal = nullptr;
+    MockLinkPX4Calibration *const _mockLinkPX4Calibration = nullptr;
     MockLinkFTP *const _mockLinkFTP = nullptr;
 
-    uint8_t _mavlinkAuxChannel = std::numeric_limits<uint8_t>::max();
-    QMutex _mavlinkAuxMutex;
-    /// Vehicle-side outgoing channel; signing state lives here, decoupled from QGC's parser channel.
-    uint8_t _mavlinkVehicleChannel = std::numeric_limits<uint8_t>::max();
+    uint8_t _incomingMavlinkChannel = std::numeric_limits<uint8_t>::max();
+    QMutex _incomingMavlinkMutex;
+    /// Outgoing (vehicle-side) channel; signing state lives here, decoupled from QGC's incoming parser channel.
+    uint8_t _outgoingMavlinkChannel = std::numeric_limits<uint8_t>::max();
 
     mavlink_signing_t _mockSigning{};
     mavlink_signing_streams_t _mockSigningStreams{};
@@ -295,6 +368,7 @@ private:
     uint8_t _mavState = MAV_STATE_STANDBY;
 
     QElapsedTimer _runningTime;
+    static constexpr int kTestParamRequestListBatch = 25;
     static constexpr int32_t _batteryMaxTimeRemaining = 15 * 60;
     int8_t _battery1PctRemaining = 100;
     int32_t _battery1TimeRemaining = _batteryMaxTimeRemaining;
@@ -304,7 +378,8 @@ private:
     MAV_BATTERY_CHARGE_STATE _battery2ChargeState = MAV_BATTERY_CHARGE_STATE_OK;
 
     double _vehicleAltitudeAMSL = _defaultVehicleHomeAltitude;
-    bool _commLost = false;
+    std::atomic<bool> _commLost = false;
+    bool _mavlinkV2Upgraded = false;    ///< True once outgoing traffic has switched from v1 to v2
     bool _signingEnabled = false;
     bool _highLatencyTransmissionEnabled = true;
 
@@ -329,6 +404,7 @@ private:
     uint8_t _availableModesMonitorSeqNumber = 0;        ///< Sequence number for the next available mode message to send
 
     QString _logDownloadFilename;                       ///< Filename for log download which is in progress
+    bool _logsErased = false;                           ///< Set by LOG_ERASE, LOG_REQUEST_LIST reports no logs
     uint32_t _logDownloadCurrentOffset = 0;             ///< Current offset we are sending from
     uint32_t _logDownloadBytesRemaining = 0;            ///< Number of bytes still to send, 0 = send inactive
     /// Protects log download state from race conditions between:
@@ -346,12 +422,53 @@ private:
     bool _hashCheckNoResponse = false;
     int _hashCheckRequestCount = 0;
     bool _paramRequestListHashCheckSent = false;
+    bool _resetSysAutostartOnParamReset = false;
+
+    // Periodic OPEN_DRONE_ID_ARM_STATUS content (overridable via setRemoteIDArmStatus).
+    // Written by the test (main) thread, read by the 1Hz worker: guarded by _remoteIDArmStatusMutex.
+    QMutex _remoteIDArmStatusMutex;
+    uint8_t _remoteIDArmStatus = MAV_ODID_ARM_STATUS_GOOD_TO_ARM;
+    QString _remoteIDArmStatusError = QStringLiteral("No Error");
+
+    // APM compass calibration worker state
+    // Protects _apmCompassCalProgress: main thread writes 0 to start/stop,
+    // worker thread reads/increments each 100ms tick.
+    mutable QMutex _apmCompassCalMutex;
+    int    _apmCompassCalProgress  = -1; ///< -1 = inactive, 0-100 = progress pct
+    int    _apmCompassCalTickCount = 0;  ///< 500 Hz tick counter for ~10 Hz throttle
+    bool   _apmStaleFailedMagCalReportStreaming = false; ///< Streaming MAG_CAL_REPORT(FAILED) from a previous failed cal
+    bool   _apmMagCalStartFailureMode = false; ///< Reject MAV_CMD_DO_START_MAG_CAL with MAV_RESULT_FAILED
+
+    // APM accel calibration worker state
+    // Protects _apmAccelCalPos: main thread writes the starting pos,
+    // worker thread reads and advances through the sequence.
+    QMutex _apmAccelCalMutex;
+    /// Each position the firmware sends to QGC in sequence
+    static constexpr ACCELCAL_VEHICLE_POS kAPMAccelCalPosSequence[] = {
+        ACCELCAL_VEHICLE_POS_LEVEL,
+        ACCELCAL_VEHICLE_POS_LEFT,
+        ACCELCAL_VEHICLE_POS_RIGHT,
+        ACCELCAL_VEHICLE_POS_NOSEDOWN,
+        ACCELCAL_VEHICLE_POS_NOSEUP,
+        ACCELCAL_VEHICLE_POS_BACK,
+    };
+    int  _apmAccelCalPosIndex   = -1;   ///< -1 = inactive, 0..5 = current pos, 6 = done
+    bool _apmAccelCalGotAck     = false; ///< GCS clicked Next
+    int  _apmAccelCalTickCount  = 0;    ///< 500 Hz tick counter for ~10 Hz throttle
+
+    struct RCChannelOverride {
+        enum class State { Ignore, Overridden, Released } state = State::Ignore;
+        uint16_t value = 0;
+    };
+    static constexpr int kRcChannelOverrideChannelCount = 18;
+    std::array<RCChannelOverride, kRcChannelOverrideChannelCount> _rcChannelOverrides;
 
     QMap<MAV_CMD, int> _receivedMavCommandCountMap;
     QMap<MAV_CMD, QMap<int, int>> _receivedMavCommandByCompCountMap;
     QMap<uint32_t, int> _receivedRequestMessageCountMap;
     QMap<int, QMap<int, int>> _receivedRequestMessageByCompAndMsgCountMap;
     QMap<uint32_t, int> _receivedMavlinkMessageCountMap;
+    QMap<uint32_t, mavlink_message_t> _lastReceivedMavlinkMessageMap;
     QMap<int, QMap<QString, QVariant>> _mapParamName2Value;
     QMap<int, QMap<QString, MAV_PARAM_TYPE>> _mapParamName2MavParamType;
 
@@ -381,6 +498,16 @@ private:
     static constexpr uint32_t _logDownloadFileSize = 1000;  ///< Size of simulated log file
 
     static constexpr bool _mavlinkStarted = true;
+
+    /// ArduPilot calibration-indicator parameters whose firmware default is 0 (uncalibrated).
+    /// Used by _resetParamsToDefaults() and MockLinkFTP::_generateParamPck() to keep both
+    /// sites in sync.
+    inline static const QSet<QString> kAPMCalOffsetParams = {
+        QStringLiteral("COMPASS_OFS_X"),  QStringLiteral("COMPASS_OFS_Y"),  QStringLiteral("COMPASS_OFS_Z"),
+        QStringLiteral("COMPASS_OFS2_X"), QStringLiteral("COMPASS_OFS2_Y"), QStringLiteral("COMPASS_OFS2_Z"),
+        QStringLiteral("COMPASS_OFS3_X"), QStringLiteral("COMPASS_OFS3_Y"), QStringLiteral("COMPASS_OFS3_Z"),
+        QStringLiteral("INS_ACCOFFS_X"),  QStringLiteral("INS_ACCOFFS_Y"),  QStringLiteral("INS_ACCOFFS_Z"),
+    };
 
     static QList<FlightMode_t> _availableFlightModes;
 

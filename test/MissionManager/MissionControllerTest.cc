@@ -2,6 +2,10 @@
 #include "MissionControllerTest.h"
 
 #include "AppSettings.h"
+#include "CameraCalc.h"
+#include "CorridorScanComplexItem.h"
+#include "StructureScanComplexItem.h"
+#include "SurveyComplexItem.h"
 #include "UnitTestCoords.h"
 #include "MissionController.h"
 #include "MissionSettingsItem.h"
@@ -10,6 +14,10 @@
 #include "SettingsManager.h"
 #include "SimpleMissionItem.h"
 #include "TestFixtures.h"
+#include "MultiSignalSpy.h"
+
+#include <QtCore/QRegularExpression>
+#include <QtCore/QTemporaryDir>
 using namespace TestFixtures;
 
 MissionControllerTest::~MissionControllerTest() = default;
@@ -37,12 +45,11 @@ void MissionControllerTest::_initForFirmwareType(MAV_AUTOPILOT firmwareType)
     _masterController = std::make_unique<PlanMasterController>();
     _masterController->setFlyView(false);
     _missionController = _masterController->missionController();
-    SignalSpyFixture missionControllerSpy(_missionController);
-    QVERIFY(missionControllerSpy.spy());
-    missionControllerSpy.expect("visualItemsReset");
+    MultiSignalSpy missionControllerSpy;
+    QVERIFY(missionControllerSpy.init(_missionController));
     _masterController->start();
     // visualItemsReset should be emitted during start (along with many other signals)
-    QVERIFY(missionControllerSpy.waitAndVerify(TestTimeout::mediumMs()));
+    QVERIFY(missionControllerSpy.waitForSignal("visualItemsReset", TestTimeout::mediumMs()));
     QmlObjectListModel* visualItems = _missionController->visualItems();
     QVERIFY(visualItems);
     // Empty vehicle only has home position
@@ -69,6 +76,9 @@ void MissionControllerTest::_testEmptyVehicle()
 {
     UT_FETCH_AUTOPILOT();
     Q_UNUSED(autopilotName);
+    // ArduPilot metadata includes an invalid enum value; skip warning is expected for that autopilot.
+    ignoreLogMessage("FirmwarePlugin.ParameterMetaData", QtWarningMsg,
+                     QRegularExpression("Skipping invalid enum value"));
     _initForFirmwareType(autopilot);
     // FYI: A significant amount of empty vehicle testing is in _initForFirmwareType since that
     // sets up an empty vehicle
@@ -81,8 +91,46 @@ void MissionControllerTest::_testEmptyVehicle()
 
 void MissionControllerTest::_setupVisualItemSignals(VisualMissionItem* visualItem)
 {
-    SignalSpyFixture visualItemSpy(visualItem);
-    QVERIFY(visualItemSpy.spy());
+    MultiSignalSpy visualItemSpy;
+    QVERIFY(visualItemSpy.init(visualItem));
+}
+
+void MissionControllerTest::_testInsertValidityHomePositionGating()
+{
+    _initForFirmwareType(MAV_AUTOPILOT_PX4);
+
+    auto boolProperty = [this](const char* name) {
+        const QVariant value = _missionController->property(name);
+        return value.isValid() && value.toBool();
+    };
+
+    // All insert validity properties must exist
+    QVERIFY(_missionController->property("isInsertTakeoffValid").isValid());
+    QVERIFY(_missionController->property("isInsertLandValid").isValid());
+    QVERIFY(_missionController->property("isInsertROIValid").isValid());
+    QVERIFY(_missionController->property("flyThroughCommandsAllowed").isValid());
+
+    // No home position set: no inserts are valid
+    QCOMPARE(_missionController->homePositionSet(), false);
+    QCOMPARE(boolProperty("isInsertTakeoffValid"), false);
+    QCOMPARE(boolProperty("isInsertLandValid"), false);
+    QCOMPARE(boolProperty("isInsertROIValid"), false);
+    QCOMPARE(boolProperty("flyThroughCommandsAllowed"), false);
+
+    // Home position set, empty plan: only takeoff insert is valid
+    _missionController->setHomePosition(Coord::zurich());
+    QCOMPARE(_missionController->homePositionSet(), true);
+    QCOMPARE(boolProperty("isInsertTakeoffValid"), true);
+    QCOMPARE(boolProperty("isInsertLandValid"), false);
+    QCOMPARE(boolProperty("isInsertROIValid"), false);
+    QCOMPARE(boolProperty("flyThroughCommandsAllowed"), false);
+
+    // Takeoff added: takeoff no longer valid, everything else is
+    QVERIFY(_missionController->insertTakeoffItem(Coord::zurich(), 1, true /* makeCurrentItem */));
+    QCOMPARE(boolProperty("isInsertTakeoffValid"), false);
+    QCOMPARE(boolProperty("isInsertLandValid"), true);
+    QCOMPARE(boolProperty("isInsertROIValid"), true);
+    QCOMPARE(boolProperty("flyThroughCommandsAllowed"), true);
 }
 
 void MissionControllerTest::_testGimbalRecalc()
@@ -338,8 +386,12 @@ void MissionControllerTest::_testMissionTransformsInvalidHome()
     QVERIFY_TRUE_WAIT(!settingsItem->coordinate().isValid(), TestTimeout::shortMs());
 
     // repositionMission and rotateMission require a valid home — they should be no-ops
+    expectLogMessage("PlanManager.MissionController", QtWarningMsg, QRegularExpression("Cannot reposition mission while home is invalid"));
     _missionController->repositionMission(home.atDistanceAndAzimuth(100.0, 0.0), true, true);
+    verifyExpectedLogMessage();
+    expectLogMessage("PlanManager.MissionController", QtWarningMsg, QRegularExpression("Cannot rotate mission while home is invalid"));
     _missionController->rotateMission(45.0, true, true);
+    verifyExpectedLogMessage();
     QCOMPARE_COORDS(item1->coordinate(), oldItemCoord, kCoordToleranceMeters);
     QCOMPARE_FUZZY(item1->editableAlt(), oldItemAlt, kAltToleranceMeters);
 
@@ -406,6 +458,131 @@ void MissionControllerTest::_testGlobalAltFrame()
             QCOMPARE(siLoop->missionItem().frame(), testCase.expectedMavFrame);
         }
     }
+}
+
+void MissionControllerTest::_testInsertComplexItemFromKML()
+{
+    _initForFirmwareType(MAV_AUTOPILOT_PX4);
+
+    // PolygonAreaTest.kml contains a 4-vertex polygon (5th coordinate is ring closure).
+    // polyline.kml contains a LineString; CorridorScan expects a polyline, not a polygon.
+    constexpr int kExpectedPolygonVertexCount = 4;
+    const QString polygonKml = QStringLiteral(":/unittest/PolygonAreaTest.kml");
+    const QString polylineKml = QStringLiteral(":/unittest/polyline.kml");
+
+    // Survey — polygon KML defines the survey area
+    VisualMissionItem* surveyVisual = _missionController->insertComplexMissionItemFromKMLOrSHP(
+        SurveyComplexItem::canonicalName, polygonKml, 1, false);
+    QVERIFY(surveyVisual);
+    SurveyComplexItem* surveyItem = qobject_cast<SurveyComplexItem*>(surveyVisual);
+    QVERIFY(surveyItem);
+    QCOMPARE(surveyItem->surveyAreaPolygon()->count(), kExpectedPolygonVertexCount);
+
+    // CorridorScan — polyline KML defines the corridor path; corridor polygon is computed from it
+    VisualMissionItem* corridorVisual = _missionController->insertComplexMissionItemFromKMLOrSHP(
+        CorridorScanComplexItem::canonicalName, polylineKml, 2, false);
+    QVERIFY(corridorVisual);
+    CorridorScanComplexItem* corridorItem = qobject_cast<CorridorScanComplexItem*>(corridorVisual);
+    QVERIFY(corridorItem);
+    QVERIFY(corridorItem->surveyAreaPolygon()->count() > 0);
+
+    // StructureScan — polygon KML defines the structure perimeter
+    VisualMissionItem* structureVisual = _missionController->insertComplexMissionItemFromKMLOrSHP(
+        StructureScanComplexItem::canonicalName, polygonKml, 3, false);
+    QVERIFY(structureVisual);
+    StructureScanComplexItem* structureItem = qobject_cast<StructureScanComplexItem*>(structureVisual);
+    QVERIFY(structureItem);
+    QCOMPARE(structureItem->structurePolygon()->count(), kExpectedPolygonVertexCount);
+
+    // home + Survey + CorridorScan + StructureScan
+    QCOMPARE(_missionController->visualItems()->count(), 4);
+}
+
+void MissionControllerTest::_testLoadPlanRoundTripComplexItems()
+{
+    _initForFirmwareType(MAV_AUTOPILOT_PX4);
+
+    const QGeoCoordinate center = Coord::zurich();
+
+    // Insert a Survey and a CorridorScan
+    VisualMissionItem* surveyVisual = _missionController->insertComplexMissionItem(
+        SurveyComplexItem::canonicalName, center, 1, false);
+    QVERIFY(surveyVisual);
+    QVERIFY(qobject_cast<SurveyComplexItem*>(surveyVisual));
+
+    VisualMissionItem* corridorVisual = _missionController->insertComplexMissionItem(
+        CorridorScanComplexItem::canonicalName, center, 2, false);
+    QVERIFY(corridorVisual);
+    QVERIFY(qobject_cast<CorridorScanComplexItem*>(corridorVisual));
+
+    // home + Survey + CorridorScan
+    QCOMPARE(_missionController->visualItems()->count(), 3);
+
+    // Save to a temporary file, reload, and verify the types survive the round-trip
+    QTemporaryDir tmpDir;
+    QVERIFY(tmpDir.isValid());
+    const QString planPath = QStringLiteral("%1/test.%2").arg(tmpDir.path(), _masterController->fileExtension());
+    QVERIFY(_masterController->saveToFile(planPath));
+
+    _missionController->removeAll();
+    QCOMPARE(_missionController->visualItems()->count(), 1); // home only
+
+    _masterController->loadFromFile(planPath);
+    QCOMPARE(_missionController->visualItems()->count(), 3);
+
+    QVERIFY(qobject_cast<SurveyComplexItem*>(_missionController->visualItems()->value<VisualMissionItem*>(1)));
+    QVERIFY(qobject_cast<CorridorScanComplexItem*>(_missionController->visualItems()->value<VisualMissionItem*>(2)));
+}
+
+void MissionControllerTest::_testInsertSurveyAppliesAltFrameInMixedMode()
+{
+    _initForFirmwareType(MAV_AUTOPILOT_PX4);
+    _missionController->setGlobalAltitudeFrame(QGroundControlQmlGlobal::AltitudeFrameMixed);
+
+    const QGeoCoordinate coord = Coord::zurich();
+
+    // Insert a simple waypoint and force its altitude frame to Absolute
+    VisualMissionItem* simpleVisual = _missionController->insertSimpleMissionItem(coord, 1, false);
+    QVERIFY(simpleVisual);
+    SimpleMissionItem* simpleItem = qobject_cast<SimpleMissionItem*>(simpleVisual);
+    QVERIFY(simpleItem);
+    simpleItem->setAltitudeFrame(QGroundControlQmlGlobal::AltitudeFrameAbsolute);
+    simpleItem->altitude()->setRawValue(150.0);
+
+    // Survey default distanceMode is Relative; inserting after an Absolute item should change it
+    QCOMPARE(_missionController->visualItems()->count(), 2); // home + simple
+    VisualMissionItem* surveyVisual = _missionController->insertComplexMissionItem(
+        SurveyComplexItem::canonicalName, coord, 2, false);
+    QVERIFY(surveyVisual);
+    SurveyComplexItem* surveyItem = qobject_cast<SurveyComplexItem*>(surveyVisual);
+    QVERIFY(surveyItem);
+
+    QCOMPARE(surveyItem->cameraCalc()->distanceMode(), QGroundControlQmlGlobal::AltitudeFrameAbsolute);
+}
+
+void MissionControllerTest::_testInsertNonSurveyComplexItemMixedModeNoCrash()
+{
+    _initForFirmwareType(MAV_AUTOPILOT_PX4);
+    _missionController->setGlobalAltitudeFrame(QGroundControlQmlGlobal::AltitudeFrameMixed);
+
+    const QGeoCoordinate coord = Coord::zurich();
+
+    // Insert a simple waypoint with Absolute frame to provide altitude context
+    VisualMissionItem* simpleVisual = _missionController->insertSimpleMissionItem(coord, 1, false);
+    QVERIFY(simpleVisual);
+    SimpleMissionItem* simpleItem = qobject_cast<SimpleMissionItem*>(simpleVisual);
+    QVERIFY(simpleItem);
+    simpleItem->setAltitudeFrame(QGroundControlQmlGlobal::AltitudeFrameAbsolute);
+
+    // CorridorScan inherits the base-class no-op — distanceMode stays at its default (Relative)
+    VisualMissionItem* corridorVisual = _missionController->insertComplexMissionItem(
+        CorridorScanComplexItem::canonicalName, coord, 2, false);
+    QVERIFY(corridorVisual);
+    CorridorScanComplexItem* corridorItem = qobject_cast<CorridorScanComplexItem*>(corridorVisual);
+    QVERIFY(corridorItem);
+
+    QCOMPARE(corridorItem->cameraCalc()->distanceMode(), QGroundControlQmlGlobal::AltitudeFrameRelative);
+    QCOMPARE(_missionController->visualItems()->count(), 3);
 }
 
 #include "UnitTest.h"

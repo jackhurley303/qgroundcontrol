@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from detect_changes import (
     build_patterns,
     has_relevant_changes,
@@ -86,16 +84,21 @@ class TestHasRelevantChanges:
         assert not has_relevant_changes(["android/AndroidManifest.xml"], "linux")
 
     def test_docker_linux_patterns(self) -> None:
-        assert has_relevant_changes(["deploy/docker/Dockerfile-build-ubuntu"], "docker-linux")
+        assert has_relevant_changes(["deploy/docker/Dockerfile"], "docker-linux")
+        assert has_relevant_changes(["deploy/docker/install-sysroot-aarch64.sh"], "docker-linux")
+        assert has_relevant_changes(["deploy/docker/entrypoint.sh"], "docker-linux")
+        assert has_relevant_changes(["deploy/docker/_docker-exec.sh"], "docker-linux")
+        assert has_relevant_changes(["deploy/docker/lib/retry.sh"], "docker-linux")
         assert has_relevant_changes(["deploy/linux/AppImage.sh"], "docker-linux")
-        assert not has_relevant_changes(["deploy/docker/Dockerfile-build-ubuntu"], "linux")
+        assert not has_relevant_changes(["deploy/docker/Dockerfile"], "linux")
 
     def test_docker_android_patterns(self) -> None:
-        assert has_relevant_changes(["deploy/docker/Dockerfile-build-android"], "docker-android")
+        assert has_relevant_changes(["deploy/docker/Dockerfile"], "docker-android")
+        assert has_relevant_changes(["deploy/docker/lib/build-type.sh"], "docker-android")
         assert has_relevant_changes(["android/build.gradle"], "docker-android")
 
     def test_setup_patterns_linux(self) -> None:
-        assert has_relevant_changes(["tools/setup/install_dependencies.py"], "linux")
+        assert has_relevant_changes(["tools/setup/install_dependencies/_debian.py"], "linux")
         assert has_relevant_changes(["tools/setup/foo-debian.sh"], "linux")
         assert not has_relevant_changes(["tools/setup/foo-windows.ps1"], "linux")
 

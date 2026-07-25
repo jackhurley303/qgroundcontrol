@@ -1,8 +1,10 @@
 #pragma once
 
 #include <QtCore/QElapsedTimer>
+#include <QtCore/QLoggingCategory>
 #include <QtCore/QMap>
 #include <QtCore/QSet>
+#include <QtCore/QTime>
 #include <QtCore/QTimer>
 #include <QtCore/QTranslator>
 #include <QtGui/QGuiApplication>
@@ -33,7 +35,8 @@ struct QMetaObject;
 
 #define qgcApp() qApp
 
-/// The main application and management class.
+/// \brief The main application and management class.
+///
 class QGCApplication : public QGuiApplication
 {
     Q_OBJECT
@@ -79,13 +82,22 @@ public:
 
     /// Although public, these methods are internal and should only be called by UnitTest code
     QQmlApplicationEngine *qmlAppEngine() const { return _qmlAppEngine; }
+    /// UI test harnesses create their own QML engine; registering it here lets app-level
+    /// messaging (showAppMessage) reach the test's MainWindow. Pass nullptr on teardown.
+    void setQmlAppEngine(QQmlApplicationEngine *engine)
+    {
+        _qmlAppEngine = engine;
+        _mainRootWindow = nullptr;    // cached from the previous engine's root object
+        _uiTestMode = (engine != nullptr);
+    }
+    /// showRebootAppMessage() debounces repeat messages (2 min). Tests reset the
+    /// debounce per-test so each one deterministically sees its own message.
+    void resetRebootMessageDebounce() { _lastRebootMessageTime = QTime(); }
 
 signals:
     void languageChanged(const QLocale &locale);
 
 public slots:
-    void showVehicleConfig();
-
     void qmlAttemptWindowClose();
 
     /// Get current language
@@ -101,6 +113,9 @@ public slots:
     /// one after the other.
     void showRebootAppMessage(const QString &message, const QString &title = QString());
 
+    /// Same as showRebootAppMessage() but the dialog also includes a button which reboots the active vehicle.
+    void showRebootVehicleMessage(const QString &message, const QString &title = QString());
+
     QGCImageProvider *qgcImageProvider();
 
 private slots:
@@ -115,17 +130,22 @@ private:
 
     bool _initVideo();
 
+    bool _initQmlRootWindow();
+
     /// Initialize the application for normal application boot. Or in other words we are not going to run unit tests.
     void _initForNormalAppBoot();
 
     QObject *_rootQmlObject();
     void _checkForNewVersion();
+    bool _rebootMessageDebounced();
 
     bool _runningUnitTests = false;
     bool _simpleBootTest = false;
+    bool _uiTestMode = false;    ///< true: QML UI test harness registered its engine via setQmlAppEngine()
     bool _fakeMobile = false;    ///< true: Fake ui into displaying mobile interface
     bool _logOutput = false;    ///< true: Log Qt debug output to file
     quint8 _systemId = 0; ///< MAVLink system ID, 0 means not set
+    QTime _lastRebootMessageTime;    ///< showRebootAppMessage() debounce state
 
     static constexpr int _missingParamsDelayedDisplayTimerTimeout = 1000;   ///< Timeout to wait for next missing fact to come in before display
     QTimer _missingParamsDelayedDisplayTimer;                               ///< Timer use to delay missing fact display
@@ -171,3 +191,5 @@ private:
 
     const QString _qgcImageProviderId = QStringLiteral("QGCImages");
 };
+
+Q_DECLARE_LOGGING_CATEGORY(QGCAppMessageLog)

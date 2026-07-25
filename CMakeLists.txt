@@ -16,7 +16,6 @@ list(APPEND CMAKE_MODULE_PATH
     "${CMAKE_SOURCE_DIR}/cmake/platform"
 )
 
-# Include helper functions early
 include(Helpers)
 
 # ----------------------------------------------------------------------------
@@ -40,15 +39,19 @@ set(CMAKE_POLICY_VERSION_MINIMUM ${CMAKE_MINIMUM_REQUIRED_VERSION})
 # Load default options and allow custom builds to override
 include(CustomOptions)
 
+option(QGC_VERBOSE_CONFIGURE "Prefix configure messages with module context labels" OFF)
+set(CMAKE_MESSAGE_CONTEXT_SHOW ${QGC_VERBOSE_CONFIGURE})
+list(APPEND CMAKE_MESSAGE_CONTEXT qgc)
+
 # build-config.json is the source of truth; keep cmake_minimum_required(...) above in sync.
 if(CMAKE_VERSION VERSION_LESS QGC_CONFIG_CMAKE_MINIMUM)
-    message(FATAL_ERROR "QGC requires CMake ${QGC_CONFIG_CMAKE_MINIMUM}+, found ${CMAKE_VERSION}")
+    message(FATAL_ERROR "QGC: requires CMake ${QGC_CONFIG_CMAKE_MINIMUM}+, found ${CMAKE_VERSION}")
 endif()
 
-if(IS_DIRECTORY "${CMAKE_SOURCE_DIR}/custom")
-    message(STATUS "QGC: Custom build directory detected")
+if(IS_DIRECTORY "${CMAKE_SOURCE_DIR}/${QGC_CUSTOM_DIR}")
+    message(STATUS "QGC: Custom build directory detected: ${QGC_CUSTOM_DIR}")
     set(QGC_CUSTOM_BUILD ON)
-    list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/custom/cmake")
+    list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/${QGC_CUSTOM_DIR}/cmake")
     include(CustomOverrides)
 endif()
 
@@ -118,11 +121,19 @@ if(NOT CPM_SOURCE_CACHE)
     endif()
 endif()
 include(CPM)
+include(CPMTrackHead)
 
 # ----------------------------------------------------------------------------
 # Toolchain Configuration (Compiler, Linker, Build Settings)
 # ----------------------------------------------------------------------------
 include(Toolchain)
+
+# ----------------------------------------------------------------------------
+# Python interpreter for code generators (prefer workspace .venv)
+# ----------------------------------------------------------------------------
+include(PythonVenv)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+include(QGCQmlCodegen)
 
 # ----------------------------------------------------------------------------
 # Output Directories
@@ -260,7 +271,7 @@ endif()
 # ============================================================================
 
 if(QGC_CUSTOM_BUILD)
-    add_subdirectory(custom)
+    add_subdirectory("${QGC_CUSTOM_DIR}")
 endif()
 
 # ============================================================================
@@ -282,20 +293,23 @@ list(APPEND QGC_RESOURCES
 # QGroundControl Executable Target
 # ============================================================================
 
-# Create the main executable
+include(Hardening)
+qgc_apply_global_hardening()
+
 qt_add_executable(${CMAKE_PROJECT_NAME}
     WIN32          # Windows GUI application
     MACOSX_BUNDLE  # macOS application bundle
     ${QGC_RESOURCES}
 )
 
-# Apply optional sanitizer instrumentation to the main target.
+set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES
+    ADDITIONAL_CLEAN_FILES "${CMAKE_BINARY_DIR}/ccache-launcher"
+)
+
 include(Sanitizers)
 
-# Apply optional coverage instrumentation and coverage targets.
 include(Coverage)
 
-# Apply compiler warning configuration to QGC target
 qgc_apply_warning_flags()
 
 # Export symbols from executable for Tier C (internals-native) plugin loading (D7).
@@ -342,6 +356,15 @@ qt_add_qml_module(${CMAKE_PROJECT_NAME}
 # Source & Test Subdirectories
 # ----------------------------------------------------------------------------
 add_subdirectory(libs/miniz)
+if(QGC_BUILD_TESTING)
+    # Marks test-capable builds at the preprocessor level so production code can
+    # compile out unit-test-only hooks (e.g. QGCCacheWorker::setUnitTestTileGenerator).
+    # Directory scope is intentional: the hooks live in sources compiled into several
+    # targets (${CMAKE_PROJECT_NAME}, QGroundControlModule, QGCLocation), so a single
+    # target-scoped definition would not cover them all.
+    add_compile_definitions(QGC_UNITTEST_BUILD)
+endif()
+
 add_subdirectory(src)
 
 # ----------------------------------------------------------------------------
@@ -428,6 +451,8 @@ if(QGC_BUILD_TESTING)
     add_subdirectory(test)
     # Exclude test directory from translation scanning
     set_property(DIRECTORY test PROPERTY QT_EXCLUDE_FROM_TRANSLATION ON)
+    # Pure-CMake unit tests for cmake/GStreamer helpers (no project build needed).
+    add_subdirectory(cmake/GStreamer/tests)
 endif()
 
 # ----------------------------------------------------------------------------
@@ -442,7 +467,8 @@ get_property(_qgc_is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if(_qgc_is_multi_config OR NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     list(FILTER TS_SOURCES EXCLUDE REGEX "_eo\\.ts$")
 endif()
-set_source_files_properties(${TS_SOURCES} PROPERTIES OUTPUT_LOCATION "${CMAKE_BINARY_DIR}/i18n")
+
+set(QT_NO_MISSING_CATALOG_LANGUAGE_WARNING ON)
 
 qt_add_translations(${CMAKE_PROJECT_NAME}
     TS_FILES ${TS_SOURCES}
@@ -450,10 +476,8 @@ qt_add_translations(${CMAKE_PROJECT_NAME}
     LUPDATE_OPTIONS -no-obsolete
     TS_FILE_DIR "${CMAKE_SOURCE_DIR}/translations"
     TS_FILE_BASE ${CMAKE_PROJECT_NAME}
-    # TS_FILES_OUTPUT_VARIABLE _ts_files_generated
-    # TS_OUTPUT_DIRECTORY "{CMAKE_SOURCE_DIR}/translations"
-    # QM_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/i18n"
-    # MERGE_QT_TRANSLATIONS
+    QM_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/i18n"
+    MERGE_QT_TRANSLATIONS
 )
 
 # ----------------------------------------------------------------------------

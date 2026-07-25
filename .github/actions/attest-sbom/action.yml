@@ -32,12 +32,16 @@ runs:
         EVENT_NAME: ${{ github.event_name }}
         PR_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         THIS_REPO: ${{ github.repository }}
+        INPUTS_SUBJECT_PATH: ${{ inputs.subject-path }}
+        INPUTS_SUBJECT_NAME: ${{ inputs.subject-name }}
+        INPUTS_SCAN_PATH: ${{ inputs.scan-path }}
+        INPUTS_SBOM_FORMAT: ${{ inputs.sbom-format }}
       run: |
-        python3 "${GITHUB_WORKSPACE}/.github/scripts/attest_helper.py" \
-          --subject-path "${{ inputs.subject-path }}" \
-          --subject-name "${{ inputs.subject-name }}" \
-          --scan-path "${{ inputs.scan-path }}" \
-          --sbom-format "${{ inputs.sbom-format }}" \
+        python3 "${GITHUB_WORKSPACE}/.github/scripts/attest_helper.py" check \
+          --subject-path "${INPUTS_SUBJECT_PATH}" \
+          --subject-name "${INPUTS_SUBJECT_NAME}" \
+          --scan-path "${INPUTS_SCAN_PATH}" \
+          --sbom-format "${INPUTS_SBOM_FORMAT}" \
           --runner-temp "${{ runner.temp }}"
 
     - name: Generate SBOM
@@ -54,13 +58,16 @@ runs:
 
     - name: Attest Build Provenance
       if: steps.check.outputs.skip != 'true'
-      uses: actions/attest-build-provenance@v3
+      uses: actions/attest-build-provenance@v4
       with:
         subject-path: ${{ inputs.subject-path }}
 
     - name: Attest SBOM
       if: steps.check.outputs.skip != 'true'
-      uses: actions/attest-sbom@v3
+      # actions/attest-sbom is deprecated (a wrapper since v4); upstream advises
+      # migrating to actions/attest, which derives SBOM mode from sbom-path.
+      # All existing inputs are interface-compatible — no caller changes needed.
+      uses: actions/attest@v4
       with:
         subject-path: ${{ inputs.subject-path }}
         sbom-path: ${{ steps.check.outputs.sbom-path }}

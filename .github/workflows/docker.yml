@@ -10,6 +10,8 @@ on:
     paths-ignore:
       - 'docs/**'
   pull_request:
+    paths-ignore:
+      - 'docs/**'
   workflow_dispatch:
 
 concurrency:
@@ -19,34 +21,12 @@ concurrency:
 permissions:
   contents: read
   actions: read
-  security-events: write
 
 jobs:
   changes:
-    name: Detect Changes
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    outputs:
-      linux: ${{ steps.detect-linux.outputs.any }}
-      android: ${{ steps.detect-android.outputs.any }}
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - name: Detect Linux changes
-        id: detect-linux
-        uses: ./.github/actions/detect-changes
-        with:
-          platform: docker-linux
-      - name: Detect Android changes
-        id: detect-android
-        uses: ./.github/actions/detect-changes
-        with:
-          platform: docker-android
+    uses: ./.github/workflows/_detect-changes.yml
+    with:
+      platform: docker-linux docker-android
 
   plan-builds:
     name: Plan Docker Builds
@@ -59,29 +39,41 @@ jobs:
       has_jobs: ${{ steps.plan.outputs.has_jobs }}
     steps:
       - name: Checkout planner
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
+          # Bootstrap shim (ci_bootstrap.py + tools/_bootstrap.py + common/__init__.py + common/gh_actions.py)
+          # also appears in linux.yml (debug-matrix), pr-checks.yml (size), _cache-cleanup.yml. Keep aligned —
+          # GHA composite actions can't run before checkout, so this list can't be deduplicated structurally.
           sparse-checkout: |
             .github/scripts/plan_docker_builds.py
             .github/scripts/ci_bootstrap.py
+            deploy/docker/variants.json
+            tools/_bootstrap.py
+            tools/common/__init__.py
+            tools/common/file_traversal.py
             tools/common/gh_actions.py
           sparse-checkout-cone-mode: false
+          persist-credentials: false
 
       - name: Plan matrix
         id: plan
         env:
           EVENT_NAME: ${{ github.event_name }}
-          LINUX: ${{ needs.changes.outputs.linux }}
-          ANDROID: ${{ needs.changes.outputs.android }}
+          LINUX: ${{ needs.changes.outputs.docker_linux }}
+          ANDROID: ${{ needs.changes.outputs.docker_android }}
         run: python3 "${GITHUB_WORKSPACE}/.github/scripts/plan_docker_builds.py"
 
   build:
     name: Docker ${{ matrix.platform }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'mavlink' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}/runner=linux-x64-builder', github.run_id) || 'ubuntu-latest' }}
     needs: [changes, plan-builds]
     if: always() && !cancelled() && needs.plan-builds.outputs.has_jobs == 'true'
     timeout-minutes: 120
+    permissions:
+      contents: read
+      security-events: write
+      packages: write
 
     strategy:
       fail-fast: false
@@ -92,42 +84,91 @@ jobs:
         shell: bash
 
     steps:
+      - name: Enable RunsOn magic cache
+        if: github.repository_owner == 'mavlink' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: runs-on/action@v2
+        with:
+          metrics: cpu,network,memory,disk,io
+          show_costs: summary
+
       - name: Harden Runner
         uses: step-security/harden-runner@v2
         with:
           egress-policy: audit
 
-      - name: Free Disk Space
-        uses: endersonmenezes/free-disk-space@v3
-        with:
-          remove_android: ${{ matrix.platform != 'Android' }}
-          remove_dotnet: true
-          remove_haskell: true
-          remove_tool_cache: true
-          remove_swap: true
-          remove_packages: azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable
-          remove_packages_one_command: true
-          remove_folders: /usr/local/lib/docker/overlay2
-          rm_cmd: rmz
-
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
+          persist-credentials: false
+
+      - name: Free Disk Space
+        uses: ./.github/actions/free-disk-space
+
+      - name: Resolve push target
+        id: push-target
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref }}
+        run: >-
+          python3 "${GITHUB_WORKSPACE}/.github/scripts/docker_helper.py" resolve-push-target
+          --event-name "${EVENT_NAME}"
+          --repo "${REPO}"
+          --ref "${REF}"
 
       - name: Build with Docker
         uses: ./.github/actions/docker
         with:
-          dockerfile: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          variant: ${{ matrix.variant }}
+          build-args: ${{ matrix.build_args }}
           fuse: ${{ matrix.fuse }}
+          docker-username: ${{ secrets.DOCKERHUB_USERNAME }}
           docker-token: ${{ secrets.DOCKERHUB_TOKEN }}
+          push-image: ${{ steps.push-target.outputs.ref }}
 
       - name: Find build artifact
         id: artifact
         run: >-
           python3 "${GITHUB_WORKSPACE}/.github/scripts/find_artifact.py"
           --build-dir "${{ github.workspace }}/build"
-          --pattern "${{ matrix.artifact_pattern }}"
+          --pattern "${MATRIX_ARTIFACT_PATTERN}"
+        env:
+          MATRIX_ARTIFACT_PATTERN: ${{ matrix.artifact_pattern }}
+
+      # Per-distro artifact: `variant` keys the name so the parallel matrix entries
+      # (linux, linux-debian, linux-fedora, linux-arch, ...) don't collide.
+      - name: Upload build artifact
+        if: steps.artifact.outputs.found == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: qgroundcontrol-${{ matrix.variant }}
+          path: ${{ steps.artifact.outputs.path }}
+          if-no-files-found: error
+          retention-days: 14
+
+      # Native distro package (.deb/.rpm/.pkg.tar.zst) alongside the AppImage on
+      # x86_64 Linux variants; empty package_pattern (aarch64, Android) skips both.
+      - name: Find native package
+        id: package
+        if: matrix.package_pattern != ''
+        run: >-
+          python3 "${GITHUB_WORKSPACE}/.github/scripts/find_artifact.py"
+          --build-dir "${{ github.workspace }}/build"
+          --pattern "${MATRIX_PACKAGE_PATTERN}"
+        env:
+          MATRIX_PACKAGE_PATTERN: ${{ matrix.package_pattern }}
+
+      - name: Upload native package
+        if: matrix.package_pattern != '' && steps.package.outputs.found == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: qgroundcontrol-${{ matrix.variant }}-package
+          path: ${{ steps.package.outputs.path }}
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Generate CPM dependency SBOM
         if: steps.artifact.outputs.found == 'true'
@@ -139,7 +180,7 @@ jobs:
       - name: Scan SBOM with Grype
         if: steps.artifact.outputs.found == 'true'
         id: grype
-        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7
+        uses: anchore/scan-action@v7
         with:
           sbom: cpm-sbom.cdx.json
           fail-build: false

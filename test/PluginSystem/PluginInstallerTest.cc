@@ -3,6 +3,7 @@
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QJsonDocument>
+#include <QtCore/QRegularExpression>
 #include <QtCore/QStandardPaths>
 
 #include "PluginInstaller.h"
@@ -100,7 +101,9 @@ void PluginInstallerTest::_installManifestlessZipRejected_test()
     const QString zipPath = _writeZip(QStringLiteral("nomanifest.qgcplugin"), entries);
     QVERIFY(!zipPath.isEmpty());
 
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("archive does not contain qgcplugin.json at its root"));
     const PluginInstallResult result = PluginInstaller::installFromFile(zipPath);
+    verifyExpectedLogMessage();
     QVERIFY(!result.success);
     QVERIFY2(result.errorString.contains(QStringLiteral("qgcplugin.json")), qPrintable(result.errorString));
 
@@ -115,14 +118,18 @@ void PluginInstallerTest::_installMalformedManifestRejected_test()
     const QString zipPath = _writeZip(QStringLiteral("malformed.qgcplugin"), entries);
     QVERIFY(!zipPath.isEmpty());
 
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("malformed qgcplugin.json"));
     const PluginInstallResult result = PluginInstaller::installFromFile(zipPath);
+    verifyExpectedLogMessage();
     QVERIFY(!result.success);
     QVERIFY2(result.errorString.contains(QStringLiteral("malformed")), qPrintable(result.errorString));
 }
 
 void PluginInstallerTest::_installMissingFileRejected_test()
 {
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("as a zip archive"));
     const PluginInstallResult result = PluginInstaller::installFromFile(tempPath(QStringLiteral("nonexistent.qgcplugin")));
+    verifyExpectedLogMessage();
     QVERIFY(!result.success);
     QVERIFY(!result.errorString.isEmpty());
 }
@@ -136,7 +143,9 @@ void PluginInstallerTest::_installZipSlipEntryRejected_test()
     const QString zipPath = _writeZip(QStringLiteral("slip.qgcplugin"), entries);
     QVERIFY(!zipPath.isEmpty());
 
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("has an unsafe path"));
     const PluginInstallResult result = PluginInstaller::installFromFile(zipPath);
+    verifyExpectedLogMessage();
     QVERIFY(!result.success);
     QVERIFY2(result.errorString.contains(QStringLiteral("unsafe")), qPrintable(result.errorString));
 
@@ -190,7 +199,9 @@ void PluginInstallerTest::_removeCleansDirectory_test()
 
 void PluginInstallerTest::_removeUnknownIdFails_test()
 {
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("no installed package with id"));
     const PluginInstallResult result = PluginInstaller::removePlugin(QStringLiteral("org.test.neverinstalled"));
+    verifyExpectedLogMessage();
     QVERIFY(!result.success);
     QVERIFY(!result.errorString.isEmpty());
 }
@@ -203,7 +214,9 @@ void PluginInstallerTest::_installInternalTierZipRejectedPreExtraction_test()
     const QString zipPath = _writeZip(QStringLiteral("internal.qgcplugin"), entries);
     QVERIFY(!zipPath.isEmpty());
 
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("tier internal cannot be packaged"));
     const PluginInstallResult result = PluginInstaller::installFromFile(zipPath);
+    verifyExpectedLogMessage();
     QVERIFY(!result.success);
     QVERIFY2(result.errorString.contains(QStringLiteral("internal")), qPrintable(result.errorString));
 
@@ -220,7 +233,9 @@ void PluginInstallerTest::_installBundledPluginApiDylibRejected_test()
     const QString zipPath = _writeZip(QStringLiteral("bundledapi.qgcplugin"), entries);
     QVERIFY(!zipPath.isEmpty());
 
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("bundles a runtime library"));
     const PluginInstallResult result = PluginInstaller::installFromFile(zipPath);
+    verifyExpectedLogMessage();
     QVERIFY(!result.success);
     QVERIFY2(result.errorString.contains(QStringLiteral("bundles a runtime")), qPrintable(result.errorString));
 
@@ -236,7 +251,9 @@ void PluginInstallerTest::_installBundledQtFrameworkRejected_test()
     const QString zipPath = _writeZip(QStringLiteral("bundledqt.qgcplugin"), entries);
     QVERIFY(!zipPath.isEmpty());
 
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("bundles a runtime library"));
     const PluginInstallResult result = PluginInstaller::installFromFile(zipPath);
+    verifyExpectedLogMessage();
     QVERIFY(!result.success);
     QVERIFY2(result.errorString.contains(QStringLiteral("bundles a runtime")), qPrintable(result.errorString));
 

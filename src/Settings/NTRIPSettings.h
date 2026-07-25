@@ -19,9 +19,13 @@ public:
     DEFINE_SETTINGFACT(ntripMountpoint)
     DEFINE_SETTINGFACT(ntripWhitelist)
     DEFINE_SETTINGFACT(ntripUseTls)
+    DEFINE_SETTINGFACT(ntripAllowSelfSignedCerts)
+    DEFINE_SETTINGFACT(ntripGgaPositionSource)
+    DEFINE_SETTINGFACT(ntripGgaIntervalSec)
     DEFINE_SETTINGFACT(ntripUdpForwardEnabled)
     DEFINE_SETTINGFACT(ntripUdpTargetAddress)
     DEFINE_SETTINGFACT(ntripUdpTargetPort)
     DEFINE_SETTINGFACT(rtcmUdpInputEnabled)
     DEFINE_SETTINGFACT(rtcmUdpInputPort)
+    DEFINE_SETTINGFACT(rtcmUdpValidate)
 };

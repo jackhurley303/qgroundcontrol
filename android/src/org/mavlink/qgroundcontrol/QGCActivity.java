@@ -18,8 +18,6 @@ import android.view.MotionEvent;
 
 import org.qtproject.qt.android.bindings.QtActivity;
 
-import org.freedesktop.gstreamer.GStreamer;
-
 public class QGCActivity extends QtActivity {
     private static final String TAG = QGCActivity.class.getSimpleName();
     private static final String MULTICAST_LOCK_TAG = "QGroundControl";
@@ -36,6 +34,7 @@ public class QGCActivity extends QtActivity {
         super.onCreate(savedInstanceState);
         m_instance = this;
 
+        QGCLogger.initialize(getApplicationContext());
         nativeInit();
         setupMulticastLock();
 

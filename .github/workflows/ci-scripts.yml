@@ -14,11 +14,9 @@ on:
       - 'tools/common/**'
       - 'tools/generators/**'
       - 'tools/analyzers/**'
-      - 'tools/locators/**'
-      - 'tools/log-analyzer/**'
-      - 'tools/lsp/**'
       - 'tools/simulation/**'
       - 'tools/translations/**'
+      - 'deploy/docker/**'
   push:
     branches:
       - master
@@ -35,11 +33,9 @@ on:
       - 'tools/common/**'
       - 'tools/generators/**'
       - 'tools/analyzers/**'
-      - 'tools/locators/**'
-      - 'tools/log-analyzer/**'
-      - 'tools/lsp/**'
       - 'tools/simulation/**'
       - 'tools/translations/**'
+      - 'deploy/docker/**'
   workflow_dispatch:
 
 concurrency:
@@ -48,13 +44,16 @@ concurrency:
 
 permissions:
   contents: read
-  checks: write
 
 jobs:
   lint-workflows:
     name: Lint Workflows
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # checks: write scoped here: only actionlint reports via github-pr-check.
+    permissions:
+      contents: read
+      checks: write
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@v2
@@ -62,7 +61,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
           sparse-checkout: |
@@ -70,6 +69,7 @@ jobs:
             .github/workflows
             .github/actions
           sparse-checkout-cone-mode: false
+          persist-credentials: false
 
       - name: Run actionlint
         uses: reviewdog/action-actionlint@v1
@@ -81,9 +81,13 @@ jobs:
           level: warning
 
   test-ci-scripts:
-    name: Test CI Scripts
+    name: Test CI Scripts (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.12']
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@v2
@@ -91,7 +95,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
           sparse-checkout: |
@@ -107,21 +111,20 @@ jobs:
             tools/common
             tools/generators
             tools/analyzers
-            tools/locators
-            tools/log-analyzer
-            tools/lsp
             tools/simulation
             tools/translations
+            deploy/docker
           sparse-checkout-cone-mode: false
+          persist-credentials: false
 
       - name: Setup Python
         uses: ./.github/actions/setup-python
         with:
           groups: scripts,test
-          python-version: '3.12'
+          python-version: ${{ matrix.python-version }}
 
       - name: Python syntax smoke test
-        run: python3 -m compileall .github/scripts tools/*.py tools/setup tools/common tools/generators tools/analyzers tools/locators tools/log-analyzer tools/lsp tools/simulation tools/translations
+        run: python3 -m compileall .github/scripts tools/*.py tools/setup tools/common tools/generators tools/analyzers tools/simulation tools/translations
 
       - name: Run CI script tests
         run: pytest -q tools/tests .github/scripts/tests

@@ -30,3 +30,11 @@ add_dependencies(${CMAKE_PROJECT_NAME} TestPluginFixture)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     QGC_TEST_PLUGIN_FIXTURE_PATH="$<TARGET_FILE:TestPluginFixture>"
 )
+
+add_qgc_test(HostServicesTest LABELS Unit)
+add_qgc_test(HostVehicleServicesTest LABELS Integration Vehicle RESOURCE_LOCK MockLink)
+add_qgc_test(PluginContributionsTest LABELS Unit)
+add_qgc_test(PluginInstallerTest LABELS Unit)
+add_qgc_test(PluginLoaderGateTest LABELS Unit)
+add_qgc_test(PluginManifestTest LABELS Unit)
+add_qgc_test(QGCPluginManagerTest LABELS Unit)

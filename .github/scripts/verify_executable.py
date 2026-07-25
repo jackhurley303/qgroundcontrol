@@ -7,13 +7,20 @@ Resolves paths, sets permissions, and delegates to run_tests.py --verify-only.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import platform
-import re
 import stat
 import subprocess
 import sys
 from pathlib import Path
+
+from ci_bootstrap import ensure_tools_dir
+
+ensure_tools_dir(__file__)
+
+from cmake_helper import read_cache_var
+from common.gh_actions import gh_error
 
 
 def _setup_gstreamer_env(build_dir: Path) -> None:
@@ -27,13 +34,11 @@ def _setup_gstreamer_env(build_dir: Path) -> None:
     if not cache.is_file():
         return
 
-    match = re.search(
-        r"^GStreamer_ROOT_DIR:\w*=(.+)$", cache.read_text(), re.MULTILINE
-    )
-    if not match:
+    value = read_cache_var(str(cache), "GStreamer_ROOT_DIR")
+    if not value:
         return
 
-    gst_root = Path(match.group(1))
+    gst_root = Path(value)
     plugin_dir = gst_root / "lib" / "gstreamer-1.0"
     if not plugin_dir.is_dir():
         return
@@ -41,8 +46,10 @@ def _setup_gstreamer_env(build_dir: Path) -> None:
     print(f"Setting GStreamer env from build cache: {gst_root}")
     plugin_str = str(plugin_dir)
     for var in (
-        "GST_PLUGIN_PATH", "GST_PLUGIN_PATH_1_0",
-        "GST_PLUGIN_SYSTEM_PATH", "GST_PLUGIN_SYSTEM_PATH_1_0",
+        "GST_PLUGIN_PATH",
+        "GST_PLUGIN_PATH_1_0",
+        "GST_PLUGIN_SYSTEM_PATH",
+        "GST_PLUGIN_SYSTEM_PATH_1_0",
     ):
         os.environ[var] = plugin_str
 
@@ -57,9 +64,7 @@ def _setup_gstreamer_env(build_dir: Path) -> None:
     lib_dir = str(gst_root / "lib")
     if platform.system() == "Darwin":
         existing = os.environ.get("DYLD_LIBRARY_PATH", "")
-        os.environ["DYLD_LIBRARY_PATH"] = (
-            f"{lib_dir}:{existing}" if existing else lib_dir
-        )
+        os.environ["DYLD_LIBRARY_PATH"] = f"{lib_dir}:{existing}" if existing else lib_dir
     elif platform.system() == "Windows":
         bin_dir = str(gst_root / "bin")
         existing = os.environ.get("PATH", "")
@@ -79,7 +84,7 @@ def main() -> None:
     work_dir = Path(args.working_dir) if args.working_dir else binary_path.parent
 
     if not work_dir.is_dir():
-        print(f"::error::Working directory not found: {work_dir}", file=sys.stderr)
+        gh_error(f"Working directory not found: {work_dir}")
         sys.exit(1)
 
     if args.build_dir:
@@ -95,17 +100,18 @@ def main() -> None:
 
     if os.name != "nt":
         exe = work_dir / binary_name
-        try:
+        with contextlib.suppress(OSError):
             exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
-        except OSError:
-            pass
         run_binary = str(exe.resolve())
 
     workspace = os.environ.get("GITHUB_WORKSPACE", ".")
     cmd = [
-        sys.executable, os.path.join(workspace, "tools", "run_tests.py"),
-        "--binary", run_binary,
-        "--timeout", args.timeout,
+        sys.executable,
+        os.path.join(workspace, "tools", "run_tests.py"),
+        "--binary",
+        run_binary,
+        "--timeout",
+        args.timeout,
         "--verify-only",
         "-v",
     ]
