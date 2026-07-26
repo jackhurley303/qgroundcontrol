@@ -384,6 +384,7 @@ QVariantList QGCCorePlugin::complexMissionItemNames(Vehicle *vehicle)
     if (vehicle->multiRotor() || vehicle->vtol()) {
         items.append(makeEntry(StructureScanComplexItem::canonicalName, StructureScanComplexItem::tr(StructureScanComplexItem::canonicalName)));
     }
+    // Note: Landing pattern items are not added here — they have their own dedicated button
     return items;
 }
 

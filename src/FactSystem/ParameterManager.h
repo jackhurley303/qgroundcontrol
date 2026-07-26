@@ -103,13 +103,13 @@ public:
     static MAV_PARAM_TYPE factTypeToMavType(FactMetaData::ValueType_t factType);
     static FactMetaData::ValueType_t mavTypeToFactType(MAV_PARAM_TYPE mavType);
 
-    /// Called by FlightReplayController before starting tlog replay to pre-register
-    /// a params file for a vehicle. ParameterManager will load it during refreshAllParameters
-    /// instead of immediately completing with missing parameters.
+    /// Pre-registers a params file for a vehicle before tlog replay starts. ParameterManager
+    /// loads it during refreshAllParameters instead of immediately completing with missing
+    /// parameters.
     static void registerReplayParamFile(int vehicleId, const QString& filePath);
 
-    /// Apply resolved parameter values after a seek. Called by FlightReplayController
-    /// from _onSeekParamResolved. Updates in-memory Fact values without sending MAVLink.
+    /// Apply resolved parameter values after a replay seek. Updates in-memory Fact values
+    /// without sending MAVLink.
     /// Pass the initial (params-file) raw value for a parameter; no-op if unknown.
     void resetParamToReplayInitial(int compId, const QString& paramId);
     /// Set a specific parameter raw value from a seek resolution.

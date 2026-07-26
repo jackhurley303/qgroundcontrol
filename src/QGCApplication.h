@@ -17,7 +17,6 @@ class QQmlApplicationEngine;
 class QQuickWindow;
 class QGCImageProvider;
 class QGCApplication;
-class QGCCorePlugin;
 class QEvent;
 class QPostEventList;
 class QMetaMethod;

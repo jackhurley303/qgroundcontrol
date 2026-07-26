@@ -33,7 +33,6 @@
 #include "QGCCommandLineParser.h"
 #include "QGCCorePlugin.h"
 #include "QGCPluginManager.h"
-#include "QGCPluginLoader.h"
 #include "QGCFileDownload.h"
 #include "QGCImageProvider.h"
 #include "QGCLoggingCategory.h"
@@ -810,4 +809,3 @@ void QGCApplication::shutdown()
     // This is bad, but currently qobject inheritances are incorrect and cause crashes on exit without
     delete _qmlAppEngine;
 }
-

@@ -20,8 +20,7 @@
         <file alias="TrashDelete.svg">resources/TrashDelete.svg</file>
         <file alias="XDelete.svg">resources/XDelete.svg</file>
         <file alias="qgroundcontrol.ico">resources/icons/qgroundcontrol.ico</file>
-        <!-- Fork-only: consumed by plugins/qdrive and custom-example, not by any base-app module. -->
-        <file alias="cancel.svg">resources/cancel.svg</file>
+        <!-- Referenced by custom-example's CustomIconButton.qml, which no base-app module owns. -->
         <file alias="QGCLogoBlack.svg">resources/QGCLogoBlack.svg</file>
     </qresource>
 </RCC>

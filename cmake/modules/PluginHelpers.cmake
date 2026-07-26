@@ -42,8 +42,7 @@ function(qgc_add_plugin PLUGIN_NAME)
     if(NOT PLUGIN_TIER STREQUAL "INTERNAL" AND NOT PLUGIN_TIER STREQUAL "SDK")
         message(FATAL_ERROR
             "qgc_add_plugin(${PLUGIN_NAME}): TIER ${PLUGIN_TIER} is not supported yet. "
-            "INTERNAL and SDK work today; QML arrives in Stage 3 "
-            "(see plugins/.architecture/04-macos-implementation-plan.md).")
+            "INTERNAL and SDK work today; QML is not implemented yet.")
     endif()
 
     if(NOT PLUGIN_MANIFEST)
@@ -84,8 +83,7 @@ function(qgc_add_plugin PLUGIN_NAME)
                 "QGC_ENABLE_INTERNAL_PLUGINS=ON. This build was configured with it OFF "
                 "(the upstream-facing default — D7), so the host exposes no exported "
                 "symbols for internals-native plugins to resolve against. Use TIER SDK "
-                "instead, or reconfigure with -DQGC_ENABLE_INTERNAL_PLUGINS=ON "
-                "(see plugins/.architecture/04-macos-implementation-plan.md).")
+                "instead, or reconfigure with -DQGC_ENABLE_INTERNAL_PLUGINS=ON.")
         endif()
 
         # Apply common compile definitions from main QGC build

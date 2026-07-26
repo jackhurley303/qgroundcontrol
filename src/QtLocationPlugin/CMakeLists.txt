@@ -110,4 +110,3 @@ qt_add_resources(${CMAKE_PROJECT_NAME} qtlocationplugin_resources
     FILES
         "${CMAKE_SOURCE_DIR}/resources/notile.png"
 )
-

@@ -19,10 +19,4 @@ qt_add_resources(${CMAKE_PROJECT_NAME} json_gimbal
     FILES GimbalFact.json
 )
 
-qt_add_resources(${CMAKE_PROJECT_NAME} gimbal_resources
-    PREFIX "/gimbal"
-    BASE "${CMAKE_SOURCE_DIR}/resources/gimbal"
-    FILES "${CMAKE_SOURCE_DIR}/resources/gimbal/payload.svg"
-)
-
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

@@ -14,9 +14,8 @@ regenerating this file.
 
 ## Provenance
 
-- Built from commit `73f2b4ea40f434bc65c746928fad1fbf73dc9f4f`
-  (`plugins/.architecture/05-completion-plan.md` U3.5, the last commit
-  before U5.1).
+- Built from commit `73f2b4ea40f434bc65c746928fad1fbf73dc9f4f`, deliberately an
+  older host commit than the one this fixture is loaded against.
 - Universal (`x86_64h;arm64`) Release build, matching
   `cmake/presets/macOS.json`'s shipped architecture — a single-arch fixture
   would only exercise one slice on the arm64 GH runner.

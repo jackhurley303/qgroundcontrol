@@ -155,10 +155,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-distribution-id: ${{ secrets.AWS_DISTRIBUTION_ID }}
 
-      # Plugin SDK (plugins/.architecture/04-macos-implementation-plan.md U2.7): the
-      # "never build QGC" artifact — a separate, isolated install pass (--component
-      # selects only QGCPluginSDK's install() rules, skipping the app bundle/DMG ones)
-      # packed into its own zip, independent of QGroundControl.dmg above.
+      # Plugin SDK: the "never build QGC" artifact — a separate, isolated install pass
+      # (--component selects only QGCPluginSDK's install() rules, skipping the app
+      # bundle/DMG ones) packed into its own zip, independent of QGroundControl.dmg above.
       - name: Package plugin SDK
         if: matrix.build_type == 'Release'
         working-directory: ${{ runner.temp }}/build
@@ -170,8 +169,7 @@ jobs:
           echo "SDK_ZIP=${SDK_NAME}.zip" >> "$GITHUB_ENV"
           echo "SDK_NAME=${SDK_NAME}" >> "$GITHUB_ENV"
 
-      # Plugin SDK ABI watchdog (plugins/.architecture/05-completion-plan.md U5.1): the
-      # permanent "different-commit-host" proof (DoD #1's residue, 04 §11 Spike S3). Leg 1
+      # Plugin SDK ABI watchdog: the permanent "different-commit-host" proof. Leg 1
       # loads a frozen, git-committed golden Example-plugin dylib (test/PluginSystem/golden/,
       # built at an earlier commit) through today's QGCPluginLoader. Leg 2 builds
       # plugins/template/ standalone against the SDK just packaged above and loads that.

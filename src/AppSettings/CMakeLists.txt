@@ -101,4 +101,3 @@ qt_add_resources(${CMAKE_PROJECT_NAME} appsettings_resources
     FILES
         "${CMAKE_SOURCE_DIR}/resources/pencil.svg"
 )
-

@@ -57,4 +57,3 @@ qt_add_resources(${CMAKE_PROJECT_NAME} analyzeview_qmlimages
         "${CMAKE_CURRENT_SOURCE_DIR}/OnboardLogs/OnboardLogIcon.svg"
         "${CMAKE_CURRENT_SOURCE_DIR}/Vibration/VibrationPageIcon.png"
 )
-

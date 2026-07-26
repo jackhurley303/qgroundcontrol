@@ -38,5 +38,3 @@ qt_add_resources(${CMAKE_PROJECT_NAME} json_gps_drivers
     PREFIX "/json/Vehicle"
     FILES GPSRTKFact.json
 )
-
-# ----------------------------------------------------------------------------
