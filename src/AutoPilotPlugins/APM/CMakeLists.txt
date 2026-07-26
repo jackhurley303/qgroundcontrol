@@ -163,3 +163,11 @@ qt_add_qml_module(AutoPilotPluginsAPMModule
 )
 
 # ----------------------------------------------------------------------------
+# APM Component Metadata
+# ----------------------------------------------------------------------------
+qt_add_resources(${CMAKE_PROJECT_NAME} autopilot_plugin_apm_resource
+    PREFIX "/json"
+    FILES APMFollowComponent.FactMetaData.json
+)
+
+# ----------------------------------------------------------------------------

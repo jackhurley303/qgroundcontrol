@@ -60,6 +60,11 @@ thr = "thr"
 # Geographic/organizational acronyms
 LINZ = "LINZ"  # Land Information New Zealand
 
+# Upstream's own typo in qt_add_resources/qgc_add_json_resources target names
+# (FirmwarePlugin/APM, FirmwarePlugin/PX4 CMakeLists.txt) — mirrored verbatim,
+# not ours to silently fix.
+firmaware = "firmaware"
+
 [files]
 extend-exclude = [
     "build/",

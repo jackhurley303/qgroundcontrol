@@ -27,6 +27,17 @@ endif()
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+qgc_add_json_resources(json_firmaware_plugin_apm)
+
+qt_add_resources(${CMAKE_PROJECT_NAME} firmaware_plugin_apm_resource
+    PREFIX "/FirmwarePlugin/APM"
+    FILES
+        Copter.OfflineEditing.params
+        Plane.OfflineEditing.params
+        Rover.OfflineEditing.params
+        Sub.OfflineEditing.params
+)
+
 #===========================================================================#
 
 CPMAddPackage(

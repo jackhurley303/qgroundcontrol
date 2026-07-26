@@ -40,6 +40,13 @@ target_sources(${CMAKE_PROJECT_NAME}
 )
 
 # ----------------------------------------------------------------------------
+# PX4 Airframe Metadata
+# ----------------------------------------------------------------------------
+qt_add_resources(${CMAKE_PROJECT_NAME} autopilot_plugin_px4_resource
+    PREFIX "/AutoPilotPlugins/PX4"
+    FILES AirframeFactMetaData.xml
+)
+
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # ----------------------------------------------------------------------------
@@ -135,4 +142,3 @@ qt_add_qml_module(AutoPilotPluginsPX4Module
         VehicleConfig/Safety.VehicleConfig.json
     NO_PLUGIN
 )
-
