@@ -38,16 +38,6 @@ qt_add_resources(${CMAKE_PROJECT_NAME} firmaware_plugin_apm_resource
         Sub.OfflineEditing.params
 )
 
-set_source_files_properties(APMBrandImage.png PROPERTIES QT_RESOURCE_ALIAS "APM/BrandImage")
-set_source_files_properties(APMBrandImageSub.png PROPERTIES QT_RESOURCE_ALIAS "APM/BrandImageSub")
-
-qt_add_resources(${CMAKE_PROJECT_NAME} firmaware_plugin_apm_qmlimages
-    PREFIX "/qmlimages"
-    FILES
-        APMBrandImage.png
-        APMBrandImageSub.png
-)
-
 #===========================================================================#
 
 CPMAddPackage(

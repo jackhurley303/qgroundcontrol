@@ -28,14 +28,6 @@ qt_add_resources(${CMAKE_PROJECT_NAME} firmaware_plugin_px4_resource
         V1.4.OfflineEditing.params
 )
 
-set_source_files_properties(PX4BrandImage.png PROPERTIES QT_RESOURCE_ALIAS "PX4/BrandImage")
-
-qt_add_resources(${CMAKE_PROJECT_NAME} firmaware_plugin_px4_qmlimages
-    PREFIX "/qmlimages"
-    FILES
-        PX4BrandImage.png
-)
-
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 qt_add_library(PX4FirmwareModule STATIC)
