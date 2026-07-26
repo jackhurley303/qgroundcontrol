@@ -35,6 +35,14 @@ qt_add_resources(${CMAKE_PROJECT_NAME} autopilot_plugin_common_resource
     FILES PowerModulePresets.json
 )
 
+qt_add_resources(${CMAKE_PROJECT_NAME} autopilot_plugin_common_images
+    PREFIX "/res"
+    BASE "${CMAKE_SOURCE_DIR}/resources"
+    FILES
+        "${CMAKE_SOURCE_DIR}/resources/Download.svg"
+        "${CMAKE_SOURCE_DIR}/resources/Upload.svg"
+)
+
 # Airframe icons. URL form: /qmlimages/Airframe/<name>.svg, populated dynamically
 # from PX4 AirframeFactMetaData.xml image="..." values and APM frame-class lookups.
 qt_add_resources(${CMAKE_PROJECT_NAME} autopilot_plugin_common_airframes

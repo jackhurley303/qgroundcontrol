@@ -104,3 +104,10 @@ target_precompile_headers(QGCLocation PRIVATE
     <QtQml/QQmlEngine>
 )
 
+qt_add_resources(${CMAKE_PROJECT_NAME} qtlocationplugin_resources
+    PREFIX "/res"
+    BASE "${CMAKE_SOURCE_DIR}/resources"
+    FILES
+        "${CMAKE_SOURCE_DIR}/resources/notile.png"
+)
+

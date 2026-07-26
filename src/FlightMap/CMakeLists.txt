@@ -43,6 +43,13 @@ qt_add_qml_module(FlightMapModule
     NO_PLUGIN
 )
 
+qt_add_resources(${CMAKE_PROJECT_NAME} flightmap_resources
+    PREFIX "/res"
+    BASE "${CMAKE_SOURCE_DIR}/resources"
+    FILES
+        "${CMAKE_SOURCE_DIR}/resources/gear-black.svg"
+)
+
 # subVehicleArrowOpaque.png alias for ArduSub firmware plugin (file lives here).
 set_source_files_properties("${CMAKE_SOURCE_DIR}/src/FlightMap/Images/sub.png"
     PROPERTIES QT_RESOURCE_ALIAS "subVehicleArrowOpaque.png")

@@ -201,6 +201,19 @@ qt_add_qml_module(QGroundControlControlsModule
 # ----------------------------------------------------------------------------
 qgc_add_json_resources(json_controls)
 
+qt_add_resources(QGroundControlControlsModule qmlcontrols_resources
+    PREFIX "/res"
+    BASE "${CMAKE_SOURCE_DIR}/resources"
+    FILES
+        "${CMAKE_SOURCE_DIR}/resources/ArrowRight.svg"
+        "${CMAKE_SOURCE_DIR}/resources/buttonRight.svg"
+        "${CMAKE_SOURCE_DIR}/resources/chevron-down.svg"
+        "${CMAKE_SOURCE_DIR}/resources/chevron-up.svg"
+        "${CMAKE_SOURCE_DIR}/resources/clockwise-arrow.svg"
+        "${CMAKE_SOURCE_DIR}/resources/counter-clockwise-arrow.svg"
+        "${CMAKE_SOURCE_DIR}/resources/JoystickBezelLight.png"
+)
+
 # subMenuButtonImage.png aliases the shared CogWheels.png at the repo root.
 set_source_files_properties("${CMAKE_SOURCE_DIR}/resources/CogWheels.png"
     PROPERTIES QT_RESOURCE_ALIAS "subMenuButtonImage.png")

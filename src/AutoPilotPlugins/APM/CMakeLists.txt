@@ -170,6 +170,13 @@ qt_add_resources(${CMAKE_PROJECT_NAME} autopilot_plugin_apm_resource
     FILES APMFollowComponent.FactMetaData.json
 )
 
+qt_add_resources(${CMAKE_PROJECT_NAME} autopilot_plugin_apm_images
+    PREFIX "/res"
+    BASE "${CMAKE_SOURCE_DIR}/resources"
+    FILES
+        "${CMAKE_SOURCE_DIR}/resources/helicoptericon.svg"
+)
+
 # Sub frame images: registered under URL /qmlimages/Frames/<NiceName>.png with
 # on-disk filenames mapped via QT_RESOURCE_ALIAS.
 set_source_files_properties("${CMAKE_SOURCE_DIR}/src/AutoPilotPlugins/APM/Images/bluerov-frame.png"

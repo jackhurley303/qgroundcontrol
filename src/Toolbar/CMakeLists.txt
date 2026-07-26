@@ -37,6 +37,16 @@ qt_add_qml_module(ToolbarModule
     NO_PLUGIN
 )
 
+qt_add_resources(${CMAKE_PROJECT_NAME} toolbar_resources
+    PREFIX "/res"
+    BASE "${CMAKE_SOURCE_DIR}/resources"
+    FILES
+        "${CMAKE_SOURCE_DIR}/resources/FlyingPaperPlane.svg"
+        "${CMAKE_SOURCE_DIR}/resources/GearWithPaperPlane.svg"
+        "${CMAKE_SOURCE_DIR}/resources/OpenDoor.svg"
+        "${CMAKE_SOURCE_DIR}/resources/VehicleMessages.png"
+)
+
 qt_add_resources(${CMAKE_PROJECT_NAME} toolbar_qmlimages
     PREFIX "/qmlimages"
     BASE "${CMAKE_SOURCE_DIR}/src/Toolbar/Images"
