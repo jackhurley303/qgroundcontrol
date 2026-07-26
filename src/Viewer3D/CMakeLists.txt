@@ -23,6 +23,13 @@ target_sources(${CMAKE_PROJECT_NAME}
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+set_source_files_properties("${CMAKE_SOURCE_DIR}/resources/opengl/buglist.json"
+    PROPERTIES QT_RESOURCE_ALIAS "resources/opengl/buglist.json")
+qt_add_resources(${CMAKE_PROJECT_NAME} viewer3d_opengl_resources
+    PREFIX "/opengl"
+    FILES "${CMAKE_SOURCE_DIR}/resources/opengl/buglist.json"
+)
+
 add_subdirectory(Providers/Osm)
 
 # ----------------------------------------------------------------------------

@@ -35,6 +35,15 @@ qt_add_resources(${CMAKE_PROJECT_NAME} vehiclesetup_qmlimages
         "${CMAKE_CURRENT_SOURCE_DIR}/VehicleSummaryIcon.png"
 )
 
+qt_add_resources(${CMAKE_PROJECT_NAME} vehiclesetup_firmware_images
+    PREFIX "/res/firmware"
+    BASE "${CMAKE_SOURCE_DIR}/resources/firmware"
+    FILES
+        "${CMAKE_SOURCE_DIR}/resources/firmware/3drradio.png"
+        "${CMAKE_SOURCE_DIR}/resources/firmware/apm.png"
+        "${CMAKE_SOURCE_DIR}/resources/firmware/px4.png"
+)
+
 qt_add_library(VehicleSetupModule STATIC)
 
 qt_add_qml_module(VehicleSetupModule

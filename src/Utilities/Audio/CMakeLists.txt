@@ -21,6 +21,13 @@ target_include_directories(QGCAudio
 
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE QGCAudio)
 
+set_source_files_properties("${CMAKE_SOURCE_DIR}/resources/audio/alert.wav" PROPERTIES QT_RESOURCE_ALIAS "Alert")
+qt_add_resources(${CMAKE_PROJECT_NAME} audio_resources
+    PREFIX "/res/audio"
+    BASE "${CMAKE_SOURCE_DIR}/resources/audio"
+    FILES "${CMAKE_SOURCE_DIR}/resources/audio/alert.wav"
+)
+
 target_precompile_headers(QGCAudio PRIVATE
     <QtCore/QObject>
     <QtCore/QString>

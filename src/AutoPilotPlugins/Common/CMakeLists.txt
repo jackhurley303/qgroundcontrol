@@ -43,6 +43,52 @@ qt_add_resources(${CMAKE_PROJECT_NAME} autopilot_plugin_common_images
         "${CMAKE_SOURCE_DIR}/resources/Upload.svg"
 )
 
+qt_add_resources(${CMAKE_PROJECT_NAME} autopilot_plugin_common_calibration
+    PREFIX "/res/calibration"
+    BASE "${CMAKE_SOURCE_DIR}/resources/calibration"
+    FILES
+        "${CMAKE_SOURCE_DIR}/resources/calibration/accel_back.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/accel_down.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/accel_front.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/accel_left.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/accel_right.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/accel_up.png"
+)
+
+qt_add_resources(${CMAKE_PROJECT_NAME} autopilot_plugin_common_calibration_mode1
+    PREFIX "/qml/QGroundControl/AutoPilotPlugins/Common/calibration/mode1"
+    BASE "${CMAKE_SOURCE_DIR}/resources/calibration/mode1"
+    FILES
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode1/radioCenter.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode1/radioHome.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode1/radioPitchDown.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode1/radioPitchUp.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode1/radioRollLeft.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode1/radioRollRight.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode1/radioSwitchMinMax.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode1/radioThrottleDown.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode1/radioThrottleUp.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode1/radioYawLeft.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode1/radioYawRight.png"
+)
+
+qt_add_resources(${CMAKE_PROJECT_NAME} autopilot_plugin_common_calibration_mode2
+    PREFIX "/qml/QGroundControl/AutoPilotPlugins/Common/calibration/mode2"
+    BASE "${CMAKE_SOURCE_DIR}/resources/calibration/mode2"
+    FILES
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode2/radioCenter.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode2/radioHome.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode2/radioPitchDown.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode2/radioPitchUp.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode2/radioRollLeft.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode2/radioRollRight.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode2/radioSwitchMinMax.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode2/radioThrottleDown.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode2/radioThrottleUp.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode2/radioYawLeft.png"
+        "${CMAKE_SOURCE_DIR}/resources/calibration/mode2/radioYawRight.png"
+)
+
 # Airframe icons. URL form: /qmlimages/Airframe/<name>.svg, populated dynamically
 # from PX4 AirframeFactMetaData.xml image="..." values and APM frame-class lookups.
 qt_add_resources(${CMAKE_PROJECT_NAME} autopilot_plugin_common_airframes

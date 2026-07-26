@@ -96,3 +96,12 @@ qt_add_resources(${CMAKE_PROJECT_NAME} toolbar_qmlimages
         "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/TrackingIcon.svg"
         "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/Yield.svg"
 )
+
+qt_add_resources(${CMAKE_PROJECT_NAME} toolbar_gcscontrol_resources
+    PREFIX "/gcscontrolIndicator"
+    BASE "${CMAKE_SOURCE_DIR}/resources/gcscontrolIndicator"
+    FILES
+        "${CMAKE_SOURCE_DIR}/resources/gcscontrolIndicator/gcscontrol_device.svg"
+        "${CMAKE_SOURCE_DIR}/resources/gcscontrolIndicator/gcscontrol_gcs.svg"
+        "${CMAKE_SOURCE_DIR}/resources/gcscontrolIndicator/gcscontrol_line.svg"
+)
