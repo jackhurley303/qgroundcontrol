@@ -171,7 +171,7 @@ Rectangle {
 
             QGCColoredImage {
                 anchors.fill:     parent
-                source:           "/qmlimages/video.svg"
+                source:           "/qmlimages/camera_video.svg"
                 color:            videoOffsetPopover.visible ? qgcPal.brandingBlue
                                       : (parent._enabled ? qgcPal.text : qgcPal.colorGrey)
                 sourceSize.width: width
