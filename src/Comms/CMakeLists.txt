@@ -30,6 +30,12 @@ target_sources(${CMAKE_PROJECT_NAME}
         UDPLink.h
 )
 
+# USB board information JSON data
+qt_add_resources(${CMAKE_PROJECT_NAME} json_comm
+    PREFIX "/json"
+    FILES USBBoardInfo.json
+)
+
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Uncomment to enable Qt socket debugging

@@ -196,6 +196,11 @@ qt_add_qml_module(QGroundControlControlsModule
     NO_PLUGIN
 )
 
+# ----------------------------------------------------------------------------
+# Control Configuration Resources
+# ----------------------------------------------------------------------------
+qgc_add_json_resources(json_controls)
+
 # Globbed because FactValueGrid enumerates :/InstrumentValueIcons/ at runtime
 # to build the icon picker — every SVG in the directory must be embedded.
 file(GLOB INSTRUMENT_VALUE_ICONS CONFIGURE_DEPENDS

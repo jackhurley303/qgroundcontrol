@@ -83,6 +83,11 @@ target_sources(${CMAKE_PROJECT_NAME}
         VTOLLandingComplexItem.h
 )
 
+# ----------------------------------------------------------------------------
+# Mission Definition JSON Resources
+# ----------------------------------------------------------------------------
+qgc_add_json_resources(json_mission_manager)
+
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # qt_add_qml_module(QGC

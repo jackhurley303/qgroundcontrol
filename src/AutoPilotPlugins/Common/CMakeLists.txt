@@ -28,6 +28,14 @@ target_sources(${CMAKE_PROJECT_NAME}
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # ----------------------------------------------------------------------------
+# Common AutoPilot Plugins Resources
+# ----------------------------------------------------------------------------
+qt_add_resources(${CMAKE_PROJECT_NAME} autopilot_plugin_common_resource
+    PREFIX "/json"
+    FILES PowerModulePresets.json
+)
+
+# ----------------------------------------------------------------------------
 # Common AutoPilot Plugins QML Module
 # ----------------------------------------------------------------------------
 qt_add_library(AutoPilotPluginsCommonModule STATIC)

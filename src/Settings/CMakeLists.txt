@@ -73,4 +73,8 @@ if(NOT QGC_DISABLE_APM_MAVLINK)
 endif()
 
 # ----------------------------------------------------------------------------
+# Settings Definition Resources
+# ----------------------------------------------------------------------------
+qgc_add_json_resources(json_app_settings)
+
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
