@@ -201,6 +201,17 @@ qt_add_qml_module(QGroundControlControlsModule
 # ----------------------------------------------------------------------------
 qgc_add_json_resources(json_controls)
 
+# subMenuButtonImage.png aliases the shared CogWheels.png at the repo root.
+set_source_files_properties("${CMAKE_SOURCE_DIR}/resources/CogWheels.png"
+    PROPERTIES QT_RESOURCE_ALIAS "subMenuButtonImage.png")
+
+qt_add_resources(QGroundControlControlsModule qmlcontrols_qmlimages
+    PREFIX "/qmlimages"
+    BASE "${CMAKE_SOURCE_DIR}/resources"
+    FILES
+        "${CMAKE_SOURCE_DIR}/resources/CogWheels.png"
+)
+
 # Globbed because FactValueGrid enumerates :/InstrumentValueIcons/ at runtime
 # to build the icon picker — every SVG in the directory must be embedded.
 file(GLOB INSTRUMENT_VALUE_ICONS CONFIGURE_DEPENDS

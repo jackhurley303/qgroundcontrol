@@ -66,4 +66,14 @@ qt_add_qml_module(PlanViewModule
     NO_PLUGIN
 )
 
+qt_add_resources(PlanViewModule planview_qmlimages
+    PREFIX "/qmlimages"
+    BASE "${CMAKE_SOURCE_DIR}/resources"
+    FILES
+        "${CMAKE_SOURCE_DIR}/resources/PatternCamera.png"
+        "${CMAKE_SOURCE_DIR}/resources/PatternGrid.png"
+        "${CMAKE_SOURCE_DIR}/resources/PatternPresets.png"
+        "${CMAKE_SOURCE_DIR}/resources/PatternTerrain.png"
+)
+
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
