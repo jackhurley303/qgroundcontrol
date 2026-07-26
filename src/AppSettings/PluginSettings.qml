@@ -132,15 +132,16 @@ SettingsPage {
                 }
 
                 FactCheckBoxSlider {
+                    id:                 pluginEnabledSlider
                     fact:               _pluginSettings.pluginEnabledFact(modelData.id)
                     visible:            fact !== null && modelData.state !== "NeedsApproval"
 
                     Connections {
-                        target: fact
+                        target: pluginEnabledSlider.fact
                         enabled: _supportsRuntimeReload  // Only hook up reload on supported platforms
 
                         function onValueChanged() {
-                            QGroundControl.pluginManager.setPluginEnabled(modelData.id, fact.value)
+                            QGroundControl.pluginManager.setPluginEnabled(modelData.id, pluginEnabledSlider.fact.value)
                         }
                     }
                 }
