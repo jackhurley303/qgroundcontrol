@@ -207,8 +207,10 @@ set_source_files_properties("${CMAKE_SOURCE_DIR}/resources/CogWheels.png"
 
 qt_add_resources(QGroundControlControlsModule qmlcontrols_qmlimages
     PREFIX "/qmlimages"
-    BASE "${CMAKE_SOURCE_DIR}/resources"
+    BASE "${CMAKE_CURRENT_SOURCE_DIR}"
     FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/arrow-down.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/checkbox-check.svg"
         "${CMAKE_SOURCE_DIR}/resources/CogWheels.png"
 )
 

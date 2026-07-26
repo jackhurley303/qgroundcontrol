@@ -27,6 +27,14 @@ if(NOT QGC_NO_SERIAL_LINK)
     )
 endif()
 
+qt_add_resources(${CMAKE_PROJECT_NAME} vehiclesetup_qmlimages
+    PREFIX "/qmlimages"
+    BASE "${CMAKE_CURRENT_SOURCE_DIR}"
+    FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/FirmwareUpgradeIcon.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/VehicleSummaryIcon.png"
+)
+
 qt_add_library(VehicleSetupModule STATIC)
 
 qt_add_qml_module(VehicleSetupModule
