@@ -6,12 +6,10 @@
         <file alias="NanumGothic-Bold">resources/fonts/NanumGothic-Bold.ttf</file>
     </qresource>
     <qresource prefix="/res">
-        <file alias="cancel.svg">resources/cancel.svg</file>
+        <file alias="BingNoTileBytes.dat">resources/BingNoTileBytes.dat</file>
         <file alias="CameraGimbal.png">resources/CameraGimbal.png</file>
         <file alias="chevron-double-right.svg">resources/chevron-double-right.svg</file>
         <file alias="GeoFence.svg">resources/GeoFence.svg</file>
-        <file alias="BingNoTileBytes.dat">resources/BingNoTileBytes.dat</file>
-        <file alias="QGCLogoBlack.svg">resources/QGCLogoBlack.svg</file>
         <file alias="QGCLogoFull.svg">resources/QGCLogoFull.svg</file>
         <file alias="QGCLogoWhite.svg">resources/QGCLogoWhite.svg</file>
         <file alias="QGCLogoArrow.svg">resources/QGCLogoArrow.svg</file>
@@ -22,5 +20,8 @@
         <file alias="TrashDelete.svg">resources/TrashDelete.svg</file>
         <file alias="XDelete.svg">resources/XDelete.svg</file>
         <file alias="qgroundcontrol.ico">resources/icons/qgroundcontrol.ico</file>
+        <!-- Fork-only: consumed by plugins/qdrive and custom-example, not by any base-app module. -->
+        <file alias="cancel.svg">resources/cancel.svg</file>
+        <file alias="QGCLogoBlack.svg">resources/QGCLogoBlack.svg</file>
     </qresource>
 </RCC>
