@@ -308,19 +308,6 @@ include(Coverage)
 
 qgc_apply_warning_flags()
 
-# Export symbols from executable for Tier C (internals-native) plugin loading (D7).
-# Upstream-facing builds turn QGC_ENABLE_INTERNAL_PLUGINS off; the fork defaults it
-# ON to keep QDrive working (see cmake/CustomOptions.cmake).
-if(QGC_ENABLE_INTERNAL_PLUGINS)
-    if(APPLE OR LINUX)
-        target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
-            -Wl,-export_dynamic  # Export all symbols for plugins
-        )
-    elseif(WIN32)
-        # Windows doesn't need this - DLLs export symbols by default
-    endif()
-endif()
-
 # ----------------------------------------------------------------------------
 # Platform-Specific Configuration
 # ----------------------------------------------------------------------------
@@ -366,76 +353,7 @@ add_subdirectory(src)
 # ----------------------------------------------------------------------------
 # Plugin Infrastructure Configuration
 # ----------------------------------------------------------------------------
-# Collect common compile definitions and include paths for plugins
-# These are made available after the main build so plugins can use them
 if(IS_DIRECTORY "${CMAKE_SOURCE_DIR}/plugins" AND EXISTS "${CMAKE_SOURCE_DIR}/plugins/CMakeLists.txt")
-    # Application metadata definitions that plugins may need
-    set(QGC_PLUGIN_COMPILE_DEFINITIONS
-        QGC_APP_NAME="${QGC_APP_NAME}"
-        QGC_ORG_NAME="${QGC_ORG_NAME}"
-        QGC_ORG_DOMAIN="${QGC_ORG_DOMAIN}"
-        QGC_APP_VERSION_STR="${QGC_APP_VERSION_STR}"
-        QGC_APP_DATE="${QGC_APP_DATE}"
-        QGC_APP_DESCRIPTION="${QGC_APP_DESCRIPTION}"
-        CACHE INTERNAL "Compile definitions for QGC plugins"
-    )
-    
-    # Common include paths that plugins need to access QGC APIs
-    set(QGC_PLUGIN_INCLUDE_DIRECTORIES
-        ${CMAKE_SOURCE_DIR}/src
-        ${CMAKE_SOURCE_DIR}/src/API
-        ${CMAKE_SOURCE_DIR}/src/UI
-        ${CMAKE_SOURCE_DIR}/src/QmlControls
-        ${CMAKE_SOURCE_DIR}/src/Settings
-        ${CMAKE_SOURCE_DIR}/src/Utilities
-        ${CMAKE_SOURCE_DIR}/src/Utilities/Logging
-        ${CMAKE_SOURCE_DIR}/src/Vehicle
-        ${CMAKE_SOURCE_DIR}/src/Vehicle/FactGroups
-        ${CMAKE_SOURCE_DIR}/src/FactSystem
-        ${CMAKE_SOURCE_DIR}/src/FirmwarePlugin
-        ${CMAKE_SOURCE_DIR}/src/MissionManager
-        ${CMAKE_SOURCE_DIR}/src/Gimbal
-        ${CMAKE_SOURCE_DIR}/src/Comms
-        ${CMAKE_SOURCE_DIR}/src/MAVLink
-        ${CMAKE_SOURCE_DIR}/src/MAVLink/LibEvents
-        ${CMAKE_SOURCE_DIR}/src/MAVLink/Signing
-        ${CMAKE_SOURCE_DIR}/src/PluginAPI
-        ${CMAKE_SOURCE_DIR}/src/PluginSystem
-        ${CMAKE_BINARY_DIR}/src
-        ${CMAKE_BINARY_DIR}
-        CACHE INTERNAL "Include directories for QGC plugins"
-    )
-    
-    # Add MAVLink include paths if available.
-    # mavlink_BINARY_DIR is only in scope inside src/MAVLink/CMakeLists.txt (CPMAddPackage
-    # PARENT_SCOPE does not propagate past one add_subdirectory boundary).  That file
-    # exports QGC_MAVLINK_INCLUDE_DIRS as CACHE INTERNAL so we can safely use it here.
-    if(DEFINED QGC_MAVLINK_INCLUDE_DIRS)
-        list(APPEND QGC_PLUGIN_INCLUDE_DIRECTORIES ${QGC_MAVLINK_INCLUDE_DIRS})
-        message(STATUS "QGC: Added MAVLink paths to plugin includes")
-    else()
-        message(WARNING "QGC: MAVLink headers not found, plugins may fail to compile")
-    endif()
-    
-    # Add libevents include paths if available.
-    # Mirror what src/MAVLink/LibEvents/CMakeLists.txt does for the main target:
-    # it uses ${libevents_SOURCE_DIR}/libs/cpp (not the bare source root), because
-    # protocol/receive.h and friends live under libs/cpp/.
-    if(DEFINED CPM_PACKAGE_libevents_SOURCE_DIR AND EXISTS "${CPM_PACKAGE_libevents_SOURCE_DIR}/libs/cpp")
-        list(APPEND QGC_PLUGIN_INCLUDE_DIRECTORIES
-            ${CPM_PACKAGE_libevents_SOURCE_DIR}/libs/cpp
-        )
-        message(STATUS "QGC: Added libevents paths to plugin includes")
-    else()
-        message(WARNING "QGC: libevents headers not found, plugins may fail to compile")
-    endif()
-    
-    # Update cache variable with dependency paths
-    set(QGC_PLUGIN_INCLUDE_DIRECTORIES ${QGC_PLUGIN_INCLUDE_DIRECTORIES}
-        CACHE INTERNAL "Include directories for QGC plugins"
-    )
-    
-    message(STATUS "QGC: Building plugins from plugins/ directory")
     add_subdirectory(plugins)
 endif()
 

@@ -186,16 +186,11 @@ never as a change to an existing interface):
 | `qgc.parameters/1` | `QGCParameterService` | Per-vehicle parameter readiness + snapshot of a vehicle's current parameters to a `.params` file |
 | `qgc.app/1` | `QGCAppService` | Host identity (app/org name, version) and storage paths (save root, telemetry directory) |
 
-3. **Real linkage** — tier-dependent, never the `QGroundControl` target itself:
-   - `TIER SDK` links only the published `QGCPluginAPI` shared library + Qt (`@rpath`);
-     every symbol it needs resolves from that dylib, the same shape an out-of-tree
-     author gets from the SDK zip (Stage 2, §7 of the macOS implementation plan). See
-     `plugins/example/CMakeLists.txt`.
-   - `TIER INTERNAL` links Qt only and resolves QGC-internal symbols at `dlopen` time
-     from the running executable, via `-undefined dynamic_lookup` (macOS) or
-     `-Wl,--allow-shlib-undefined` (Linux) — see `plugins/qdrive/CMakeLists.txt`. This
-     only works because the app is built with `-Wl,-export_dynamic` today; that's
-     scaffolding for Tier C plugins, not something a real SDK consumer should rely on.
+3. **Real linkage** — `TIER SDK` links only the published `QGCPluginAPI` shared
+   library + Qt (`@rpath`), never the `QGroundControl` target itself; every symbol
+   it needs resolves from that dylib, the same shape an out-of-tree author gets
+   from the SDK zip (Stage 2, §7 of the macOS implementation plan). See
+   `plugins/example/CMakeLists.txt` and `plugins/qdrive/CMakeLists.txt`.
 4. Build: `cmake --build build --target MyPlugin`. The plugin auto-deploys (via a
    `POST_BUILD` copy step) to the platform's user plugins directory for local iteration.
 

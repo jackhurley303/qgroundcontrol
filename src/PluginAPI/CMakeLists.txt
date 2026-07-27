@@ -7,8 +7,8 @@
 
 # Public headers, listed once and reused for the SDK's packaged install (U2.7,
 # cmake/install/InstallPluginSDK.cmake, included from the root CMakeLists.txt — hence
-# CACHE INTERNAL, the propagation pattern the root CMakeLists.txt already uses for
-# QGC_PLUGIN_INCLUDE_DIRECTORIES) so the shipped include/QGCPluginAPI/ set can never
+# CACHE INTERNAL, needed because that install script runs past this directory's
+# add_subdirectory() scope) so the shipped include/QGCPluginAPI/ set can never
 # drift from what this target actually builds against.
 set(QGC_PLUGIN_API_PUBLIC_HEADERS
     QGCAppService.h

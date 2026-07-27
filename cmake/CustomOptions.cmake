@@ -138,16 +138,6 @@ option(QGC_DISABLE_PX4_PLUGIN "Disable PX4 plugin" OFF)
 option(QGC_DISABLE_PX4_PLUGIN_FACTORY "Disable PX4 plugin factory" OFF)
 
 # ============================================================================
-# Plugin System Configuration
-# ============================================================================
-
-# Internals-native (qgc_add_plugin(TIER INTERNAL)) plugins resolve QGC internals
-# via -Wl,-export_dynamic on the executable instead of linking the published
-# QGCPluginAPI SDK. This is a migration aid for plugins not yet ported to the
-# SDK boundary; builds that only host SDK-tier plugins should turn it off.
-option(QGC_ENABLE_INTERNAL_PLUGINS "Support internals-native (Tier C) plugins" ON)
-
-# ============================================================================
 # Platform-Specific Configuration
 # ============================================================================
 

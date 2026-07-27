@@ -8,14 +8,13 @@ qgc_add_plugin
 
 Single entry point for building a QGroundControl plugin. Configures the
 plugin as a MODULE library, wires up its manifest, and auto-deploys the built
-library to the host's runtime plugin search path for the dev loop. Linkage is
-tier-dependent: TIER SDK links only the published QGCPluginAPI + Qt (D2's
-include boundary); TIER INTERNAL gets the full QGC include/compile-definition
-set and the platform-appropriate undefined-symbol link options instead.
+library to the host's runtime plugin search path for the dev loop. TIER SDK
+links only the published QGCPluginAPI + Qt (D2's include boundary) — the only
+supported linkage.
 
 Example usage:
   qgc_add_plugin(MyPlugin
-      TIER INTERNAL
+      TIER SDK
       MANIFEST qgcplugin.json.in
       SOURCES
           MyPlugin.h
@@ -39,10 +38,10 @@ function(qgc_add_plugin PLUGIN_NAME)
     set(multiValueArgs SOURCES QRC_FILES)
     cmake_parse_arguments(PLUGIN "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-    if(NOT PLUGIN_TIER STREQUAL "INTERNAL" AND NOT PLUGIN_TIER STREQUAL "SDK")
+    if(NOT PLUGIN_TIER STREQUAL "SDK")
         message(FATAL_ERROR
             "qgc_add_plugin(${PLUGIN_NAME}): TIER ${PLUGIN_TIER} is not supported yet. "
-            "INTERNAL and SDK work today; QML is not implemented yet.")
+            "SDK works today; QML is not implemented yet.")
     endif()
 
     if(NOT PLUGIN_MANIFEST)
@@ -68,72 +67,10 @@ function(qgc_add_plugin PLUGIN_NAME)
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIG>/plugins"
     )
 
-    if(PLUGIN_TIER STREQUAL "SDK")
-        # Tier B: link only the published SDK + stock Qt. D2's include-boundary
-        # enforcement is the build itself — with no src/ path on the include list,
-        # a plugin reaching for a QGC internal fails to compile, not just to link.
-        # No compile definitions/include dirs from the main build, no mavlink
-        # dependency, and no undefined-symbol link options: every host symbol an
-        # SDK-tier plugin needs comes through the linked QGCPluginAPI dylib.
-        target_link_libraries(${PLUGIN_NAME} PRIVATE QGCPluginAPI)
-    else() # INTERNAL
-        if(NOT QGC_ENABLE_INTERNAL_PLUGINS)
-            message(FATAL_ERROR
-                "qgc_add_plugin(${PLUGIN_NAME}): TIER INTERNAL (Tier C) requires "
-                "QGC_ENABLE_INTERNAL_PLUGINS=ON. This build was configured with it OFF "
-                "(the upstream-facing default — D7), so the host exposes no exported "
-                "symbols for internals-native plugins to resolve against. Use TIER SDK "
-                "instead, or reconfigure with -DQGC_ENABLE_INTERNAL_PLUGINS=ON.")
-        endif()
-
-        # Apply common compile definitions from main QGC build
-        if(DEFINED QGC_PLUGIN_COMPILE_DEFINITIONS)
-            target_compile_definitions(${PLUGIN_NAME}
-                PRIVATE
-                    ${QGC_PLUGIN_COMPILE_DEFINITIONS}
-            )
-        endif()
-
-        # Apply common include directories from main QGC build
-        if(DEFINED QGC_PLUGIN_INCLUDE_DIRECTORIES)
-            target_include_directories(${PLUGIN_NAME}
-                PRIVATE
-                    ${QGC_PLUGIN_INCLUDE_DIRECTORIES}
-            )
-        endif()
-
-        # Ensure mavlink-generated headers exist before this plugin compiles.
-        # The mavlink CPM target generates headers at build time; without this dependency
-        # a parallel build can compile the plugin before the headers are ready.
-        if(TARGET mavlink)
-            add_dependencies(${PLUGIN_NAME} mavlink)
-        endif()
-
-        # Link against required Qt libraries
-        target_link_libraries(${PLUGIN_NAME}
-            PRIVATE
-                Qt6::Core
-                Qt6::Qml
-                Qt6::Quick
-                Qt6::Widgets
-                Qt6::Network
-        )
-
-        # Allow undefined symbols - they'll be resolved from the main executable at runtime.
-        # This is the internal tier's linkage model (D7); SDK-tier plugins link
-        # QGCPluginAPI directly instead and don't need this.
-        if(APPLE)
-            target_link_options(${PLUGIN_NAME} PRIVATE
-                -undefined dynamic_lookup  # Resolve symbols from loading executable
-            )
-        elseif(UNIX)
-            target_link_options(${PLUGIN_NAME} PRIVATE
-                -Wl,--allow-shlib-undefined
-            )
-        elseif(WIN32)
-            message(STATUS "${PLUGIN_NAME}: Windows plugin loading may require additional configuration")
-        endif()
-    endif()
+    # Link only the published SDK + stock Qt. D2's include-boundary enforcement
+    # is the build itself — with no src/ path on the include list, a plugin
+    # reaching for a QGC internal fails to compile, not just to link.
+    target_link_libraries(${PLUGIN_NAME} PRIVATE QGCPluginAPI)
 
     # Platform-specific plugin extension
     if(WIN32)
