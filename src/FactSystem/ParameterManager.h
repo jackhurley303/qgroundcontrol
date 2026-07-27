@@ -108,13 +108,6 @@ public:
     /// parameters.
     static void registerReplayParamFile(int vehicleId, const QString& filePath);
 
-    /// Apply resolved parameter values after a replay seek. Updates in-memory Fact values
-    /// without sending MAVLink.
-    /// Pass the initial (params-file) raw value for a parameter; no-op if unknown.
-    void resetParamToReplayInitial(int compId, const QString& paramId);
-    /// Set a specific parameter raw value from a seek resolution.
-    void setParamFromReplaySeek(int compId, const QString& paramId, const QVariant& rawValue);
-
     static constexpr int defaultComponentId = -1;
 
     // These are public for creating unit tests
@@ -200,6 +193,8 @@ private:
     void _decrementPendingWriteCount();
     QString _vehicleAndComponentString(int componentId) const;
 
+    static QVariant _stringToTypedVariant(const QString &string, FactMetaData::ValueType_t type, bool failOk = false);
+
     Vehicle *_vehicle = nullptr;
 
     QMap<int /* comp id */, QMap<QString /* parameter name */, Fact*>> _mapCompId2FactMap;
@@ -252,8 +247,4 @@ private:
     bool _tryftp = false;
 
     static QMap<int, QString> _replayParamFileRegistry; ///< sysId -> path, populated before tlog replay starts
-
-    /// Cached initial raw values from the params file, used by resetParamToReplayInitial().
-    /// Key: (componentId, paramName). Populated in _loadReplayParamsFromFile().
-    QMap<QPair<int,QString>, QVariant> _replayInitialValues;
 };

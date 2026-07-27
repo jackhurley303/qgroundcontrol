@@ -20,8 +20,6 @@ target_sources(${CMAKE_PROJECT_NAME}
         LogReplayLinkController.h
         MAVLinkProtocol.cc
         MAVLinkProtocol.h
-        ReplaySeekApplier.cc
-        ReplaySeekApplier.h
         TCPLink.cc
         TCPLink.h
         UdpIODevice.cc

@@ -17,9 +17,15 @@ Item {
     property bool _videoEnded:    false
     property real _prevPositionMs: 0
 
-    readonly property bool _durationKnown: _replay !== null && _replay.videoDurationMs > 0
+    // Prefer the player's own duration, falling back to the one the extension reports:
+    // the player only knows it once the media has loaded, while an extension may know it
+    // up front from its own metadata.
+    readonly property real _durationMs:    videoPlayer.duration > 0
+                                            ? videoPlayer.duration
+                                            : (_replay !== null ? _replay.videoDurationMs : 0)
+    readonly property bool _durationKnown: _durationMs > 0
     readonly property bool _isPostEnd: !_isPreStart && _replay !== null && (
-        _durationKnown ? _replay.videoPositionMs > _replay.videoDurationMs : _videoEnded
+        _durationKnown ? _replay.videoPositionMs > _durationMs : _videoEnded
     )
 
     MediaPlayer {
@@ -29,7 +35,6 @@ Item {
         playbackRate: _replay ? _replay.playbackSpeed : 1.0
         onSourceChanged:      { _videoEnded = false; _prevPositionMs = 0 }
         onMediaStatusChanged: if (mediaStatus === MediaPlayer.EndOfMedia) _videoEnded = true
-        onDurationChanged: (duration) => { if (_replay && duration > 0) _replay.setVideoDurationMs(duration) }
     }
 
     Rectangle {
@@ -82,7 +87,7 @@ Item {
         anchors.centerIn: parent
         visible:          _isPostEnd
         text:             _durationKnown
-                            ? qsTr("%1 since video ended").arg(_formatDuration(Math.floor((_replay.videoPositionMs - _replay.videoDurationMs) / 1000)))
+                            ? qsTr("%1 since video ended").arg(_formatDuration(Math.floor((_replay.videoPositionMs - _durationMs) / 1000)))
                             : qsTr("Video ended")
         font.bold:        true
         color:            "white"

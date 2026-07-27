@@ -167,4 +167,85 @@ void LogReplayLinkTest::_testGarbageOnlyLogFails()
     QVERIFY(errorSpy.first().first().toString().contains(QStringLiteral("corrupt or empty")));
 }
 
+void LogReplayLinkTest::_testStreamStartsWhenNotDeferred()
+{
+    // Default behaviour: connectToLog bootstraps the vehicle and streams straight on.
+    const quint64 baseTimeUSecs = 1700000000000000ULL;
+    const QString filename = _writeLogFile(buildTlogBytes(5, baseTimeUSecs));
+    QVERIFY(!filename.isEmpty());
+
+    LogReplayConfiguration config(QStringLiteral("LogReplayLinkTest"));
+    config.setLogFilename(filename);
+    QVERIFY(!config.deferStreamStart());
+
+    LogReplayWorker worker(&config);
+    worker.setup();
+
+    QSignalSpy startedSpy(&worker, &LogReplayWorker::playbackStarted);
+
+    worker.connectToLog();
+
+    QCOMPARE(startedSpy.count(), 1);
+    QVERIFY(worker.isPlaying());
+
+    worker.pause();
+    worker.disconnectFromLog();
+}
+
+void LogReplayLinkTest::_testDeferredStreamLifecycle()
+{
+    // deferStreamStart lets a caller (e.g. a plugin driving replay through the host
+    // services) initialize against the bootstrapped vehicle before playback runs.
+    const quint64 baseTimeUSecs = 1700000000000000ULL;
+    const QString filename = _writeLogFile(buildTlogBytes(5, baseTimeUSecs));
+    QVERIFY(!filename.isEmpty());
+
+    LogReplayConfiguration config(QStringLiteral("LogReplayLinkTest"));
+    config.setLogFilename(filename);
+    config.setDeferStreamStart(true);
+
+    LogReplayWorker worker(&config);
+    worker.setup();
+
+    QSignalSpy connectedSpy(&worker, &LogReplayWorker::connected);
+    QSignalSpy startedSpy(&worker, &LogReplayWorker::playbackStarted);
+    QSignalSpy pausedSpy(&worker, &LogReplayWorker::playbackPaused);
+    QSignalSpy atEndSpy(&worker, &LogReplayWorker::playbackAtEnd);
+    QSignalSpy dataSpy(&worker, &LogReplayWorker::dataReceived);
+
+    // Bootstrap only: the vehicle-creating heartbeat is emitted, the stream is not started.
+    worker.connectToLog();
+    QCOMPARE(connectedSpy.count(), 1);
+    QCOMPARE(startedSpy.count(), 0);
+    QVERIFY(!worker.isPlaying());
+    QCOMPARE(dataSpy.count(), 1);
+
+    worker.beginStream();
+    QCOMPARE(startedSpy.count(), 1);
+    QVERIFY(worker.isPlaying());
+
+    worker.pause();
+    QCOMPARE(pausedSpy.count(), 1);
+    QVERIFY(!worker.isPlaying());
+
+    // A speed change must never resume a paused session, or it would defeat the
+    // deferred start it is allowed to precede.
+    worker.setPlaybackSpeed(10);
+    QVERIFY(!worker.isPlaying());
+
+    worker.play();
+    QVERIFY(worker.isPlaying());
+    QTRY_VERIFY_WITH_TIMEOUT(atEndSpy.count() == 1, 5000);
+    QVERIFY(!worker.isPlaying());
+
+    // Restarting from the end rewinds and streams again rather than sitting at EOF.
+    const int dataAtEnd = dataSpy.count();
+    worker.play();
+    QVERIFY(worker.isPlaying());
+    QTRY_VERIFY_WITH_TIMEOUT(dataSpy.count() > dataAtEnd, 5000);
+
+    worker.pause();
+    worker.disconnectFromLog();
+}
+
 UT_REGISTER_TEST(LogReplayLinkTest, TestLabel::Unit, TestLabel::Comms)

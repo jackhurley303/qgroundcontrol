@@ -256,7 +256,6 @@ FlightMap {
             function onPointAdded(coordinate) { trajectoryPolyline.addCoordinate(coordinate) }
             function onUpdateLastPoint(coordinate) { trajectoryPolyline.replaceCoordinate(trajectoryPolyline.pathLength() - 1, coordinate) }
             function onPointsCleared() { trajectoryPolyline.path = [] }
-            function onPointsBulkLoaded() { trajectoryPolyline.path = _activeVehicle.trajectoryPoints.list() }
         }
     }
 
