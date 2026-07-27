@@ -138,42 +138,9 @@ ApplicationWindow {
         toolDrawer.visible = false
     }
 
-    function openTelemetryLog(filePath) {
-        if (allowViewSwitch()) {
-            closeTool()
-            QGroundControl.settingsManager.flyViewSettings.showLogReplayStatusBar.rawValue = true
-            showFlyView()
-            footer.loadLogFile(filePath)
-        }
-    }
-
-    function openTelemetryLogWithFlight(flightEntry) {
-        if (allowViewSwitch()) {
-            closeTool()
-            var replay = QGroundControl.pluginManager.replayExtension
-            if (replay) {
-                QGroundControl.settingsManager.flyViewSettings.showLogReplayStatusBar.rawValue = true
-                showFlyView()
-                replay.openFlight(flightEntry)
-            }
-        }
-    }
-
-    property string pendingParamsFile: ""
-
-    function openParamsFile(filePath) {
-        if (allowViewSwitch()) {
-            closeTool()
-            pendingParamsFile = filePath
-            showVehicleConfigParametersPage()
-        }
-    }
-
     function closeTool() {
         toolDrawer.visible = false
     }
-
-    readonly property var planMasterController: planView._planMasterController
 
     function showTool(toolTitle, toolSource, toolIcon, toolbarSource) {
         toolDrawer.backIcon     = flyView.visible ? "/qmlimages/PaperPlane.svg" : "/qmlimages/Plan.svg"
