@@ -905,7 +905,6 @@ void MockLink::_writeBytesQueued(const QByteArray &bytes)
     }
 
     _handleIncomingMavlinkBytes(reinterpret_cast<const uint8_t*>(bytes.constData()), bytes.length());
-    emit bytesSent(this, bytes);
 }
 
 void MockLink::_handleIncomingNSHBytes(const char *bytes, int cBytes)

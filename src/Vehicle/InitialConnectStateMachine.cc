@@ -65,13 +65,11 @@ void InitialConnectStateMachine::_createStates()
         _handleAutopilotVersionFailure();
     });
 
-    // State 1: Request standard modes (skipped for log replay / high latency)
-    _stateStandardModes = new SkippableAsyncState(
+    // State 1: Request standard modes
+    _stateStandardModes = new AsyncFunctionState(
         QStringLiteral("RequestStandardModes"),
         this,
-        [this]() { return _shouldSkipForLinkType(); },
-        [this](SkippableAsyncState* state) { _requestStandardModes(state); },
-        []() { qCDebug(InitialConnectStateMachineLog) << "Skipping standard modes request"; },
+        [this](AsyncFunctionState* state) { _requestStandardModes(state); },
         _timeoutStandardModes
     );
 
@@ -187,7 +185,6 @@ void InitialConnectStateMachine::_wireTransitions()
     // Linear progression - use completed() for WaitStateBase-derived states (more semantic)
     _stateAutopilotVersion->addTransition(_stateAutopilotVersion, &WaitStateBase::completed, _stateStandardModes);
     _stateStandardModes->addTransition(_stateStandardModes, &WaitStateBase::completed, _stateCompInfo);
-    _stateStandardModes->addTransition(_stateStandardModes, &SkippableAsyncState::skipped, _stateCompInfo);
     _stateCompInfo->addTransition(_stateCompInfo, &WaitStateBase::completed, _stateParameters);
 
     // SkippableAsyncStates: both completed and skipped go to next state
@@ -388,7 +385,7 @@ void InitialConnectStateMachine::_handleAutopilotVersionFailure()
     vehicle()->_setCapabilities(assumedCapabilities);
 }
 
-void InitialConnectStateMachine::_requestStandardModes(SkippableAsyncState* state)
+void InitialConnectStateMachine::_requestStandardModes(AsyncFunctionState* state)
 {
     qCDebug(InitialConnectStateMachineLog) << "_stateRequestStandardModes";
 
