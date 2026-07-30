@@ -338,7 +338,6 @@ qt_add_qml_module(${CMAKE_PROJECT_NAME}
 # ----------------------------------------------------------------------------
 # Source & Test Subdirectories
 # ----------------------------------------------------------------------------
-add_subdirectory(libs/miniz)
 if(QGC_BUILD_TESTING)
     # Marks test-capable builds at the preprocessor level so production code can
     # compile out unit-test-only hooks (e.g. QGCCacheWorker::setUnitTestTileGenerator).

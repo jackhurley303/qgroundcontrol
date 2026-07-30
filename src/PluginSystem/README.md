@@ -129,10 +129,11 @@ A static utility backing the Plugins settings page's "Install plugin…"/"Remove
 (U3.2, D8):
 - `installFromFile(zipPath)` reads and validates `qgcplugin.json` at the archive root
   *before* extracting anything else, then extracts to `<user-plugins-dir>/<manifest.id>/`,
-  replacing any existing install of the same id. Extraction is in-process via vendored
-  [miniz](../../libs/miniz/) rather than shelling out, so the extracted files are never
-  quarantined by Gatekeeper the way a browser download would be (01 §1.4) — a per-entry
-  path check rejects zip-slip attempts (`../` escapes) before any file is written.
+  replacing any existing install of the same id. Extraction is in-process via
+  [QGCCompression](../Utilities/Compression/QGCCompression.h) rather than shelling out, so
+  the extracted files are never quarantined by Gatekeeper the way a browser download would
+  be (01 §1.4) — a per-entry path check rejects zip-slip attempts (`../` escapes) before
+  any file is written.
 - `removePlugin(id)` deletes `<user-plugins-dir>/<id>/` entirely. The caller
   (`QGCPluginManager::removePlugin`) is responsible for deactivating the plugin first.
 - `isFileQuarantined(path)`/`stripQuarantine(path)` (macOS only) check/clear

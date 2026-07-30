@@ -33,6 +33,6 @@ target_sources(${CMAKE_PROJECT_NAME}
         QGCPluginManager.h
 )
 
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE QGCPluginAPI miniz)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE QGCPluginAPI)
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

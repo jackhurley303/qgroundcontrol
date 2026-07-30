@@ -9,16 +9,16 @@
 
 #include "PluginInstaller.h"
 #include "PluginManifest.h"
+#include "QGCCompression.h"
 #include "QGCLoggingCategory.h"
 #include "QGCPluginLoader.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QDirIterator>
+#include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonParseError>
-
-#include "miniz.h"
 
 #if defined(Q_OS_MACOS)
 #include <sys/xattr.h>
@@ -29,6 +29,15 @@ QGC_LOGGING_CATEGORY(PluginInstallerLog, "PluginSystem.PluginInstaller")
 namespace {
 
 constexpr const char* kManifestFileName = "qgcplugin.json";
+
+// Extraction ceiling for untrusted packages. A plugin is a binary plus QML and assets;
+// anything past this is a decompression bomb, not a package. libarchive's own pre-check
+// only compares the archive's *declared* sizes against free disk space, so a bomb sized
+// just under it would otherwise fill the disk.
+constexpr qint64 kMaxPackageBytes = 512LL * 1024 * 1024;
+
+// Enough leading bytes for magic-number format detection.
+constexpr qint64 kMagicBytesToRead = 512;
 
 #if defined(Q_OS_MACOS)
 constexpr const char* kQuarantineAttrName = "com.apple.quarantine";
@@ -57,35 +66,20 @@ bool isSafeEntryName(const QString& entryName)
     return true;
 }
 
-// Reads qgcplugin.json's bytes directly out of the zip archive without extracting
-// anything else, so a malformed manifest is rejected before any file is written.
-QByteArray readManifestBytesFromZip(mz_zip_archive* zip, QString* errorOut)
+// The first entry whose name would escape the destination directory, if any.
+// QGCCompression skips such an entry with a warning and extracts the rest; an
+// untrusted package that contains one is rejected outright instead.
+bool findUnsafeEntry(const QStringList& entryNames, QString* offendingNameOut)
 {
-    const int index = mz_zip_reader_locate_file(zip, kManifestFileName, nullptr, 0);
-    if (index < 0) {
-        if (errorOut) {
-            *errorOut = QStringLiteral("archive does not contain %1 at its root").arg(QString::fromLatin1(kManifestFileName));
+    for (const QString& entryName : entryNames) {
+        if (!isSafeEntryName(entryName)) {
+            if (offendingNameOut) {
+                *offendingNameOut = entryName;
+            }
+            return true;
         }
-        return {};
     }
-
-    mz_zip_archive_file_stat stat;
-    if (!mz_zip_reader_file_stat(zip, static_cast<mz_uint>(index), &stat)) {
-        if (errorOut) {
-            *errorOut = QStringLiteral("could not stat %1 in archive").arg(QString::fromLatin1(kManifestFileName));
-        }
-        return {};
-    }
-
-    QByteArray bytes;
-    bytes.resize(static_cast<qsizetype>(stat.m_uncomp_size));
-    if (!mz_zip_reader_extract_to_mem(zip, static_cast<mz_uint>(index), bytes.data(), static_cast<size_t>(bytes.size()), 0)) {
-        if (errorOut) {
-            *errorOut = QStringLiteral("could not read %1 from archive").arg(QString::fromLatin1(kManifestFileName));
-        }
-        return {};
-    }
-    return bytes;
+    return false;
 }
 
 // D12/04 §9: a package's sidecar manifest and bin/ binary are independently trusted
@@ -93,16 +87,9 @@ QByteArray readManifestBytesFromZip(mz_zip_archive* zip, QString* errorOut)
 // carry its own copy of the host's plugin ABI library or Qt itself — either would let
 // installed content run a runtime the loader never checked. Entry names only; the
 // archive isn't touched.
-bool findBundledRuntimeEntry(mz_zip_archive* zip, QString* offendingNameOut)
+bool findBundledRuntimeEntry(const QStringList& entryNames, QString* offendingNameOut)
 {
-    const mz_uint fileCount = mz_zip_reader_get_num_files(zip);
-    for (mz_uint i = 0; i < fileCount; ++i) {
-        mz_zip_archive_file_stat stat;
-        if (!mz_zip_reader_file_stat(zip, i, &stat)) {
-            continue;
-        }
-
-        const QString entryName = QString::fromUtf8(stat.m_filename);
+    for (const QString& entryName : entryNames) {
         const QStringList parts = entryName.split(QLatin1Char('/'), Qt::SkipEmptyParts);
         for (const QString& part : parts) {
             // Case-insensitive: this is a name-pattern heuristic, not a code check, so a
@@ -122,55 +109,26 @@ bool findBundledRuntimeEntry(mz_zip_archive* zip, QString* offendingNameOut)
     return false;
 }
 
-bool extractAllTo(mz_zip_archive* zip, const QString& destDir, QString* errorOut)
+// The first listed entry with nothing on disk to show for it, if any. Directory entries
+// (trailing '/') are skipped — parents are created implicitly for nested files, so their
+// absence is not evidence of a failed extraction. A dangling symlink counts as present:
+// it was extracted, whatever its target resolves to.
+bool findMissingEntry(const QStringList& entryNames, const QString& destDir, QString* missingNameOut)
 {
-    const mz_uint fileCount = mz_zip_reader_get_num_files(zip);
-
-    for (mz_uint i = 0; i < fileCount; ++i) {
-        mz_zip_archive_file_stat stat;
-        if (!mz_zip_reader_file_stat(zip, i, &stat)) {
-            if (errorOut) {
-                *errorOut = QStringLiteral("could not stat archive entry %1").arg(i);
-            }
-            return false;
-        }
-
-        const QString entryName = QString::fromUtf8(stat.m_filename);
-        if (!isSafeEntryName(entryName)) {
-            if (errorOut) {
-                *errorOut = QStringLiteral("archive entry '%1' has an unsafe path").arg(entryName);
-            }
-            return false;
-        }
-
-        const QString destPath = QDir(destDir).filePath(entryName);
-
-        if (mz_zip_reader_is_file_a_directory(zip, i)) {
-            if (!QDir().mkpath(destPath)) {
-                if (errorOut) {
-                    *errorOut = QStringLiteral("could not create directory '%1'").arg(destPath);
-                }
-                return false;
-            }
+    const QDir dir(destDir);
+    for (const QString& entryName : entryNames) {
+        if (entryName.endsWith(QLatin1Char('/'))) {
             continue;
         }
-
-        if (!QDir().mkpath(QFileInfo(destPath).absolutePath())) {
-            if (errorOut) {
-                *errorOut = QStringLiteral("could not create directory for '%1'").arg(destPath);
+        const QFileInfo info(dir.filePath(entryName));
+        if (!info.exists() && !info.isSymLink()) {
+            if (missingNameOut) {
+                *missingNameOut = entryName;
             }
-            return false;
-        }
-
-        if (!mz_zip_reader_extract_to_file(zip, i, destPath.toUtf8().constData(), 0)) {
-            if (errorOut) {
-                *errorOut = QStringLiteral("could not extract '%1'").arg(entryName);
-            }
-            return false;
+            return true;
         }
     }
-
-    return true;
+    return false;
 }
 
 } // namespace
@@ -185,26 +143,78 @@ PluginInstallResult PluginInstaller::installFromFile(const QString& zipPath)
 {
     PluginInstallResult result;
 
-    mz_zip_archive zip = {};
-    if (!mz_zip_reader_init_file(&zip, zipPath.toUtf8().constData(), 0)) {
+    // Entry names for the whole archive, read before anything is extracted. The manifest
+    // lookup and both entry-name checks below work off this one list.
+    const QStringList entryNames = QGCCompression::listArchive(zipPath, QGCCompression::Format::ZIP);
+    if (entryNames.isEmpty()) {
         result.errorString = QStringLiteral("could not open '%1' as a zip archive").arg(zipPath);
         qCWarning(PluginInstallerLog) << result.errorString;
         return result;
     }
 
-    QString error;
-    const QByteArray manifestBytes = readManifestBytesFromZip(&zip, &error);
+    // The Format argument above only skips QGCCompression's own sniffing — the reader is
+    // opened with every libarchive format enabled, so a tar/cpio/7z named .qgcplugin would
+    // otherwise be extracted just as happily. Require a real zip: the other containers carry
+    // entry types (hardlinks, device nodes) whose targets the name checks below cannot see,
+    // and a hardlink's target is not confined to the destination directory.
+    // Magic bytes rather than detectFormatFromFile(), which consults QMimeDatabase first
+    // and can only answer ambiguously for a container whose entries are stored uncompressed.
+    QFile archiveFile(zipPath);
+    if (!archiveFile.open(QIODevice::ReadOnly) ||
+        QGCCompression::detectFormatFromData(archiveFile.read(kMagicBytesToRead)) != QGCCompression::Format::ZIP) {
+        result.errorString = QStringLiteral("'%1' is not a zip archive").arg(zipPath);
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
+        return result;
+    }
+    archiveFile.close();
+
+    // Cheap string-only rules first, so a hostile package is rejected before any of its
+    // data is decompressed.
+    QString offendingEntry;
+    if (findUnsafeEntry(entryNames, &offendingEntry)) {
+        result.errorString = QStringLiteral("archive entry '%1' has an unsafe path").arg(offendingEntry);
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
+        return result;
+    }
+
+    if (findBundledRuntimeEntry(entryNames, &offendingEntry)) {
+        result.errorString = QStringLiteral("archive bundles a runtime library ('%1'); plugins must link the host's QGCPluginAPI/Qt, not ship their own").arg(offendingEntry);
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
+        return result;
+    }
+
+    // Exactly one manifest. Zip allows duplicate names, and the reader answers a by-name
+    // lookup with the first match while extraction writes every entry in order — so two
+    // qgcplugin.json entries would mean validating one manifest and installing another.
+    const qsizetype manifestCount = entryNames.count(QLatin1String(kManifestFileName));
+    if (manifestCount == 0) {
+        result.errorString =
+            QStringLiteral("archive does not contain %1 at its root").arg(QString::fromLatin1(kManifestFileName));
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
+        return result;
+    }
+    if (manifestCount > 1) {
+        result.errorString = QStringLiteral("archive contains %1 copies of %2")
+                                 .arg(manifestCount)
+                                 .arg(QString::fromLatin1(kManifestFileName));
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
+        return result;
+    }
+
+    // Reads qgcplugin.json's bytes straight out of the archive without extracting
+    // anything else, so a malformed manifest is rejected before any file is written.
+    const QByteArray manifestBytes =
+        QGCCompression::extractFileData(zipPath, QString::fromLatin1(kManifestFileName), QGCCompression::Format::ZIP);
     if (manifestBytes.isEmpty()) {
-        mz_zip_reader_end(&zip);
-        result.errorString = error;
-        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << error;
+        result.errorString =
+            QStringLiteral("could not read %1 from archive").arg(QString::fromLatin1(kManifestFileName));
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
         return result;
     }
 
     QJsonParseError parseError;
     const QJsonDocument doc = QJsonDocument::fromJson(manifestBytes, &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-        mz_zip_reader_end(&zip);
         result.errorString = QStringLiteral("malformed %1: %2").arg(QString::fromLatin1(kManifestFileName), parseError.errorString());
         qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
         return result;
@@ -213,30 +223,19 @@ PluginInstallResult PluginInstaller::installFromFile(const QString& zipPath)
     QString manifestError;
     const PluginManifest manifest = PluginManifest::fromJson(doc.object(), &manifestError);
     if (manifest.id.isEmpty()) {
-        mz_zip_reader_end(&zip);
         result.errorString = QStringLiteral("invalid manifest: %1").arg(manifestError);
         qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
         return result;
     }
 
     if (manifest.tier == PluginManifest::Tier::Internal) {
-        mz_zip_reader_end(&zip);
         result.errorString = QStringLiteral("tier internal cannot be packaged (dev-loop only); use tier sdk for a distributable binary plugin");
-        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
-        return result;
-    }
-
-    QString offendingEntry;
-    if (findBundledRuntimeEntry(&zip, &offendingEntry)) {
-        mz_zip_reader_end(&zip);
-        result.errorString = QStringLiteral("archive bundles a runtime library ('%1'); plugins must link the host's QGCPluginAPI/Qt, not ship their own").arg(offendingEntry);
         qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
         return result;
     }
 
     const QString pluginsDir = userPluginsDir();
     if (pluginsDir.isEmpty() || !QDir().mkpath(pluginsDir)) {
-        mz_zip_reader_end(&zip);
         result.errorString = QStringLiteral("could not create plugins directory");
         qCWarning(PluginInstallerLog) << result.errorString;
         return result;
@@ -249,7 +248,6 @@ PluginInstallResult PluginInstaller::installFromFile(const QString& zipPath)
     if (QDir(destDir).exists()) {
         qCDebug(PluginInstallerLog) << "Replacing existing install of" << manifest.id << "at" << destDir;
         if (!QDir(destDir).removeRecursively()) {
-            mz_zip_reader_end(&zip);
             result.errorString = QStringLiteral("could not remove existing install at '%1'").arg(destDir);
             qCWarning(PluginInstallerLog) << result.errorString;
             return result;
@@ -257,22 +255,31 @@ PluginInstallResult PluginInstaller::installFromFile(const QString& zipPath)
     }
 
     if (!QDir().mkpath(destDir)) {
-        mz_zip_reader_end(&zip);
         result.errorString = QStringLiteral("could not create '%1'").arg(destDir);
         qCWarning(PluginInstallerLog) << result.errorString;
         return result;
     }
 
-    QString extractError;
-    if (!extractAllTo(&zip, destDir, &extractError)) {
-        mz_zip_reader_end(&zip);
+    if (!QGCCompression::extractArchive(zipPath, destDir, QGCCompression::Format::ZIP, nullptr, kMaxPackageBytes)) {
         QDir(destDir).removeRecursively();
-        result.errorString = extractError;
-        qCWarning(PluginInstallerLog) << "Extraction of" << zipPath << "failed -" << extractError;
+        result.errorString =
+            QStringLiteral("could not extract '%1': %2").arg(zipPath, QGCCompression::lastErrorString());
+        qCWarning(PluginInstallerLog) << "Extraction of" << zipPath << "failed -" << result.errorString;
         return result;
     }
 
-    mz_zip_reader_end(&zip);
+    // Extraction reports success even when it silently skipped entries — an escaping
+    // symlink and a name the listing pass read differently are both dropped with only a
+    // warning — so confirm every listed entry actually landed. (It cannot catch an
+    // archive whose headers stop early: the listing pass truncates at the same point, so
+    // both agree on a short list. That needs QGCCompression itself to distinguish
+    // ARCHIVE_EOF from ARCHIVE_FATAL.)
+    if (findMissingEntry(entryNames, destDir, &offendingEntry)) {
+        QDir(destDir).removeRecursively();
+        result.errorString = QStringLiteral("archive entry '%1' was not extracted").arg(offendingEntry);
+        qCWarning(PluginInstallerLog) << "Extraction of" << zipPath << "failed -" << result.errorString;
+        return result;
+    }
 
     qCDebug(PluginInstallerLog) << "Installed" << manifest.id << "to" << destDir;
     result.success = true;

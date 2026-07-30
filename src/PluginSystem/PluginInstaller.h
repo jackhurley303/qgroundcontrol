@@ -25,10 +25,9 @@ struct PluginInstallResult {
 ///
 /// A .qgcplugin file is a zip archive with a package directory's contents at its root
 /// (qgcplugin.json, optionally bin/<platform>/...). Extraction is done in-process via
-/// vendored miniz (libs/miniz/ — see its README for why not QGCCompression/libarchive)
-/// rather than shelling out to an external unzip tool: files QGC itself writes are not
-/// quarantined by Gatekeeper, so the extracted package loads cleanly without a user
-/// having to fight com.apple.quarantine on every file (01 §1.4).
+/// QGCCompression rather than shelling out to an external unzip tool: files QGC itself
+/// writes are not quarantined by Gatekeeper, so the extracted package loads cleanly
+/// without a user having to fight com.apple.quarantine on every file (01 §1.4).
 class PluginInstaller
 {
 public:
