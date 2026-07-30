@@ -35,6 +35,7 @@
 #include "Joystick.h"
 #include "JoystickManager.h"
 #include "LinkManager.h"
+#include "LogReplayLink.h"
 #include "MavCommandQueue.h"
 #include "MessageIntervalManager.h"
 #include "TerrainQueryCoordinator.h"
@@ -250,6 +251,18 @@ void Vehicle::_commonInit(LinkInterface* link)
 
     connect(_missionManager, &MissionManager::sendComplete,             _trajectoryPoints, &TrajectoryPoints::clear);
     connect(_missionManager, &MissionManager::newMissionItemsAvailable, _trajectoryPoints, &TrajectoryPoints::clear);
+
+    for (const SharedLinkInterfacePtr& linkPtr : LinkManager::instance()->links()) {
+        if (auto* logLink = qobject_cast<LogReplayLink*>(linkPtr.get())) {
+            connect(logLink, &LogReplayLink::seekStarted,          _trajectoryPoints, &TrajectoryPoints::clear);
+            connect(logLink, &LogReplayLink::seekReplayComplete,    _trajectoryPoints, &TrajectoryPoints::bulkLoad);
+            connect(logLink, &LogReplayLink::seekFlightStatsReady,  this,              &Vehicle::_onSeekFlightStatsReady);
+            connect(logLink, &LogReplayLink::playbackPaused,        this, &Vehicle::_onReplayPlaybackPaused);
+            connect(logLink, &LogReplayLink::playbackStarted,       this, &Vehicle::_onReplayPlaybackStarted);
+            connect(logLink, &LogReplayLink::playbackSpeedChanged,  this, &Vehicle::_onReplayPlaybackSpeedChanged);
+            break;
+        }
+    }
 
     _standardModes                  = new StandardModes                 (this, this);
     _componentInformationManager    = new ComponentInformationManager   (this, this);
@@ -1618,6 +1631,7 @@ void Vehicle::_clearCameraTriggerPoints()
 
 void Vehicle::_flightTimerStart()
 {
+    _flightTimeOffset = 0.0;
     _flightTimer.start();
     _flightTimeUpdater.start();
     _flightDistanceFact.setRawValue(0);
@@ -1631,7 +1645,42 @@ void Vehicle::_flightTimerStop()
 
 void Vehicle::_updateFlightTime()
 {
-    _flightTimeFact.setRawValue((double)_flightTimer.elapsed() / 1000.0);
+    _flightTimeFact.setRawValue(_flightTimeOffset + (double)_flightTimer.elapsed() / 1000.0 * _replayPlaybackSpeed);
+}
+
+void Vehicle::_onSeekFlightStatsReady(double flightTimeSecs, double flightDistanceMeters)
+{
+    _flightTimeOffset = flightTimeSecs;
+    _flightTimer.restart();
+    _flightTimeUpdater.stop();
+    _flightTimeFact.setRawValue(flightTimeSecs);
+    _flightDistanceFact.setRawValue(flightDistanceMeters);
+}
+
+void Vehicle::_onReplayPlaybackPaused()
+{
+    if (_flightTimeUpdater.isActive()) {
+        _flightTimeOffset += (double)_flightTimer.elapsed() / 1000.0 * _replayPlaybackSpeed;
+        _flightTimer.restart();
+        _flightTimeUpdater.stop();
+    }
+}
+
+void Vehicle::_onReplayPlaybackStarted()
+{
+    if (_armed) {
+        _flightTimer.restart();
+        _flightTimeUpdater.start();
+    }
+}
+
+void Vehicle::_onReplayPlaybackSpeedChanged(qreal speed)
+{
+    if (_flightTimeUpdater.isActive()) {
+        _flightTimeOffset += (double)_flightTimer.elapsed() / 1000.0 * _replayPlaybackSpeed;
+        _flightTimer.restart();
+    }
+    _replayPlaybackSpeed = speed;
 }
 
 void Vehicle::_gotProgressUpdate(float progressValue)
@@ -2728,6 +2777,7 @@ void Vehicle::forceInitialPlanRequestComplete()
     _initialPlanRequestComplete = true;
     emit initialPlanRequestCompleteChanged(true);
 }
+
 
 void Vehicle::sendPlan(QString planFile)
 {

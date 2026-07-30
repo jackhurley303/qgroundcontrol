@@ -10,7 +10,16 @@
 #include <QtCore/QThread>
 #include <QtCore/QTimer>
 
+#include <algorithm>
+
 QGC_LOGGING_CATEGORY(LogReplayLinkLog, "Comms.LogReplayLink")
+
+static const bool _missionItemListRegistered = []{
+    qRegisterMetaType<QList<mavlink_mission_item_int_t>>();
+    qRegisterMetaType<QMap<int, QList<mavlink_mission_item_int_t>>>();
+    qRegisterMetaType<QList<ParamSeekValue>>();
+    return true;
+}();
 
 /*===========================================================================*/
 
@@ -177,6 +186,10 @@ void LogReplayWorker::play()
 
     if (_logFile.atEnd()) {
         _resetPlaybackToBeginning();
+        _pendingUploadItems.clear();
+        _pendingUploadCount.clear();
+        emit replaySeekMissionResolved({});
+        _emitParamSeekReset();
     }
 
     _playbackStartTimeMSecs = static_cast<quint64>(QDateTime::currentMSecsSinceEpoch());
@@ -247,11 +260,9 @@ void LogReplayWorker::setPlaybackSpeed(qreal playbackSpeed)
     _playbackSpeed = playbackSpeed;
     _playbackStartTimeMSecs = static_cast<quint64>(QDateTime::currentMSecsSinceEpoch());
     _playbackStartLogTimeUSecs = _logCurrentTimeUSecs;
-    // Only restart the tick timer if playback is already running: a speed change must
-    // never start the stream, or it would defeat a deferStreamStart session.
-    if (_readTickTimer->isActive()) {
+    if (_readTickTimer->isActive())
         _readTickTimer->start(1);
-    }
+    emit playbackSpeedChanged(playbackSpeed);
 }
 
 void LogReplayWorker::movePlayhead(qreal percentComplete)
@@ -262,6 +273,9 @@ void LogReplayWorker::movePlayhead(qreal percentComplete)
             return;
         }
     }
+
+    _pendingUploadItems.clear();
+    _pendingUploadCount.clear();
 
     percentComplete = qBound(0., percentComplete, 100.);
     const qreal percentCompleteMult = percentComplete / 100.0;
@@ -289,6 +303,148 @@ void LogReplayWorker::movePlayhead(qreal percentComplete)
     newRelativeTimeUSecs = static_cast<qreal>(_logCurrentTimeUSecs - _logStartTimeUSecs);
     percentComplete = ((newRelativeTimeUSecs / _logDurationUSecs) * 100);
     emit playbackPercentCompleteChanged(percentComplete);
+
+    const quint64 targetTimeUSecs = _logCurrentTimeUSecs;
+    const qint64 targetFilePos = _logFile.pos();
+
+    emit seekStarted();
+
+    if (!_logFile.reset()) {
+        qCWarning(LogReplayLinkLog) << "Failed to reset log file for seek replay";
+        return;
+    }
+    mavlink_reset_channel_status(_mavlinkChannel);
+
+    QList<QGeoCoordinate> coords;
+    QByteArray lastHeartbeatBytes;
+    QByteArray lastPositionBytes;
+    QByteArray lastAttitudeBytes;
+    QByteArray lastMissionCurrentBytes;
+    QByteArray lastVfrHudBytes;
+    QByteArray lastHomePositionBytes;
+
+    quint64 currentMsgTimeUSecs     = _logStartTimeUSecs;
+    quint64 lastArmedTransitionUSecs = 0;
+    bool    prevArmedState           = false;
+    bool    isArmedAtSeekPoint       = false;
+    QGeoCoordinate lastDistCoord;
+    double flightDistanceMeters   = 0.0;
+    static constexpr double kDistTolerance = 2.0;
+
+    while (!_logFile.atEnd()) {
+        QByteArray bytes;
+        mavlink_message_t msg{};
+        const quint64 nextTimeUSecs = _readNextMavlinkMessage(bytes, msg);
+        if (msg.msgid == MAVLINK_MSG_ID_GLOBAL_POSITION_INT) {
+            mavlink_global_position_int_t pos;
+            mavlink_msg_global_position_int_decode(&msg, &pos);
+            const QGeoCoordinate coord(pos.lat / 1e7, pos.lon / 1e7, pos.alt / 1000.0);
+            coords.append(coord);
+            if (lastDistCoord.isValid()) {
+                const double d = lastDistCoord.distanceTo(coord);
+                if (d > kDistTolerance) {
+                    flightDistanceMeters += d;
+                    lastDistCoord = coord;
+                }
+            } else {
+                lastDistCoord = coord;
+            }
+            lastPositionBytes = bytes;
+        } else if (msg.msgid == MAVLINK_MSG_ID_HEARTBEAT && msg.compid == MAV_COMP_ID_AUTOPILOT1) {
+            mavlink_heartbeat_t hb;
+            mavlink_msg_heartbeat_decode(&msg, &hb);
+            const bool armed = (hb.base_mode & MAV_MODE_FLAG_SAFETY_ARMED) != 0;
+            if (armed && !prevArmedState) {
+                lastArmedTransitionUSecs = currentMsgTimeUSecs;
+            }
+            prevArmedState     = armed;
+            isArmedAtSeekPoint = armed;
+            lastHeartbeatBytes = bytes;
+        } else if (msg.msgid == MAVLINK_MSG_ID_ATTITUDE) {
+            lastAttitudeBytes = bytes;
+        } else if (msg.msgid == MAVLINK_MSG_ID_MISSION_CURRENT) {
+            lastMissionCurrentBytes = bytes;
+        } else if (msg.msgid == MAVLINK_MSG_ID_VFR_HUD) {
+            lastVfrHudBytes = bytes;
+        } else if (msg.msgid == MAVLINK_MSG_ID_HOME_POSITION) {
+            lastHomePositionBytes = bytes;
+        }
+        currentMsgTimeUSecs = nextTimeUSecs;
+        if (nextTimeUSecs == 0 || nextTimeUSecs >= targetTimeUSecs) {
+            break;
+        }
+    }
+
+    const double flightTimeSecs = (isArmedAtSeekPoint && lastArmedTransitionUSecs > 0)
+        ? static_cast<double>(targetTimeUSecs - lastArmedTransitionUSecs) / 1e6
+        : 0.0;
+
+    emit seekReplayComplete(coords);
+
+    if (!lastHeartbeatBytes.isEmpty()) {
+        emit dataReceived(lastHeartbeatBytes);
+    }
+    if (!lastAttitudeBytes.isEmpty()) {
+        emit dataReceived(lastAttitudeBytes);
+    }
+    if (!lastHomePositionBytes.isEmpty()) {
+        emit dataReceived(lastHomePositionBytes);
+    }
+    if (!lastVfrHudBytes.isEmpty()) {
+        emit dataReceived(lastVfrHudBytes);
+    }
+    if (!lastPositionBytes.isEmpty()) {
+        emit dataReceived(lastPositionBytes);
+    }
+    emit seekFlightStatsReady(flightTimeSecs, flightDistanceMeters);
+
+    QMap<int, QList<mavlink_mission_item_int_t>> resolved;
+    for (auto it = _missionTimeline.constBegin(); it != _missionTimeline.constEnd(); ++it) {
+        const auto& snapshots = it.value();
+        auto ub = std::upper_bound(snapshots.begin(), snapshots.end(), targetTimeUSecs,
+            [](quint64 t, const MissionSnapshot& s) { return t < s.timeUSecs; });
+        if (ub != snapshots.begin()) {
+            --ub;
+            resolved[static_cast<int>(it.key())] = ub->items;
+        }
+    }
+    emit replaySeekMissionResolved(resolved);
+
+    for (auto sysIt = _paramTimelineByKey.constBegin(); sysIt != _paramTimelineByKey.constEnd(); ++sysIt) {
+        const int sysId = static_cast<int>(sysIt.key());
+        QList<ParamSeekValue> paramResolved;
+        paramResolved.reserve(sysIt.value().size());
+        for (auto keyIt = sysIt.value().constBegin(); keyIt != sysIt.value().constEnd(); ++keyIt) {
+            const auto& entries = keyIt.value();
+            ParamSeekValue sv;
+            sv.compId  = keyIt.key().first;
+            sv.paramId = keyIt.key().second;
+            auto ub = std::upper_bound(entries.begin(), entries.end(), targetTimeUSecs,
+                [](quint64 t, const ParamTimelineEntry& e) { return t < e.timeUSecs; });
+            if (ub != entries.begin()) {
+                --ub;
+                sv.rawValue       = ub->rawValue;
+                sv.paramType      = ub->paramType;
+                sv.resetToInitial = false;
+            } else {
+                sv.resetToInitial = true;
+            }
+            paramResolved.append(sv);
+        }
+        if (!paramResolved.isEmpty()) {
+            emit replaySeekParamResolved(sysId, paramResolved);
+        }
+    }
+
+    if (!lastMissionCurrentBytes.isEmpty()) {
+        emit dataReceived(lastMissionCurrentBytes);
+    }
+
+    mavlink_reset_channel_status(_mavlinkChannel);
+    if (!_logFile.seek(targetFilePos)) {
+        qCWarning(LogReplayLinkLog) << "Failed to restore file position after seek replay";
+    }
+    _logCurrentTimeUSecs = targetTimeUSecs;
 }
 
 void LogReplayWorker::_resetPlaybackToBeginning()
@@ -304,13 +460,221 @@ void LogReplayWorker::_resetPlaybackToBeginning()
     _logCurrentTimeUSecs = _logStartTimeUSecs;
 }
 
+void LogReplayWorker::_buildMissionTimeline()
+{
+    _missionTimeline.clear();
+
+    if (!_logFile.reset()) return;
+    mavlink_reset_channel_status(_mavlinkChannel);
+
+    QMap<uint8_t, QList<mavlink_mission_item_int_t>> pending;
+    QMap<uint8_t, uint16_t>                          pendingCount;
+
+    while (!_logFile.atEnd()) {
+        QByteArray bytes;
+        mavlink_message_t msg{};
+        const quint64 timeUSecs = _readNextMavlinkMessage(bytes, msg);
+        if (timeUSecs == 0) break;
+        if (msg.compid == MAV_COMP_ID_AUTOPILOT1) continue;
+
+        switch (msg.msgid) {
+        case MAVLINK_MSG_ID_MISSION_COUNT: {
+            mavlink_mission_count_t mc{};
+            mavlink_msg_mission_count_decode(&msg, &mc);
+            const uint8_t type = mc.mission_type;
+            pending.remove(type);
+            pendingCount.remove(type);
+            if (mc.count == 0) {
+                _missionTimeline[type].append(MissionSnapshot{timeUSecs, {}});
+            } else {
+                pendingCount[type] = mc.count;
+            }
+            break;
+        }
+        case MAVLINK_MSG_ID_MISSION_ITEM_INT: {
+            mavlink_mission_item_int_t item{};
+            mavlink_msg_mission_item_int_decode(&msg, &item);
+            const uint8_t type = item.mission_type;
+            if (pendingCount.contains(type)) {
+                pending[type].append(item);
+                if (pending[type].count() == static_cast<int>(pendingCount[type])) {
+                    _missionTimeline[type].append(MissionSnapshot{timeUSecs, pending.take(type)});
+                    pendingCount.remove(type);
+                }
+            }
+            break;
+        }
+        case MAVLINK_MSG_ID_MISSION_CLEAR_ALL: {
+            mavlink_mission_clear_all_t clear{};
+            mavlink_msg_mission_clear_all_decode(&msg, &clear);
+            if (clear.mission_type == MAV_MISSION_TYPE_ALL) {
+                _missionTimeline[MAV_MISSION_TYPE_MISSION].append(MissionSnapshot{timeUSecs, {}});
+                _missionTimeline[MAV_MISSION_TYPE_FENCE].append(MissionSnapshot{timeUSecs, {}});
+                _missionTimeline[MAV_MISSION_TYPE_RALLY].append(MissionSnapshot{timeUSecs, {}});
+            } else {
+                _missionTimeline[clear.mission_type].append(MissionSnapshot{timeUSecs, {}});
+            }
+            pending.remove(clear.mission_type);
+            pendingCount.remove(clear.mission_type);
+            break;
+        }
+        default:
+            break;
+        }
+    }
+
+    if (!_logFile.reset()) {
+        qCWarning(LogReplayLinkLog) << "Failed to reset log file after building mission timeline";
+    }
+    mavlink_reset_channel_status(_mavlinkChannel);
+}
+
+void LogReplayWorker::_buildParamTimeline()
+{
+    _paramTimelineByKey.clear();
+
+    if (!_logFile.reset()) return;
+    mavlink_reset_channel_status(_mavlinkChannel);
+
+    // Track the last seen value per (sysId, compId, paramId) to filter out
+    // duplicate PARAM_VALUE messages (e.g. the initial download flood).
+    QMap<uint8_t, QMap<QPair<int,QString>, float>> lastSeen;
+
+    while (!_logFile.atEnd()) {
+        QByteArray bytes;
+        mavlink_message_t msg{};
+        const quint64 timeUSecs = _readNextMavlinkMessage(bytes, msg);
+        if (timeUSecs == 0) break;
+        if (msg.msgid != MAVLINK_MSG_ID_PARAM_VALUE) continue;
+
+        mavlink_param_value_t pv{};
+        mavlink_msg_param_value_decode(&msg, &pv);
+        const QString paramId = QString::fromLatin1(pv.param_id,
+            static_cast<qsizetype>(qstrnlen(pv.param_id, sizeof(pv.param_id))));
+        if (paramId.isEmpty()) continue;
+
+        const QPair<int,QString> key{static_cast<int>(msg.compid), paramId};
+        auto& sysLastSeen = lastSeen[msg.sysid];
+        auto it = sysLastSeen.find(key);
+        if (it != sysLastSeen.end() && it.value() == pv.param_value) {
+            continue;  // unchanged — skip (filters out initial download flood duplicates)
+        }
+        sysLastSeen[key] = pv.param_value;
+
+        _paramTimelineByKey[msg.sysid][key].append(ParamTimelineEntry{timeUSecs, pv.param_value, pv.param_type});
+    }
+
+    for (auto sysIt = _paramTimelineByKey.constBegin(); sysIt != _paramTimelineByKey.constEnd(); ++sysIt) {
+        qCDebug(LogReplayLinkLog) << "_buildParamTimeline: sysId=" << sysIt.key()
+            << "tracked" << sysIt.value().size() << "params with in-flight changes";
+    }
+
+    if (!_logFile.reset()) {
+        qCWarning(LogReplayLinkLog) << "Failed to reset log file after building param timeline";
+    }
+    mavlink_reset_channel_status(_mavlinkChannel);
+}
+
+void LogReplayWorker::_emitParamSeekReset()
+{
+    for (auto sysIt = _paramTimelineByKey.constBegin(); sysIt != _paramTimelineByKey.constEnd(); ++sysIt) {
+        const int sysId = static_cast<int>(sysIt.key());
+        QList<ParamSeekValue> resetList;
+        resetList.reserve(sysIt.value().size());
+        for (auto keyIt = sysIt.value().constBegin(); keyIt != sysIt.value().constEnd(); ++keyIt) {
+            resetList.append(ParamSeekValue{keyIt.key().first, keyIt.key().second, 0.0f, 0, true});
+        }
+        if (!resetList.isEmpty()) {
+            emit replaySeekParamResolved(sysId, resetList);
+        }
+    }
+}
+
+void LogReplayWorker::_detectReplayMissionUpload(const mavlink_message_t& msg)
+{
+    switch (msg.msgid) {
+    case MAVLINK_MSG_ID_MISSION_COUNT: {
+        mavlink_mission_count_t mc{};
+        mavlink_msg_mission_count_decode(&msg, &mc);
+        qCDebug(LogReplayLinkLog) << "MISSION_COUNT sysid=" << msg.sysid << "compid=" << msg.compid
+                                  << "mission_type=" << mc.mission_type << "count=" << mc.count;
+        const uint8_t type = mc.mission_type;
+        if (msg.compid != MAV_COMP_ID_AUTOPILOT1 && mc.count > 0) {
+            _pendingUploadItems[type].clear();
+            _pendingUploadCount[type] = mc.count;
+        } else if (msg.compid != MAV_COMP_ID_AUTOPILOT1 && mc.count == 0) {
+            emit replayMissionUploaded(type, {});
+        }
+        break;
+    }
+    case MAVLINK_MSG_ID_MISSION_ITEM_INT: {
+        mavlink_mission_item_int_t item{};
+        mavlink_msg_mission_item_int_decode(&msg, &item);
+        qCDebug(LogReplayLinkLog) << "MISSION_ITEM_INT sysid=" << msg.sysid << "compid=" << msg.compid
+                                  << "mission_type=" << item.mission_type << "seq=" << item.seq;
+        const uint8_t type = item.mission_type;
+        if (msg.compid != MAV_COMP_ID_AUTOPILOT1 && _pendingUploadCount.contains(type)) {
+            _pendingUploadItems[type].append(item);
+            const int buffered = _pendingUploadItems[type].count();
+            const int expected = static_cast<int>(_pendingUploadCount[type]);
+            if (buffered == expected) {
+                qCDebug(LogReplayLinkLog) << "replayMissionUploaded type=" << type << "count=" << buffered;
+                emit replayMissionUploaded(type, _pendingUploadItems[type]);
+                _pendingUploadItems.remove(type);
+                _pendingUploadCount.remove(type);
+            }
+        }
+        break;
+    }
+    case MAVLINK_MSG_ID_MISSION_CLEAR_ALL: {
+        mavlink_mission_clear_all_t clear{};
+        mavlink_msg_mission_clear_all_decode(&msg, &clear);
+        if (msg.compid == MAV_COMP_ID_AUTOPILOT1) break;
+        qCDebug(LogReplayLinkLog) << "MISSION_CLEAR_ALL sysid=" << msg.sysid
+                                  << "compid=" << msg.compid
+                                  << "mission_type=" << clear.mission_type;
+        const auto emitClear = [this](uint8_t type) {
+            _pendingUploadItems.remove(type);
+            _pendingUploadCount.remove(type);
+            emit replayMissionUploaded(static_cast<int>(type), {});
+        };
+        if (clear.mission_type == MAV_MISSION_TYPE_ALL) {
+            emitClear(MAV_MISSION_TYPE_MISSION);
+            emitClear(MAV_MISSION_TYPE_FENCE);
+            emitClear(MAV_MISSION_TYPE_RALLY);
+        } else {
+            emitClear(clear.mission_type);
+        }
+        break;
+    }
+    case MAVLINK_MSG_ID_MISSION_ACK: {
+        mavlink_mission_ack_t ack{};
+        mavlink_msg_mission_ack_decode(&msg, &ack);
+        qCDebug(LogReplayLinkLog) << "MISSION_ACK sysid=" << msg.sysid << "compid=" << msg.compid
+                                  << "mission_type=" << ack.mission_type << "result=" << ack.type;
+        break;
+    }
+    case MAVLINK_MSG_ID_MISSION_REQUEST_INT: {
+        mavlink_mission_request_int_t req{};
+        mavlink_msg_mission_request_int_decode(&msg, &req);
+        qCDebug(LogReplayLinkLog) << "MISSION_REQUEST_INT sysid=" << msg.sysid << "compid=" << msg.compid
+                                  << "mission_type=" << req.mission_type << "seq=" << req.seq;
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 void LogReplayWorker::_readNextLogEntry()
 {
     int timeToNextExecutionMSecs = 0;
     while (timeToNextExecutionMSecs < 3) {
         QByteArray bytes;
         bytes.reserve(_logFile.bytesAvailable());
-        const qint64 nextTimeUSecs = _readNextMavlinkMessage(bytes);
+        mavlink_message_t msg{};
+        const qint64 nextTimeUSecs = _readNextMavlinkMessage(bytes, msg);
+        _detectReplayMissionUpload(msg);
         emit dataReceived(bytes);
         emit playbackPercentCompleteChanged((static_cast<float>(_logCurrentTimeUSecs - _logStartTimeUSecs) / static_cast<float>(_logDurationUSecs)) * 100);
 
@@ -376,6 +740,9 @@ bool LogReplayWorker::_loadLogFile()
 
     const quint64 logDurationSecondsTotal = _logDurationUSecs / 1000000;
     emit logFileStats(logDurationSecondsTotal);
+
+    _buildMissionTimeline();
+    _buildParamTimeline();
 
     return true;
 }
@@ -517,7 +884,14 @@ LogReplayLink::LogReplayLink(SharedLinkConfigurationPtr &config, QObject *parent
     (void) connect(_worker, &LogReplayWorker::playbackPaused, this, &LogReplayLink::playbackPaused, Qt::QueuedConnection);
     (void) connect(_worker, &LogReplayWorker::playbackPercentCompleteChanged, this, &LogReplayLink::playbackPercentCompleteChanged, Qt::QueuedConnection);
     (void) connect(_worker, &LogReplayWorker::currentLogTimeSecs, this, &LogReplayLink::currentLogTimeSecs, Qt::QueuedConnection);
+    (void) connect(_worker, &LogReplayWorker::seekStarted, this, &LogReplayLink::seekStarted, Qt::QueuedConnection);
+    (void) connect(_worker, &LogReplayWorker::seekReplayComplete,    this, &LogReplayLink::seekReplayComplete,    Qt::QueuedConnection);
+    (void) connect(_worker, &LogReplayWorker::seekFlightStatsReady,  this, &LogReplayLink::seekFlightStatsReady,  Qt::QueuedConnection);
+    (void) connect(_worker, &LogReplayWorker::playbackSpeedChanged, this, &LogReplayLink::playbackSpeedChanged, Qt::QueuedConnection);
     (void) connect(_worker, &LogReplayWorker::disconnected, this, &LogReplayLink::disconnected, Qt::QueuedConnection);
+    (void) connect(_worker, &LogReplayWorker::replayMissionUploaded, this, &LogReplayLink::replayMissionUploaded, Qt::QueuedConnection);
+    (void) connect(_worker, &LogReplayWorker::replaySeekMissionResolved, this, &LogReplayLink::replaySeekMissionResolved, Qt::QueuedConnection);
+    (void) connect(_worker, &LogReplayWorker::replaySeekParamResolved, this, &LogReplayLink::replaySeekParamResolved, Qt::QueuedConnection);
 
     _workerThread->start();
 }

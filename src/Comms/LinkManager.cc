@@ -1,5 +1,6 @@
 #include "LinkManager.h"
 #include "LogReplayLink.h"
+#include "ReplaySeekApplier.h"
 #include "QGCNetworkHelper.h"
 #include "MAVLinkProtocol.h"
 #include "MultiVehicleManager.h"
@@ -140,9 +141,12 @@ bool LinkManager::createConnectedLink(SharedLinkConfigurationPtr &config)
     case LinkConfiguration::TypeBluetooth:
         link = std::make_shared<BluetoothLink>(config);
         break;
-    case LinkConfiguration::TypeLogReplay:
-        link = std::make_shared<LogReplayLink>(config);
+    case LinkConfiguration::TypeLogReplay: {
+        auto replayLink = std::make_shared<LogReplayLink>(config);
+        new ReplaySeekApplier(replayLink.get());
+        link = replayLink;
         break;
+    }
 #ifdef QT_DEBUG
     case LinkConfiguration::TypeMock:
         link = std::make_shared<MockLink>(config);

@@ -1596,6 +1596,7 @@ void ParameterManager::_loadReplayParamsFromFile(const QString& filePath)
             emit factAdded(componentId, fact);
         }
         fact->containerSetRawValue(paramValue);
+        _replayInitialValues[qMakePair(componentId, paramName)] = paramValue;
         _setLoadProgress(static_cast<double>(i + 1) / total);
     }
 
@@ -1607,6 +1608,20 @@ void ParameterManager::_loadReplayParamsFromFile(const QString& filePath)
     // loop in _checkInitialLoadComplete passes immediately. Default component facts
     // are now in _mapCompId2FactMap, so the guard there passes too.
     _checkInitialLoadComplete();
+}
+
+void ParameterManager::resetParamToReplayInitial(int compId, const QString& paramId)
+{
+    const auto key = qMakePair(compId, paramId);
+    if (!_replayInitialValues.contains(key)) return;
+    Fact* fact = _mapCompId2FactMap.value(compId).value(paramId, nullptr);
+    if (fact) fact->containerSetRawValue(_replayInitialValues[key]);
+}
+
+void ParameterManager::setParamFromReplaySeek(int compId, const QString& paramId, const QVariant& rawValue)
+{
+    Fact* fact = _mapCompId2FactMap.value(compId).value(paramId, nullptr);
+    if (fact) fact->containerSetRawValue(rawValue);
 }
 
 void ParameterManager::resetAllParametersToDefaults()

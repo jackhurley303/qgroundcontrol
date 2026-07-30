@@ -2,14 +2,39 @@
 
 #include "LinkConfiguration.h"
 #include "LinkInterface.h"
-#include "QGCMAVLinkTypes.h"
+#include "MAVLinkLib.h"
 
 #include <QtCore/QFile>
+#include <QtCore/QList>
+#include <QtCore/QLoggingCategory>
+#include <QtCore/QMap>
+#include <QtCore/QPair>
+#include <QtCore/QSet>
+#include <QtPositioning/QGeoCoordinate>
 #include <QtQmlIntegration/QtQmlIntegration>
 
 #include <atomic>
 
 class QTimer;
+
+Q_DECLARE_METATYPE(QList<mavlink_mission_item_int_t>)
+using MissionItemsByType = QMap<int, QList<mavlink_mission_item_int_t>>;
+Q_DECLARE_METATYPE(MissionItemsByType)
+
+/// Resolved parameter value emitted by replaySeekParamResolved.
+/// When resetToInitial is true the receiver should revert the parameter to
+/// its params-file initial value; rawValue and paramType are unused in that case.
+struct ParamSeekValue {
+    int     compId         = 0;
+    QString paramId;
+    float   rawValue       = 0.0f;
+    uint8_t paramType      = 0;        ///< MAV_PARAM_TYPE
+    bool    resetToInitial = false;
+};
+Q_DECLARE_METATYPE(QList<ParamSeekValue>)
+
+Q_DECLARE_LOGGING_CATEGORY(LogReplayLinkLog)
+
 
 /*===========================================================================*/
 
@@ -76,6 +101,20 @@ signals:
     void playbackAtEnd();
     void playbackPercentCompleteChanged(qreal percentComplete);
     void currentLogTimeSecs(uint32_t secs);
+    void seekStarted();
+    void seekReplayComplete(QList<QGeoCoordinate> coords);
+    void seekFlightStatsReady(double flightTimeSecs, double flightDistanceMeters);
+    void playbackSpeedChanged(qreal speed);
+    /// Emitted when the tlog contains a complete GCS→vehicle mission upload sequence
+    /// (MISSION_COUNT + all MISSION_ITEM_INT from a non-autopilot compid). missionType is MAV_MISSION_TYPE.
+    void replayMissionUploaded(int missionType, QList<mavlink_mission_item_int_t> items);
+    /// Emitted after seek (and on restart-from-end) with the last known mission state per type
+    /// at or before the seek point. Types absent from the map had no events — initial plan applies.
+    void replaySeekMissionResolved(QMap<int, QList<mavlink_mission_item_int_t>> resolvedByType);
+    /// Emitted after seek (and on restart-from-end) with the resolved parameter values for
+    /// every parameter that appeared in the tlog. resetToInitial=true means the param should
+    /// be reverted to its params-file value (seek target is before its first recorded change).
+    void replaySeekParamResolved(int sysId, QList<ParamSeekValue> resolved);
 
 public slots:
     void setup();
@@ -105,6 +144,21 @@ private:
     bool _loadLogFile();
     void _resetPlaybackToBeginning();
     void _signalCurrentLogTimeSecs();
+    void _detectReplayMissionUpload(const mavlink_message_t &msg);
+    void _buildMissionTimeline();
+    void _buildParamTimeline();
+    void _emitParamSeekReset();
+
+    struct MissionSnapshot {
+        quint64 timeUSecs;
+        QList<mavlink_mission_item_int_t> items;  // empty = cleared
+    };
+
+    struct ParamTimelineEntry {
+        quint64 timeUSecs;
+        float   rawValue;
+        uint8_t paramType;
+    };
 
     const LogReplayConfiguration *_logReplayConfig = nullptr;
     QTimer *_readTickTimer = nullptr;
@@ -125,6 +179,18 @@ private:
     quint64 _logFileSize = 0;
 
     static constexpr size_t kTimestamp = sizeof(quint64);
+
+    // Live playback upload detection state
+    QMap<uint8_t, QList<mavlink_mission_item_int_t>> _pendingUploadItems;
+    QMap<uint8_t, uint16_t>                          _pendingUploadCount;
+
+    // Pre-scanned timeline of mission state changes, keyed by MAV_MISSION_TYPE
+    QMap<uint8_t, QList<MissionSnapshot>> _missionTimeline;
+
+    // Pre-scanned timeline of parameter value changes.
+    // Outer key: sysId. Inner key: (compId, paramId). Value: chronologically sorted entries.
+    // Only records actual value changes (initial download flood filtered out).
+    QMap<uint8_t, QMap<QPair<int,QString>, QList<ParamTimelineEntry>>> _paramTimelineByKey;
 };
 
 /*===========================================================================*/
@@ -155,6 +221,13 @@ signals:
     void playbackAtEnd();
     void playbackPercentCompleteChanged(qreal percentComplete);
     void currentLogTimeSecs(uint32_t secs);
+    void seekStarted();
+    void seekReplayComplete(QList<QGeoCoordinate> coords);
+    void seekFlightStatsReady(double flightTimeSecs, double flightDistanceMeters);
+    void playbackSpeedChanged(qreal speed);
+    void replayMissionUploaded(int missionType, QList<mavlink_mission_item_int_t> items);
+    void replaySeekMissionResolved(QMap<int, QList<mavlink_mission_item_int_t>> resolvedByType);
+    void replaySeekParamResolved(int sysId, QList<ParamSeekValue> resolved);
     void replayPlanReloadRequested();
 
 public slots:

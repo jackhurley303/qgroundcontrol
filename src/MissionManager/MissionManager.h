@@ -21,6 +21,9 @@ public:
     /// Last current mission item reported while in Mission flight mode
     int lastCurrentIndex(void) const { return _lastCurrentIndex; }
 
+    /// Resets the current index to -1 so the next MISSION_CURRENT always triggers currentIndexChanged
+    void resetCurrentIndex(void) { _currentMissionIndex = -1; }
+
     /// Writes the specified set mission items to the vehicle as an ArduPilot guided mode mission item.
     ///     @param gotoCoord Coordinate to move to
     ///     @param altChangeOnly true: only altitude change, false: lat/lon/alt change

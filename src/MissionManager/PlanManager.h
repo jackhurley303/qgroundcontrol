@@ -41,6 +41,16 @@ public:
     ///     Signals removeAllComplete when done
     void removeAll(void);
 
+    /// Directly injects a complete set of raw MAVLink items (e.g. from a tlog replay upload).
+    /// Converts, takes ownership, and emits newMissionItemsAvailable.
+    void loadItemsFromReplay(const QList<mavlink_mission_item_int_t>& rawItems);
+
+    /// Converts a raw MAVLink MISSION_ITEM_INT struct to a MissionItem.
+    /// Caller takes ownership of the returned object.
+    static MissionItem* missionItemFromMavlinkInt(const mavlink_mission_item_int_t& raw,
+                                                  bool sendHomePositionToVehicle,
+                                                  QObject* parent);
+
     /// Error codes returned in error signal
     typedef enum {
         InternalError,

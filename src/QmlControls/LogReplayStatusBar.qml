@@ -8,11 +8,14 @@ import QGroundControl.Controls
 
 Rectangle {
     id:     _root
-    height: visible ? (rowLayout.height + (_margins * 2)) : 0
+    height: visible ? (Math.max(rowLayout.implicitHeight, loadingRow.implicitHeight) + (_margins * 2)) : 0
     color: qgcPal.window
 
     property real _margins: ScreenTools.defaultFontPixelHeight / 4
-    property var _logReplayLink: null
+
+    // Plugin-agnostic accessor for the replay extension (null when no plugin is loaded)
+    readonly property var  _replay:          QGroundControl.pluginManager.replayExtension
+    readonly property bool _isLoadingRemote: _replay !== null && _replay.isLoadingRemote
 
     function pickLogFile() {
         if (globals.activeVehicle) {
@@ -41,15 +44,44 @@ Rectangle {
     LogReplayLinkController {
         id: controller
 
-        // Track whichever replay link is active, so the bar also drives a session
-        // started by something other than the file dialog above (e.g. a plugin).
         link: QGroundControl.linkManager.activeLogReplayLink
 
         onPercentCompleteChanged: (percentComplete) => slider.updatePercentComplete(percentComplete)
     }
 
+    // Loading overlay shown while a remote flight's tlog is downloading.
+    RowLayout {
+        id:      loadingRow
+        visible: _isLoadingRemote
+        anchors {
+            margins: _margins
+            top:     parent.top
+            left:    parent.left
+            right:   parent.right
+        }
+        spacing: ScreenTools.defaultFontPixelWidth
+
+        QGCLabel {
+            text: qsTr("Downloading flight… %1%").arg(_replay ? _replay.remoteLoadProgress : 0)
+            font.bold: true
+        }
+
+        ProgressBar {
+            Layout.fillWidth: true
+            from:  0
+            to:    100
+            value: _replay ? _replay.remoteLoadProgress : 0
+        }
+
+        QGCButton {
+            text:      qsTr("Cancel")
+            onClicked: if (_replay) _replay.cancelRemoteLoad()
+        }
+    }
+
     RowLayout {
         id: rowLayout
+        visible: !_isLoadingRemote
         anchors {
             margins: _margins
             top: parent.top
@@ -77,7 +109,11 @@ Rectangle {
                 ListElement { text: "10x";  value: 10 }
             }
 
-            onActivated: (index) => { controller.playbackSpeed = model.get(currentIndex).value }
+            onActivated: (index) => {
+                controller.playbackSpeed = model.get(currentIndex).value
+                if (_replay && _replay.isActive)
+                    _replay.setPlaybackSpeed(model.get(currentIndex).value)
+            }
         }
 
         QGCLabel { text: controller.playheadTime }
@@ -98,13 +134,54 @@ Rectangle {
             }
 
             onValueChanged: {
-                if (!manualUpdate) {
+                if (!manualUpdate && !pressed) {
                     controller.percentComplete = value
+                    if (_replay && _replay.isActive)
+                        _replay.seekTo(value)
+                }
+            }
+
+            onPressedChanged: {
+                if (!pressed && !manualUpdate) {
+                    controller.percentComplete = value
+                    if (_replay && _replay.isActive)
+                        _replay.seekTo(value)
                 }
             }
         }
 
         QGCLabel { text: controller.totalTime }
+
+        // ── Video camera icon — visible when a video attachment is active ──────
+        Item {
+            visible:          _replay ? _replay.hasVideo : false
+            width:            ScreenTools.defaultFontPixelHeight * 1.6
+            height:           ScreenTools.defaultFontPixelHeight * 1.6
+            Layout.alignment: Qt.AlignVCenter
+
+            readonly property bool _enabled: _replay !== null && _replay.videoDurationMs > 0
+
+            QGCColoredImage {
+                anchors.fill:     parent
+                source:           "/qmlimages/camera_video.svg"
+                color:            videoOffsetPopover.visible ? qgcPal.brandingBlue
+                                      : (parent._enabled ? qgcPal.text : qgcPal.colorGrey)
+                sourceSize.width: width
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape:  parent._enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: {
+                    if (!parent._enabled) return
+                    if (videoOffsetPopover.visible) {
+                        videoOffsetPopover.close()
+                    } else {
+                        videoOffsetPopover.open()
+                    }
+                }
+            }
+        }
 
         QGCButton {
             text: qsTr("Load Telemetry Log")
@@ -115,12 +192,37 @@ Rectangle {
         QGCButton {
             text: qsTr("Close")
             onClicked: {
+                if (_replay) _replay.closeFlight()
                 var activeVehicle = QGroundControl.multiVehicleManager.activeVehicle
                 if (activeVehicle) {
                     activeVehicle.closeVehicle()
                 }
                 QGroundControl.settingsManager.flyViewSettings.showLogReplayStatusBar.rawValue = false
             }
+        }
+    }
+
+    // ── Video offset popover ──────────────────────────────────────────────────
+    Popup {
+        id:          videoOffsetPopover
+        modal:       false
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        width:       ScreenTools.defaultFontPixelWidth * 56
+
+        // Position above the camera icon — anchored to the parent bar
+        x: _root.width - width - _margins * 2
+        y: -height - _margins
+
+        background: Rectangle {
+            color:        qgcPal.window
+            radius:       8
+            border.color: Qt.rgba(1, 1, 1, 0.2)
+            border.width: 1
+        }
+
+        contentItem: VideoOffsetEditor {
+            replay:     _replay
+            controller: controller
         }
     }
 }
