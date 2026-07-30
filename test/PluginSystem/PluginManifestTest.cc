@@ -176,7 +176,7 @@ void PluginManifestTest::_internalTierHashMatch_test()
 {
     const PluginManifest manifest = PluginManifest::fromJson(validInternalManifestJson());
     QVERIFY(!manifest.id.isEmpty());
-    QCOMPARE(manifest.tier, PluginManifest::Tier::Internal);
+    QCOMPARE(manifest.tier, PluginManifest::Tier::HostPinned);
 
     HostInfo host;
     host.version = QVersionNumber::fromString(QStringLiteral("5.0"));
@@ -367,7 +367,7 @@ void PluginManifestTest::_metaDataEnvelope_test()
     QVERIFY2(!manifest.id.isEmpty(), qPrintable(error));
     QCOMPARE(manifest.id, QStringLiteral("org.example.qgc.example"));
     QCOMPARE(manifest.name, QStringLiteral("Example"));
-    QCOMPARE(manifest.tier, PluginManifest::Tier::Internal);
+    QCOMPARE(manifest.tier, PluginManifest::Tier::HostPinned);
 }
 
 void PluginManifestTest::_metaDataIidMismatch_test()

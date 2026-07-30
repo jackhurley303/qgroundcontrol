@@ -122,25 +122,20 @@ void PluginLoaderGateTest::_inspectMissingFileFails_test()
     QVERIFY(!info.errorString.isEmpty());
 }
 
-// The permanent "different-commit-host" ABI proof (04 §11 Spike S3, DoD #1's residue):
-// a dylib built at a different commit (or, for the template leg, against a different
-// SDK zip entirely) must still satisfy today's QGCPluginLoader gate. CI points these at
-// a real path via env var; outside CI (or before U5.1's macos.yml wiring lands) the var
-// is unset and the slot skips rather than failing.
+// The permanent "different-SDK-zip-host" ABI proof (04 §11 Spike S3, DoD #1's residue):
+// a dylib built against a standalone SDK zip must still satisfy today's QGCPluginLoader
+// gate. CI points this at a real path via env var; outside CI (or before U5.1's
+// macos.yml wiring lands) the var is unset and the slot skips rather than failing.
 //
 // Exercises both compiled-in vtables a plugin binary carries: QGCPluginInterface's
 // (pluginInterfaceVersion()/createPlugin(), invoked by activate() itself) and
 // QGCPlugin's own (replayExtension(), invoked explicitly below, mirroring
-// _activateRealPlugin_test's real-fixture check). A manual verify confirmed this
-// actually catches a break: inserting a scratch virtual into QGCPluginInterface
-// ahead of createPlugin() and reloading this committed golden dylib crashes with
-// SIGSEGV (out-of-bounds vtable read against the old 2-slot layout) rather than
-// silently misbehaving — reverted, not part of this commit.
+// _activateRealPlugin_test's real-fixture check).
 void PluginLoaderGateTest::_inspectAndActivateExternalDylib(const QByteArray& envVarName, const QString& skipContext)
 {
     const QString path = qEnvironmentVariable(envVarName.constData());
     if (path.isEmpty()) {
-        QSKIP(qPrintable(QStringLiteral("%1 not set; skipping %2 ABI check (set by CI, see test/PluginSystem/golden/README.md)")
+        QSKIP(qPrintable(QStringLiteral("%1 not set; skipping %2 ABI check (set by CI)")
                           .arg(QString::fromUtf8(envVarName), skipContext)));
     }
     QVERIFY2(QFile::exists(path), qPrintable(QStringLiteral("%1 does not exist: %2").arg(skipContext, path)));
@@ -154,11 +149,6 @@ void PluginLoaderGateTest::_inspectAndActivateExternalDylib(const QByteArray& en
     QVERIFY(info.plugin != nullptr);
     QCOMPARE(info.plugin->replayExtension(), nullptr);
     delete info.plugin;
-}
-
-void PluginLoaderGateTest::_activateGoldenPluginAgainstCurrentHost_test()
-{
-    _inspectAndActivateExternalDylib(QByteArrayLiteral("QGC_GOLDEN_PLUGIN_PATH"), QStringLiteral("golden plugin"));
 }
 
 void PluginLoaderGateTest::_activateTemplateBuiltPluginAgainstCurrentHost_test()

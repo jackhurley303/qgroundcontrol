@@ -19,7 +19,7 @@ QString PluginManifest::tierToString(Tier tier)
         return QStringLiteral("qml");
     case Tier::Sdk:
         return QStringLiteral("sdk");
-    case Tier::Internal:
+    case Tier::HostPinned:
         return QStringLiteral("internal");
     }
     return QString();
@@ -36,7 +36,7 @@ bool PluginManifest::tierFromString(const QString &str, Tier *tierOut)
         return true;
     }
     if (str == QStringLiteral("internal")) {
-        *tierOut = Tier::Internal;
+        *tierOut = Tier::HostPinned;
         return true;
     }
     return false;
@@ -153,7 +153,7 @@ PluginManifest PluginManifest::fromJson(const QJsonObject &json, QString *errorO
     }
 
     manifest.hostBuildId = json.value(QStringLiteral("hostBuildId")).toString();
-    if (manifest.tier == Tier::Internal && manifest.hostBuildId.isEmpty()) {
+    if (manifest.tier == Tier::HostPinned && manifest.hostBuildId.isEmpty()) {
         if (errorOut) {
             *errorOut = QStringLiteral("'hostBuildId' is required when tier is 'internal'");
         }
@@ -229,7 +229,7 @@ bool PluginManifest::validateForHost(const HostInfo &host, QString *reasonOut) c
         }
     }
 
-    if (tier == Tier::Internal && hostBuildId != host.buildId) {
+    if (tier == Tier::HostPinned && hostBuildId != host.buildId) {
         if (reasonOut) {
             *reasonOut = QStringLiteral("built for another QGC build (%1), host build is %2").arg(hostBuildId, host.buildId);
         }

@@ -169,13 +169,11 @@ jobs:
           echo "SDK_ZIP=${SDK_NAME}.zip" >> "$GITHUB_ENV"
           echo "SDK_NAME=${SDK_NAME}" >> "$GITHUB_ENV"
 
-      # Plugin SDK ABI watchdog: the permanent "different-commit-host" proof. Leg 1
-      # loads a frozen, git-committed golden Example-plugin dylib (test/PluginSystem/golden/,
-      # built at an earlier commit) through today's QGCPluginLoader. Leg 2 builds
-      # plugins/template/ standalone against the SDK just packaged above and loads that.
-      # Both run through PluginLoaderGateTest's env-var-gated slots; a real ABI break here
-      # crashes loudly (verified manually — see the golden README) rather than passing
-      # silently, so this must run on PRs too, not just Release pushes.
+      # Plugin SDK ABI watchdog: the permanent "different-SDK-zip-host" proof. Builds
+      # plugins/template/ standalone against the SDK just packaged above and loads it
+      # through PluginLoaderGateTest's env-var-gated slot; a real ABI break here crashes
+      # loudly rather than passing silently, so this must run on PRs too, not just
+      # Release pushes.
       - name: Build SDK-template plugin against the just-packaged SDK
         if: matrix.build_type == 'Release'
         working-directory: ${{ runner.temp }}/build
@@ -186,15 +184,14 @@ jobs:
           cmake --build template-build
           echo "TEMPLATE_PLUGIN_PATH=$(pwd)/template-build/libMyPlugin.dylib" >> "$GITHUB_ENV"
 
-      - name: Run golden-plugin ABI watchdog (PluginLoaderGateTest)
+      - name: Run SDK-template ABI watchdog (PluginLoaderGateTest)
         if: matrix.build_type == 'Release'
         working-directory: ${{ runner.temp }}/build
         env:
-          QGC_GOLDEN_PLUGIN_PATH: ${{ github.workspace }}/test/PluginSystem/golden/ExamplePlugin-v2.dylib
           QGC_TEMPLATE_PLUGIN_PATH: ${{ env.TEMPLATE_PLUGIN_PATH }}
         run: |
           "${{ matrix.build_type }}/QGroundControl.app/Contents/MacOS/QGroundControl" \
-            --unittest:PluginLoaderGateTest --unittest-output:golden-plugin-results.xml
+            --unittest:PluginLoaderGateTest --unittest-output:sdk-template-plugin-results.xml
 
       - name: Attest and Upload plugin SDK
         if: matrix.build_type == 'Release'

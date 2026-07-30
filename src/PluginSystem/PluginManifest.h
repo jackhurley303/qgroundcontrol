@@ -38,7 +38,7 @@ public:
     {
         Qml,
         Sdk,
-        Internal,
+        HostPinned,
     };
 
     QString id;
@@ -46,7 +46,7 @@ public:
     QVersionNumber version;
     QString vendor;
     QString description;
-    Tier tier = Tier::Internal;
+    Tier tier = Tier::HostPinned;
     int apiVersion = 0; ///< Required and exact-matched for sdk/internal; optional and unchecked for qml (no binary, no C++ ABI — D1).
     int qmlApiVersion = 0; ///< Tier qml only; 0 = undeclared, no check performed (see QGCPluginQmlApiLevel).
     QVersionNumber hostVersionMin;

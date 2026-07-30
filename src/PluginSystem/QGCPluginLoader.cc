@@ -258,7 +258,7 @@ PluginLoadInfo QGCPluginLoader::inspectPackage(const QString& packageDir)
     // Tier internal is dev-loop only (hostBuildId-gated to a same-commit build, D7) —
     // packaging it would let a package's binary be swapped for another without the
     // loader ever re-checking it against the sidecar manifest that granted it trust.
-    if (info.manifest.tier == PluginManifest::Tier::Internal) {
+    if (info.manifest.tier == PluginManifest::Tier::HostPinned) {
         info.state = PluginState::Failed;
         info.errorString = QStringLiteral("tier internal cannot be packaged (dev-loop only); use tier sdk for a distributable binary plugin");
         return info;

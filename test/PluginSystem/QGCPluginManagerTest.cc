@@ -32,7 +32,7 @@ PluginLoadInfo discoveredFixture(const QString& id, const QString& name)
     info.manifest.name = name;
     info.manifest.version = QVersionNumber(1, 0, 0);
     info.manifest.vendor = QStringLiteral("Test Org");
-    info.manifest.tier = PluginManifest::Tier::Internal;
+    info.manifest.tier = PluginManifest::Tier::HostPinned;
     info.manifest.apiVersion = QGCPluginApiVersion;
     return info;
 }

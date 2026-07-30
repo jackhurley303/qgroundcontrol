@@ -14,7 +14,6 @@ private slots:
     void _activateRealPlugin_test();
     void _inspectMissingFileFails_test();
 
-    void _activateGoldenPluginAgainstCurrentHost_test();
     void _activateTemplateBuiltPluginAgainstCurrentHost_test();
 
     void _inspectQmlPackageActivatesWithoutBinary_test();

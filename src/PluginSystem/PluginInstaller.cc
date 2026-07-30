@@ -228,7 +228,7 @@ PluginInstallResult PluginInstaller::installFromFile(const QString& zipPath)
         return result;
     }
 
-    if (manifest.tier == PluginManifest::Tier::Internal) {
+    if (manifest.tier == PluginManifest::Tier::HostPinned) {
         result.errorString = QStringLiteral("tier internal cannot be packaged (dev-loop only); use tier sdk for a distributable binary plugin");
         qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
         return result;
