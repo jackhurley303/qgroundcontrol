@@ -30,6 +30,7 @@ private slots:
     void _testSeekResolvesMissionState();
     void _testSeekResolvesParamState();
     void _testSeekToStartAndPastEnd();
+    void _testRestartFromEndResolvesInitialValues();
     void _testSeekOntoRepeatedTimestamp();
 
 private:

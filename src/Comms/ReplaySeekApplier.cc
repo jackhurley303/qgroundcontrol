@@ -151,6 +151,30 @@ void ReplaySeekApplier::_onSeekMissionResolved(QMap<int, QList<mavlink_mission_i
     vehicle->missionManager()->resetCurrentIndex();
 }
 
+/// MAVLink encodes integer params by storing their raw bytes in the float param_value
+/// field. Read through mavlink_param_union_t — a direct static_cast would numerically
+/// convert the denormalized float to 0.
+///
+/// Returns an invalid QVariant for the types the live PARAM_VALUE path also refuses
+/// (ParameterManager::_mavlinkParamUnionToVariant). The two must agree: a seek which
+/// decoded a 64 bit type the stream ignores would create a Fact holding a value
+/// reinterpreted from the wrong half of the union.
+static QVariant _decodeParamValue(float rawValue, uint8_t paramType)
+{
+    mavlink_param_union_t pu;
+    pu.param_float = rawValue;
+    switch (static_cast<MAV_PARAM_TYPE>(paramType)) {
+    case MAV_PARAM_TYPE_REAL32: return QVariant(pu.param_float);
+    case MAV_PARAM_TYPE_UINT32: return QVariant(static_cast<quint32>(pu.param_uint32));
+    case MAV_PARAM_TYPE_INT32:  return QVariant(static_cast<qint32>(pu.param_int32));
+    case MAV_PARAM_TYPE_UINT16: return QVariant(static_cast<quint16>(pu.param_uint16));
+    case MAV_PARAM_TYPE_INT16:  return QVariant(static_cast<qint16>(pu.param_int16));
+    case MAV_PARAM_TYPE_UINT8:  return QVariant(static_cast<quint8>(pu.param_uint8));
+    case MAV_PARAM_TYPE_INT8:   return QVariant(static_cast<qint8>(pu.param_int8));
+    default:                    return QVariant();
+    }
+}
+
 void ReplaySeekApplier::_onSeekParamResolved(int sysId, QList<ParamSeekValue> resolved)
 {
     Vehicle* vehicle = MultiVehicleManager::instance()->activeVehicle();
@@ -158,25 +182,19 @@ void ReplaySeekApplier::_onSeekParamResolved(int sysId, QList<ParamSeekValue> re
 
     ParameterManager* pm = vehicle->parameterManager();
     for (const ParamSeekValue& sv : resolved) {
+        const QVariant value = _decodeParamValue(sv.rawValue, sv.paramType);
+        if (!value.isValid()) {
+            qCWarning(ReplaySeekApplierLog) << "_onSeekParamResolved: unsupported MAV_PARAM_TYPE"
+                                            << sv.paramType << "for" << sv.paramId;
+            continue;
+        }
+        const MAV_PARAM_TYPE paramType = static_cast<MAV_PARAM_TYPE>(sv.paramType);
         if (sv.resetToInitial) {
-            pm->resetParamToReplayInitial(sv.compId, sv.paramId);
+            // value here is the log's own first observed value, the fallback used when no
+            // params file was registered for this replay.
+            pm->resetParamToReplayInitial(sv.compId, sv.paramId, value, paramType);
         } else {
-            // MAVLink encodes integer params by storing their raw bytes in the float
-            // param_value field. Read through mavlink_param_union_t — direct static_cast
-            // would numerically convert the denormalized float to 0.
-            mavlink_param_union_t pu;
-            pu.param_float = sv.rawValue;
-            QVariant value;
-            switch (static_cast<MAV_PARAM_TYPE>(sv.paramType)) {
-            case MAV_PARAM_TYPE_REAL32: value = QVariant(pu.param_float);                        break;
-            case MAV_PARAM_TYPE_UINT32: value = QVariant(static_cast<quint32>(pu.param_uint32)); break;
-            case MAV_PARAM_TYPE_UINT16: value = QVariant(static_cast<quint16>(pu.param_uint16)); break;
-            case MAV_PARAM_TYPE_INT16:  value = QVariant(static_cast<qint16>(pu.param_int16));   break;
-            case MAV_PARAM_TYPE_UINT8:  value = QVariant(static_cast<quint8>(pu.param_uint8));   break;
-            case MAV_PARAM_TYPE_INT8:   value = QVariant(static_cast<qint8>(pu.param_int8));     break;
-            default:                    value = QVariant(static_cast<qint32>(pu.param_int32));    break;
-            }
-            pm->setParamFromReplaySeek(sv.compId, sv.paramId, value);
+            pm->setParamFromReplaySeek(sv.compId, sv.paramId, value, paramType);
         }
     }
 }

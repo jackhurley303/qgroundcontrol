@@ -1610,18 +1610,53 @@ void ParameterManager::_loadReplayParamsFromFile(const QString& filePath)
     _checkInitialLoadComplete();
 }
 
-void ParameterManager::resetParamToReplayInitial(int compId, const QString& paramId)
+Fact* ParameterManager::_factForReplaySeek(int compId, const QString& paramId, MAV_PARAM_TYPE paramType)
 {
-    const auto key = qMakePair(compId, paramId);
-    if (!_replayInitialValues.contains(key)) return;
     Fact* fact = _mapCompId2FactMap.value(compId).value(paramId, nullptr);
-    if (fact) fact->containerSetRawValue(_replayInitialValues[key]);
+    if (fact) {
+        return fact;
+    }
+
+    // A seek resolution targets whichever vehicle shares the log's sysId, which is not by
+    // itself proof that vehicle is the replay. Creating a parameter on a live vehicle would
+    // be worse than doing nothing: a fact under the default component satisfies one of
+    // _checkInitialLoadComplete's gates, so a real download still in flight would report
+    // itself finished.
+    if (!_logReplay) {
+        return nullptr;
+    }
+
+    // Same creation as _loadReplayParamsFromFile, for a replay which registered no params file.
+    const FactMetaData::ValueType_t factType = mavTypeToFactType(paramType);
+    fact = new Fact(compId, paramId, factType, this);
+    FactMetaData* const metaData = _vehicle->compInfoManager()->compInfoParam(compId)->factMetaDataForName(paramId, factType);
+    fact->setMetaData(metaData);
+    _mapCompId2FactMap[compId][paramId] = fact;
+    (void) connect(fact, &Fact::containerRawValueChanged, this, &ParameterManager::_factRawValueUpdated);
+    emit factAdded(compId, fact);
+
+    return fact;
 }
 
-void ParameterManager::setParamFromReplaySeek(int compId, const QString& paramId, const QVariant& rawValue)
+void ParameterManager::resetParamToReplayInitial(int compId, const QString& paramId, const QVariant& tlogInitialValue, MAV_PARAM_TYPE paramType)
 {
-    Fact* fact = _mapCompId2FactMap.value(compId).value(paramId, nullptr);
-    if (fact) fact->containerSetRawValue(rawValue);
+    const QVariant initialValue = _replayInitialValues.value(qMakePair(compId, paramId), tlogInitialValue);
+    if (!initialValue.isValid()) {
+        return;
+    }
+
+    Fact* const fact = _factForReplaySeek(compId, paramId, paramType);
+    if (fact) {
+        fact->containerSetRawValue(initialValue);
+    }
+}
+
+void ParameterManager::setParamFromReplaySeek(int compId, const QString& paramId, const QVariant& rawValue, MAV_PARAM_TYPE paramType)
+{
+    Fact* const fact = _factForReplaySeek(compId, paramId, paramType);
+    if (fact) {
+        fact->containerSetRawValue(rawValue);
+    }
 }
 
 void ParameterManager::resetAllParametersToDefaults()

@@ -29,7 +29,6 @@ Item {
         playbackRate: _replay ? _replay.playbackSpeed : 1.0
         onSourceChanged:      { _videoEnded = false; _prevPositionMs = 0 }
         onMediaStatusChanged: if (mediaStatus === MediaPlayer.EndOfMedia) _videoEnded = true
-        onDurationChanged: (duration) => { if (_replay && duration > 0) _replay.setVideoDurationMs(duration) }
     }
 
     Rectangle {

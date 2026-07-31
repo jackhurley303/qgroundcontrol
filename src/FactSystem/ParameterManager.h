@@ -108,12 +108,19 @@ public:
     /// parameters.
     static void registerReplayParamFile(int vehicleId, const QString& filePath);
 
-    /// Apply resolved parameter values after a replay seek. Updates in-memory Fact values
-    /// without sending MAVLink.
-    /// Pass the initial (params-file) raw value for a parameter; no-op if unknown.
-    void resetParamToReplayInitial(int compId, const QString& paramId);
-    /// Set a specific parameter raw value from a seek resolution.
-    void setParamFromReplaySeek(int compId, const QString& paramId, const QVariant& rawValue);
+    // Apply resolved parameter values after a replay seek. Both update in-memory Fact
+    // values without sending MAVLink, and both create the Fact when the parameter has none
+    // yet - the normal case for a replay with no params file, where Facts otherwise appear
+    // only as the streamed PARAM_VALUEs reach them, so a seek made before playback read
+    // them would apply nothing at all. Creation is replay-only, so a resolution which lands
+    // on a live vehicle invents nothing; an existing Fact is still set either way.
+
+    /// Reverts a parameter to the value it held before its first recorded change, creating
+    /// its Fact if needed. Prefers the registered params file; falls back to
+    /// tlogInitialValue, the first value the log itself was seen to hold.
+    void resetParamToReplayInitial(int compId, const QString& paramId, const QVariant& tlogInitialValue, MAV_PARAM_TYPE paramType);
+    /// Sets a parameter's raw value from a seek resolution, creating its Fact if needed.
+    void setParamFromReplaySeek(int compId, const QString& paramId, const QVariant& rawValue, MAV_PARAM_TYPE paramType);
 
     static constexpr int defaultComponentId = -1;
 
@@ -183,6 +190,9 @@ private:
     /// Load parameters from a text params file into this vehicle's ParameterManager.
     /// Used for log replay vehicles that have an attached params file.
     void _loadReplayParamsFromFile(const QString& filePath);
+    /// The Fact for a parameter resolved by a replay seek, created if it does not exist yet.
+    ///     @return nullptr if this is not a replay vehicle, so no Fact is invented on a live one
+    Fact* _factForReplaySeek(int compId, const QString& paramId, MAV_PARAM_TYPE paramType);
     QString _logVehiclePrefix(int componentId) const;
     void _setLoadProgress(double loadProgress);
     /// Requests missing index based parameters from the vehicle.

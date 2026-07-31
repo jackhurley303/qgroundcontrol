@@ -26,6 +26,7 @@ private slots:
     void _bulkRefreshUnknownNameSkipped();
     void _bulkRefreshRetrySucceeds();
     void _bulkRefreshAllRetriesExhausted();
+    void _replaySeekAppliesWithoutParamsFile();
 
 private:
     void _noFailureWorker(MockConfiguration::FailureMode_t failureMode);

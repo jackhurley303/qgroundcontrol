@@ -22,9 +22,10 @@ using MissionItemsByType = QMap<int, QList<mavlink_mission_item_int_t>>;
 Q_DECLARE_METATYPE(MissionItemsByType)
 
 /// Resolved parameter value emitted by replaySeekParamResolved.
-/// When resetToInitial is true the seek target precedes the parameter's first recorded
-/// change, so the receiver should revert it to its initial value; rawValue and paramType
-/// are unused in that case.
+/// When resetToInitial is true the target precedes the parameter's first recorded value,
+/// so the receiver should revert it to its initial value. rawValue and paramType then
+/// carry that first recorded value, which is what a receiver with no separate params file
+/// has to revert to.
 struct ParamSeekValue {
     int     compId         = 0;
     QString paramId;

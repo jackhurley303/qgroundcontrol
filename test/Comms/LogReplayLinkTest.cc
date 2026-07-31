@@ -444,7 +444,53 @@ void LogReplayLinkTest::_testSeekResolvesParamState()
     paramC = findResolvedParam(resolved, QStringLiteral("PARAM_C"));
     QVERIFY(paramC);
     QVERIFY(paramC->resetToInitial);
+    // A reset still carries the first value the log holds. A receiver with no separate
+    // params file has nothing else to revert to, so leaving this at zero would make the
+    // reset either a no-op or plain wrong.
+    QCOMPARE(paramC->rawValue, 7.0f);
+    QCOMPARE(paramC->paramType, static_cast<uint8_t>(MAV_PARAM_TYPE_REAL32));
 
+    worker.disconnectFromLog();
+}
+
+void LogReplayLinkTest::_testRestartFromEndResolvesInitialValues()
+{
+    // Playing on from the end rewinds to the start, which must revert every parameter the
+    // session changed - and carry the same stock initial value a seek to the start does.
+    SyntheticTlog tlog;
+    (void) tlog.flight(0, 3)
+               .paramValue(0.1, QStringLiteral("PARAM_A"), 1.0f)
+               .paramValue(1.5, QStringLiteral("PARAM_A"), 5.0f);
+    const QString filename = _writeLogFile(tlog.bytes());
+    QVERIFY(!filename.isEmpty());
+
+    LogReplayConfiguration config(QStringLiteral("LogReplayLinkTest"));
+    config.setLogFilename(filename);
+    config.setDeferStreamStart(true);
+
+    LogReplayWorker worker(&config);
+    worker.setup();
+
+    QSignalSpy atEndSpy(&worker, &LogReplayWorker::playbackAtEnd);
+    QSignalSpy paramSpy(&worker, &LogReplayWorker::replaySeekParamResolved);
+
+    worker.connectToLog();
+    worker.setPlaybackSpeed(10);
+    worker.beginStream();
+    QTRY_VERIFY_WITH_TIMEOUT(atEndSpy.count() == 1, 5000);
+
+    paramSpy.clear();
+    worker.play();
+    QCOMPARE(paramSpy.count(), 1);
+
+    const QList<ParamSeekValue> resolved = paramSpy.last().at(1).value<QList<ParamSeekValue>>();
+    const ParamSeekValue* paramA = findResolvedParam(resolved, QStringLiteral("PARAM_A"));
+    QVERIFY(paramA);
+    QVERIFY(paramA->resetToInitial);
+    QCOMPARE(paramA->rawValue, 1.0f);
+    QCOMPARE(paramA->paramType, static_cast<uint8_t>(MAV_PARAM_TYPE_REAL32));
+
+    worker.pause();
     worker.disconnectFromLog();
 }
 

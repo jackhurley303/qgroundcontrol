@@ -456,6 +456,11 @@ void LogReplayWorker::movePlayhead(qreal percentComplete)
                 sv.paramType      = ub->paramType;
                 sv.resetToInitial = false;
             } else {
+                // Nothing recorded yet at the target, so the first value the log holds is
+                // the best stock initial available - carried along for a receiver which has
+                // no params file to revert to.
+                sv.rawValue       = entries.first().rawValue;
+                sv.paramType      = entries.first().paramType;
                 sv.resetToInitial = true;
             }
             paramResolved.append(sv);
@@ -579,7 +584,9 @@ void LogReplayWorker::_emitParamSeekReset()
         QList<ParamSeekValue> resetList;
         resetList.reserve(sysIt.value().size());
         for (auto keyIt = sysIt.value().constBegin(); keyIt != sysIt.value().constEnd(); ++keyIt) {
-            resetList.append(ParamSeekValue{keyIt.key().first, keyIt.key().second, 0.0f, 0, true});
+            const ParamTimelineEntry &first = keyIt.value().first();
+            resetList.append(ParamSeekValue{keyIt.key().first, keyIt.key().second,
+                                            first.rawValue, first.paramType, true});
         }
         if (!resetList.isEmpty()) {
             emit replaySeekParamResolved(sysId, resetList);

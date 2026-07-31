@@ -1,16 +1,22 @@
 #include "ParameterManagerTest.h"
 
 #include <QtCore/QElapsedTimer>
+#include <QtCore/QFile>
 #include <QtCore/QRegularExpression>
+#include <QtCore/QTemporaryDir>
 #include <QtTest/QSignalSpy>
 
 #include <cmath>
 #include <limits>
 
 #include "BulkRefreshJob.h"
+#include "Fact.h"
+#include "LinkManager.h"
+#include "LogReplayLink.h"
 #include "MockLinkFTP.h"
 #include "MultiVehicleManager.h"
 #include "ParameterManager.h"
+#include "SyntheticTlog.h"
 #include "QGCMath.h"
 #include "Vehicle.h"
 
@@ -597,4 +603,62 @@ void ParameterManagerTest::_bulkRefreshAllRetriesExhausted()
     verifyExpectedLogMessage();
 
     _disconnectMockLink();
+}
+
+// A replay which registered no params file has no Fact for a parameter until the streamed
+// PARAM_VALUE reaches it, and a seek re-emits no PARAM_VALUEs. Both replay-seek entry
+// points must therefore create the Fact, or seeking before playback reads a parameter
+// applies nothing at all.
+void ParameterManagerTest::_replaySeekAppliesWithoutParamsFile()
+{
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString logFile = tempDir.filePath(QStringLiteral("replayseek.tlog"));
+    QFile file(logFile);
+    QVERIFY(file.open(QFile::WriteOnly));
+    const QByteArray tlog = SyntheticTlog::canonicalFlight();
+    QCOMPARE(file.write(tlog), static_cast<qint64>(tlog.size()));
+    file.close();
+
+    // The vehicle must come from a real replay session: ParameterManager decides it is a
+    // replay from its primary link, and a link which LinkManager never registered is
+    // dropped by VehicleLinkManager as stale, leaving an ordinary vehicle behind.
+    MultiVehicleManager* const vehicleMgr = MultiVehicleManager::instance();
+    QSignalSpy spyVehicle(vehicleMgr, &MultiVehicleManager::activeVehicleAvailableChanged);
+    // A replayed vehicle answers no component-information request, so the metadata fetch
+    // its creation kicks off always gives up. Incidental to this test.
+    ignoreLogMessage("ComponentInformation.RequestMetaDataTypeStateMachine", QtWarningMsg,
+                     QRegularExpression(QStringLiteral("failed to load metadata")));
+    LogReplayLink* const link = LinkManager::instance()->startLogReplay(logFile, true /* deferStreamStart */);
+    QVERIFY(link);
+    QVERIFY_SIGNAL_WAIT(spyVehicle, TestTimeout::mediumMs());
+
+    Vehicle* const vehicle = vehicleMgr->activeVehicle();
+    QVERIFY(vehicle);
+    ParameterManager* const paramManager = vehicle->parameterManager();
+    QVERIFY(paramManager);
+
+    // Nothing has streamed this parameter, so no Fact exists for it yet - the state a seek
+    // made before playback reached it always finds.
+    const QString paramId = QStringLiteral("REPLAY_SEEK_PARAM");
+    QVERIFY(!paramManager->parameterExists(MAV_COMP_ID_AUTOPILOT1, paramId));
+
+    paramManager->setParamFromReplaySeek(MAV_COMP_ID_AUTOPILOT1, paramId, QVariant(9.0f), MAV_PARAM_TYPE_REAL32);
+    QVERIFY(paramManager->parameterExists(MAV_COMP_ID_AUTOPILOT1, paramId));
+    Fact* const fact = paramManager->getParameter(MAV_COMP_ID_AUTOPILOT1, paramId);
+    QCOMPARE(fact->rawValue().toFloat(), 9.0f);
+
+    // Seeking back before the parameter's first recorded value reverts it to that value,
+    // which with no params file is the only initial the log knows.
+    paramManager->resetParamToReplayInitial(MAV_COMP_ID_AUTOPILOT1, paramId, QVariant(1.0f), MAV_PARAM_TYPE_REAL32);
+    QCOMPARE(fact->rawValue().toFloat(), 1.0f);
+
+    // A second application must reuse the same Fact rather than replacing it.
+    paramManager->setParamFromReplaySeek(MAV_COMP_ID_AUTOPILOT1, paramId, QVariant(3.0f), MAV_PARAM_TYPE_REAL32);
+    QCOMPARE(paramManager->getParameter(MAV_COMP_ID_AUTOPILOT1, paramId), fact);
+    QCOMPARE(fact->rawValue().toFloat(), 3.0f);
+
+    QSignalSpy spyGone(vehicleMgr, &MultiVehicleManager::activeVehicleChanged);
+    link->disconnect();
+    (void) UnitTest::waitForSignal(spyGone, TestTimeout::mediumMs(), QStringLiteral("activeVehicleChanged"));
 }
