@@ -41,6 +41,12 @@ class PRSpec:
     """Ref content is pulled from (always the fork mainline)."""
     include_paths: tuple[str, ...]
     """Paths taken wholesale from `mainline_ref` via `git checkout -- <path>`."""
+    upstream_ref: str = "upstream/master"
+    """The true upstream base this PR ultimately targets, and the only sound ref to measure
+    staleness against. When `source_ref` is another *derived* branch (stacking), that branch's
+    content has already been collapsed to mainline's by its own derivation — so comparing
+    against it hides every revert the stack inherits, and reports its synthetic "Derive ..."
+    commit as though it were work being dropped. Staleness is always measured from here."""
     patch_paths: tuple[str, ...] = ()
     """Paths where only the mainline-vs-`source_ref` diff is applied (shared files with
     content from multiple PRs interleaved; a wholesale take would pull in the other PR's
@@ -56,6 +62,14 @@ class PRSpec:
     too."""
     forbidden_terms: tuple[str, ...] = field(default_factory=lambda: ("qdrive", "claude"))
     """Case-insensitive terms that must not appear in any tracked file on the derived branch."""
+    seam_tokens: tuple[str, ...] = ()
+    """Symbols whose every base-app consumer must ship in this PR. A contribution seam is
+    inert without the code that reads it — carrying all of `src/PluginSystem` while the QML
+    that binds to `QGroundControl.pluginManager` stays behind yields a branch that compiles,
+    passes its tests, and does nothing. `check_seam_consumers` is what makes that loud."""
+    seam_exempt: tuple[str, ...] = ()
+    """Paths allowed to mention a seam token without being included — prose that merely
+    names the symbol, or this script itself."""
 
     def __post_init__(self) -> None:
         assert self.branch != self.mainline_ref, (
@@ -76,7 +90,7 @@ class PRSpec:
 
 PLUGIN_SDK = PRSpec(
     branch="upstream-pr-plugin-sdk",
-    source_ref="upstream/master",
+    source_ref="upstream-pr-replay-fidelity",
     mainline_ref="plugin-infrastructure-with-qdrive",
     include_paths=(
         "src/PluginAPI",
@@ -121,6 +135,19 @@ PLUGIN_SDK = PRSpec(
         "src/PlanView/PlanViewActionContext.h",
         "src/PlanView/PlanViewActionContext.cc",
         "src/PlanView/CMakeLists.txt",
+        # The consumption side of the contribution seams. QGCPluginManager's four
+        # Q_PROPERTYs (toolMenuItems, replayExtension, flyViewPanelItems,
+        # planViewPanelItems) are inert without these: QGroundControlQmlGlobal is what
+        # puts `pluginManager` on the QML global in the first place, and the rest are the
+        # only things that bind to it. Their CMake registration lives in
+        # src/QmlControls/ and src/Toolbar/CMakeLists.txt, both unmodified upstream.
+        "src/QmlControls/QGroundControlQmlGlobal.h",
+        "src/QmlControls/QGroundControlQmlGlobal.cc",
+        "src/FlyView/FlyView.qml",
+        "src/FlyView/FlyViewVideo.qml",
+        "src/FlyView/FlyViewWidgetLayer.qml",
+        "src/PlanView/PlanView.qml",
+        "src/Toolbar/SelectViewDropdown.qml",
         "src/AppSettings/PluginSettings.qml",
         "src/AppSettings/CMakeLists.txt",
         "src/Settings/PluginSettings.h",
@@ -135,6 +162,11 @@ PLUGIN_SDK = PRSpec(
     ),
     patch_paths=(".github/workflows/macos.yml",),
     delete_paths=("plugins/qdrive", ".gitmodules"),
+    seam_tokens=("QGCPluginManager", "QGroundControl.pluginManager"),
+    seam_exempt=(
+        "src/API/README.md",  # prose cross-reference to the runtime plugin system
+        "tools/derive_pr_branch.py",  # this file names the tokens it checks for
+    ),
     doc_rewrites=(
         (
             "plugins/README.md",
@@ -299,7 +331,105 @@ def derive(spec: PRSpec, repo_root: Path) -> None:
     _run(repo_root, "checkout", starting_branch)
 
 
-def verify(spec: PRSpec, repo_root: Path) -> bool:
+def _tracked_files(ref: str, path: str, repo_root: Path) -> list[str]:
+    result = run_git("ls-tree", "-r", "--name-only", ref, "--", path, cwd=repo_root)
+    return result.stdout.split() if result.returncode == 0 else []
+
+
+def _blob(ref: str, path: str, repo_root: Path) -> str | None:
+    result = run_git("rev-parse", f"{ref}:{path}", cwd=repo_root)
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def check_source_reverts(spec: PRSpec, repo_root: Path) -> bool:
+    """Report include paths where a wholesale checkout would revert upstream work.
+
+    `derive()` takes each include path wholesale from mainline, which is sound only while
+    mainline already carries everything upstream has for that path. The moment upstream
+    moves ahead — it lands a fix the fork has not merged — the checkout silently *reverts*
+    it. Nothing else catches this: reverting a fix still compiles and still passes the
+    fork's own tests, so a green build is no evidence at all.
+
+    Measured against `spec.upstream_ref`, never `source_ref` — see that field's docstring
+    for why the distinction is load-bearing for a stacked spec.
+
+    Non-fatal by default, since a fork mainline is routinely behind upstream mid-stream.
+    It must read clean before the PRs are opened, which is what --submission-check gates.
+    """
+    reverted: list[tuple[str, str]] = []
+    for include in spec.include_paths:
+        for path in _tracked_files(spec.upstream_ref, include, repo_root):
+            upstream_blob = _blob(spec.upstream_ref, path, repo_root)
+            if upstream_blob is None or upstream_blob == _blob(spec.mainline_ref, path, repo_root):
+                continue
+            # Blobs differ — but that is only a revert if upstream carries commits for
+            # this path that mainline lacks. (A file mainline simply moved ahead on is
+            # fine; that is the derivation working as intended.)
+            log = run_git(
+                "log",
+                "--oneline",
+                f"{spec.mainline_ref}..{spec.upstream_ref}",
+                "--",
+                path,
+                cwd=repo_root,
+            )
+            if log.returncode == 0 and log.stdout.strip():
+                reverted.append((path, log.stdout.strip().splitlines()[0]))
+
+    if reverted:
+        log_error(
+            f"{len(reverted)} include path(s) would REVERT commits reachable from "
+            f"'{spec.upstream_ref}' that '{spec.mainline_ref}' does not carry. Merge them "
+            f"into mainline and re-derive before opening the PR:"
+        )
+        for path, commit in reverted:
+            log_error(f"    {path}  — drops {commit}")
+        return False
+
+    log_ok(f"no include path reverts '{spec.upstream_ref}'")
+    return True
+
+
+def check_seam_consumers(spec: PRSpec, repo_root: Path) -> bool:
+    """Every base-app consumer of a seam token must ship in the same PR.
+
+    The failure this prevents is a branch that builds and tests green while the feature it
+    advertises is unreachable — the seam's readers left behind on mainline.
+    """
+    if not spec.seam_tokens:
+        return True
+
+    skip = spec.include_paths + spec.patch_paths + spec.delete_paths + spec.seam_exempt
+    missing: list[tuple[str, str]] = []
+    for token in spec.seam_tokens:
+        grep = run_git("grep", "-lI", token, spec.mainline_ref, cwd=repo_root)
+        # git grep: 1 == no matches (fine), anything else == the search never ran. Treating
+        # those alike would let this check go silently blind and report a clean pass.
+        if grep.returncode == 1:
+            continue
+        if grep.returncode != 0:
+            log_error(f"git grep for '{token}' failed: {grep.stderr.strip()}")
+            return False
+        for line in grep.stdout.splitlines():
+            path = line.split(":", 1)[1] if ":" in line else line
+            if any(path == p or path.startswith(f"{p}/") for p in skip):
+                continue
+            missing.append((path, token))
+
+    if missing:
+        log_error(
+            f"{len(missing)} base-app consumer(s) of a seam this PR ships are not in "
+            f"include_paths — the seam would be inert on '{spec.branch}':"
+        )
+        for path, token in missing:
+            log_error(f"    {path}  (reads {token})")
+        return False
+
+    log_ok("every seam consumer is included")
+    return True
+
+
+def verify(spec: PRSpec, repo_root: Path, submission_check: bool = False) -> bool:
     log_info(f"Verifying '{spec.branch}'")
     ok = True
 
@@ -321,6 +451,14 @@ def verify(spec: PRSpec, repo_root: Path) -> bool:
             log_error(f"Forbidden term '{term}' found in: {grep.stdout.strip()}")
             ok = False
 
+    if not check_seam_consumers(spec, repo_root):
+        ok = False
+
+    # Advisory unless --submission-check: mainline being behind upstream is a normal
+    # mid-stream state, but it must be resolved before the branch is sent anywhere.
+    if not check_source_reverts(spec, repo_root) and submission_check:
+        ok = False
+
     if ok:
         log_ok(f"'{spec.branch}' passes structural checks")
     return ok
@@ -332,6 +470,11 @@ def main() -> int:
     parser.add_argument(
         "--verify-only", action="store_true", help="Skip derivation, only verify the existing branch"
     )
+    parser.add_argument(
+        "--submission-check",
+        action="store_true",
+        help="Treat an upstream-revert report as fatal — run this before opening the PR",
+    )
     args = parser.parse_args()
 
     spec = SPECS[args.pr]
@@ -340,7 +483,7 @@ def main() -> int:
     if not args.verify_only:
         derive(spec, repo_root)
 
-    return 0 if verify(spec, repo_root) else 1
+    return 0 if verify(spec, repo_root, submission_check=args.submission_check) else 1
 
 
 if __name__ == "__main__":
