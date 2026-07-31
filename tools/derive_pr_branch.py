@@ -182,8 +182,45 @@ PLUGIN_SDK = PRSpec(
     ),
 )
 
+REPLAY_FIDELITY = PRSpec(
+    branch="upstream-pr-replay-fidelity",
+    source_ref="upstream/master",
+    mainline_ref="plugin-infrastructure-with-qdrive",
+    include_paths=(
+        "src/Comms/LogReplayLink.h",
+        "src/Comms/LogReplayLink.cc",
+        "src/Comms/ReplaySeekApplier.h",
+        "src/Comms/ReplaySeekApplier.cc",
+        "src/Comms/LinkManager.h",
+        "src/Comms/LinkManager.cc",
+        "src/Comms/CMakeLists.txt",
+        "src/FactSystem/ParameterManager.h",
+        "src/FactSystem/ParameterManager.cc",
+        "src/MissionManager/PlanManager.h",
+        "src/MissionManager/PlanManager.cc",
+        "src/MissionManager/MissionManager.h",
+        "src/MissionManager/PlanMasterController.cc",
+        "src/Vehicle/TrajectoryPoints.h",
+        "src/Vehicle/TrajectoryPoints.cc",
+        "src/Vehicle/Vehicle.h",
+        "src/Vehicle/Vehicle.cc",
+        "src/FlyView/FlyViewMap.qml",
+        "src/QmlControls/LogReplayStatusBar.qml",
+        "test/Comms/LogReplayLinkTest.h",
+        "test/Comms/LogReplayLinkTest.cc",
+        "test/Comms/ReplaySeekApplierTest.h",
+        "test/Comms/ReplaySeekApplierTest.cc",
+        "test/Comms/SyntheticTlog.h",
+        "test/Comms/SyntheticTlog.cc",
+        "test/Comms/CMakeLists.txt",
+        "test/FactSystem/ParameterManagerTest.h",
+        "test/FactSystem/ParameterManagerTest.cc",
+    ),
+)
+
 SPECS: dict[str, PRSpec] = {
     "plugin-sdk": PLUGIN_SDK,
+    "replay-fidelity": REPLAY_FIDELITY,
 }
 
 
