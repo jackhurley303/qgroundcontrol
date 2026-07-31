@@ -236,6 +236,7 @@ bool LogReplayWorker::_readUntilHeartbeat()
         QByteArray bytes;
         mavlink_message_t msg{};
         const qint64 nextTimeUSecs = _readNextMavlinkMessage(bytes, msg);
+        _recordTimelineEvent(msg, _logCurrentTimeUSecs);
         emit dataReceived(bytes);
         emit playbackPercentCompleteChanged(0.0f);
 
@@ -277,27 +278,49 @@ void LogReplayWorker::movePlayhead(qreal percentComplete)
     _pendingUploadItems.clear();
     _pendingUploadCount.clear();
 
+    // A failed seek must leave the playhead where it was: playback resuming from a position
+    // this function abandoned mid-way would read past log content the timelines have not
+    // recorded yet, and the scan high water mark would then skip it for good.
+    const qint64 entryFilePos = _logFile.pos();
+    const auto restorePlayheadAndFail = [this, entryFilePos]() {
+        (void) _logFile.seek(entryFilePos);
+        emit errorOccurred(tr("Unable to seek to new position"));
+    };
+
     percentComplete = qBound(0., percentComplete, 100.);
     const qreal percentCompleteMult = percentComplete / 100.0;
     const qint64 newFilePos = static_cast<qint64>(percentCompleteMult * static_cast<qreal>(_logFile.size()));
     if (!_logFile.seek(newFilePos)) {
-        emit errorOccurred(tr("Unable to seek to new position"));
+        restorePlayheadAndFail();
         return;
     }
 
     mavlink_message_t dummy{};
-    _logCurrentTimeUSecs = _seekToNextMavlinkMessage(dummy);
+    // Seeking at or past the last message leaves nothing to read. The end of the log is the
+    // honest answer there; the zero a failed read returns would instead resolve state as if
+    // the seek had landed before the log began.
+    const auto seekToNextMessageTime = [this, &dummy]() {
+        const quint64 timeUSecs = _seekToNextMavlinkMessage(dummy);
+        if (timeUSecs != 0) {
+            return timeUSecs;
+        }
+
+        qCDebug(LogReplayLinkLog) << "No readable message at seek position, resolving at end of log";
+        return _logEndTimeUSecs;
+    };
+
+    _logCurrentTimeUSecs = seekToNextMessageTime();
 
     qreal newRelativeTimeUSecs = static_cast<qreal>(_logCurrentTimeUSecs - _logStartTimeUSecs);
     const qreal baudRate = _logFile.size() / static_cast<qreal>(_logDurationUSecs) / 1e6;
     const qreal desiredTimeUSecs = percentCompleteMult * _logDurationUSecs;
     const qint64 offset = (newRelativeTimeUSecs - desiredTimeUSecs) * baudRate;
     if (!_logFile.seek(_logFile.pos() + offset)) {
-        emit errorOccurred(tr("Unable to seek to new position"));
+        restorePlayheadAndFail();
         return;
     }
 
-    _logCurrentTimeUSecs = _seekToNextMavlinkMessage(dummy);
+    _logCurrentTimeUSecs = seekToNextMessageTime();
     _signalCurrentLogTimeSecs();
 
     newRelativeTimeUSecs = static_cast<qreal>(_logCurrentTimeUSecs - _logStartTimeUSecs);
@@ -335,6 +358,7 @@ void LogReplayWorker::movePlayhead(qreal percentComplete)
         QByteArray bytes;
         mavlink_message_t msg{};
         const quint64 nextTimeUSecs = _readNextMavlinkMessage(bytes, msg);
+        _recordTimelineEvent(msg, currentMsgTimeUSecs);
         if (msg.msgid == MAVLINK_MSG_ID_GLOBAL_POSITION_INT) {
             mavlink_global_position_int_t pos;
             mavlink_msg_global_position_int_decode(&msg, &pos);
@@ -370,7 +394,12 @@ void LogReplayWorker::movePlayhead(qreal percentComplete)
             lastHomePositionBytes = bytes;
         }
         currentMsgTimeUSecs = nextTimeUSecs;
-        if (nextTimeUSecs == 0 || nextTimeUSecs >= targetTimeUSecs) {
+        // Stop on position rather than on timestamp. Every frame decoded from one link read
+        // carries the same millisecond-resolution timestamp, so a run of messages can share
+        // the target's time; stopping at the first of them would leave the rest of the run
+        // unread while the file position moves past it, permanently hiding those messages
+        // from the timelines.
+        if ((nextTimeUSecs == 0) || (_logFile.pos() >= targetFilePos)) {
             break;
         }
     }
@@ -460,119 +489,87 @@ void LogReplayWorker::_resetPlaybackToBeginning()
     _logCurrentTimeUSecs = _logStartTimeUSecs;
 }
 
-void LogReplayWorker::_buildMissionTimeline()
+void LogReplayWorker::_recordTimelineEvent(const mavlink_message_t &msg, quint64 timeUSecs)
 {
-    _missionTimeline.clear();
-
-    if (!_logFile.reset()) return;
-    mavlink_reset_channel_status(_mavlinkChannel);
-
-    QMap<uint8_t, QList<mavlink_mission_item_int_t>> pending;
-    QMap<uint8_t, uint16_t>                          pendingCount;
-
-    while (!_logFile.atEnd()) {
-        QByteArray bytes;
-        mavlink_message_t msg{};
-        const quint64 timeUSecs = _readNextMavlinkMessage(bytes, msg);
-        if (timeUSecs == 0) break;
-        if (msg.compid == MAV_COMP_ID_AUTOPILOT1) continue;
-
-        switch (msg.msgid) {
-        case MAVLINK_MSG_ID_MISSION_COUNT: {
-            mavlink_mission_count_t mc{};
-            mavlink_msg_mission_count_decode(&msg, &mc);
-            const uint8_t type = mc.mission_type;
-            pending.remove(type);
-            pendingCount.remove(type);
-            if (mc.count == 0) {
-                _missionTimeline[type].append(MissionSnapshot{timeUSecs, {}});
-            } else {
-                pendingCount[type] = mc.count;
-            }
-            break;
-        }
-        case MAVLINK_MSG_ID_MISSION_ITEM_INT: {
-            mavlink_mission_item_int_t item{};
-            mavlink_msg_mission_item_int_decode(&msg, &item);
-            const uint8_t type = item.mission_type;
-            if (pendingCount.contains(type)) {
-                pending[type].append(item);
-                if (pending[type].count() == static_cast<int>(pendingCount[type])) {
-                    _missionTimeline[type].append(MissionSnapshot{timeUSecs, pending.take(type)});
-                    pendingCount.remove(type);
-                }
-            }
-            break;
-        }
-        case MAVLINK_MSG_ID_MISSION_CLEAR_ALL: {
-            mavlink_mission_clear_all_t clear{};
-            mavlink_msg_mission_clear_all_decode(&msg, &clear);
-            if (clear.mission_type == MAV_MISSION_TYPE_ALL) {
-                _missionTimeline[MAV_MISSION_TYPE_MISSION].append(MissionSnapshot{timeUSecs, {}});
-                _missionTimeline[MAV_MISSION_TYPE_FENCE].append(MissionSnapshot{timeUSecs, {}});
-                _missionTimeline[MAV_MISSION_TYPE_RALLY].append(MissionSnapshot{timeUSecs, {}});
-            } else {
-                _missionTimeline[clear.mission_type].append(MissionSnapshot{timeUSecs, {}});
-            }
-            pending.remove(clear.mission_type);
-            pendingCount.remove(clear.mission_type);
-            break;
-        }
-        default:
-            break;
-        }
+    const qint64 pos = _logFile.pos();
+    if (pos <= _timelineScannedThroughPos) {
+        return;
     }
+    _timelineScannedThroughPos = pos;
+    _timelineCoverageUSecs = timeUSecs;
 
-    if (!_logFile.reset()) {
-        qCWarning(LogReplayLinkLog) << "Failed to reset log file after building mission timeline";
-    }
-    mavlink_reset_channel_status(_mavlinkChannel);
-}
-
-void LogReplayWorker::_buildParamTimeline()
-{
-    _paramTimelineByKey.clear();
-
-    if (!_logFile.reset()) return;
-    mavlink_reset_channel_status(_mavlinkChannel);
-
-    // Track the last seen value per (sysId, compId, paramId) to filter out
-    // duplicate PARAM_VALUE messages (e.g. the initial download flood).
-    QMap<uint8_t, QMap<QPair<int,QString>, float>> lastSeen;
-
-    while (!_logFile.atEnd()) {
-        QByteArray bytes;
-        mavlink_message_t msg{};
-        const quint64 timeUSecs = _readNextMavlinkMessage(bytes, msg);
-        if (timeUSecs == 0) break;
-        if (msg.msgid != MAVLINK_MSG_ID_PARAM_VALUE) continue;
-
+    // Parameters come from the autopilot, so this must precede the component filter below.
+    if (msg.msgid == MAVLINK_MSG_ID_PARAM_VALUE) {
         mavlink_param_value_t pv{};
         mavlink_msg_param_value_decode(&msg, &pv);
         const QString paramId = QString::fromLatin1(pv.param_id,
             static_cast<qsizetype>(qstrnlen(pv.param_id, sizeof(pv.param_id))));
-        if (paramId.isEmpty()) continue;
+        if (paramId.isEmpty()) {
+            return;
+        }
 
         const QPair<int,QString> key{static_cast<int>(msg.compid), paramId};
-        auto& sysLastSeen = lastSeen[msg.sysid];
-        auto it = sysLastSeen.find(key);
-        if (it != sysLastSeen.end() && it.value() == pv.param_value) {
-            continue;  // unchanged — skip (filters out initial download flood duplicates)
+        auto &sysLastValue = _timelineLastParamValue[msg.sysid];
+        const auto it = sysLastValue.find(key);
+        if ((it != sysLastValue.end()) && (it.value() == pv.param_value)) {
+            return;  // unchanged — skip (filters out initial download flood duplicates)
         }
-        sysLastSeen[key] = pv.param_value;
+        sysLastValue[key] = pv.param_value;
 
         _paramTimelineByKey[msg.sysid][key].append(ParamTimelineEntry{timeUSecs, pv.param_value, pv.param_type});
+        return;
     }
 
-    for (auto sysIt = _paramTimelineByKey.constBegin(); sysIt != _paramTimelineByKey.constEnd(); ++sysIt) {
-        qCDebug(LogReplayLinkLog) << "_buildParamTimeline: sysId=" << sysIt.key()
-            << "tracked" << sysIt.value().size() << "params with in-flight changes";
+    // Only GCS uploads change the vehicle's mission; the autopilot's own copies of these
+    // messages are the readback of a mission which is already recorded.
+    if (msg.compid == MAV_COMP_ID_AUTOPILOT1) {
+        return;
     }
 
-    if (!_logFile.reset()) {
-        qCWarning(LogReplayLinkLog) << "Failed to reset log file after building param timeline";
+    switch (msg.msgid) {
+    case MAVLINK_MSG_ID_MISSION_COUNT: {
+        mavlink_mission_count_t mc{};
+        mavlink_msg_mission_count_decode(&msg, &mc);
+        const uint8_t type = mc.mission_type;
+        _timelinePendingItems.remove(type);
+        _timelinePendingCount.remove(type);
+        if (mc.count == 0) {
+            _missionTimeline[type].append(MissionSnapshot{timeUSecs, {}});
+        } else {
+            _timelinePendingCount[type] = mc.count;
+        }
+        break;
     }
-    mavlink_reset_channel_status(_mavlinkChannel);
+    case MAVLINK_MSG_ID_MISSION_ITEM_INT: {
+        mavlink_mission_item_int_t item{};
+        mavlink_msg_mission_item_int_decode(&msg, &item);
+        const uint8_t type = item.mission_type;
+        if (_timelinePendingCount.contains(type)) {
+            _timelinePendingItems[type].append(item);
+            if (_timelinePendingItems[type].count() == static_cast<int>(_timelinePendingCount[type])) {
+                _missionTimeline[type].append(MissionSnapshot{timeUSecs, _timelinePendingItems.take(type)});
+                _timelinePendingCount.remove(type);
+            }
+        }
+        break;
+    }
+    case MAVLINK_MSG_ID_MISSION_CLEAR_ALL: {
+        mavlink_mission_clear_all_t clear{};
+        mavlink_msg_mission_clear_all_decode(&msg, &clear);
+        if (clear.mission_type == MAV_MISSION_TYPE_ALL) {
+            _missionTimeline[MAV_MISSION_TYPE_MISSION].append(MissionSnapshot{timeUSecs, {}});
+            _missionTimeline[MAV_MISSION_TYPE_FENCE].append(MissionSnapshot{timeUSecs, {}});
+            _missionTimeline[MAV_MISSION_TYPE_RALLY].append(MissionSnapshot{timeUSecs, {}});
+        } else {
+            _missionTimeline[clear.mission_type].append(MissionSnapshot{timeUSecs, {}});
+        }
+        _timelinePendingItems.remove(clear.mission_type);
+        _timelinePendingCount.remove(clear.mission_type);
+        break;
+    }
+    default:
+        break;
+    }
 }
 
 void LogReplayWorker::_emitParamSeekReset()
@@ -674,7 +671,12 @@ void LogReplayWorker::_readNextLogEntry()
         bytes.reserve(_logFile.bytesAvailable());
         mavlink_message_t msg{};
         const qint64 nextTimeUSecs = _readNextMavlinkMessage(bytes, msg);
+        // Deliberately not folded into _recordTimelineEvent: the live upload detection must
+        // fire every time playback crosses an upload, while the timeline records it only
+        // once. Seeking back before an upload and playing forward needs the former, not the
+        // latter.
         _detectReplayMissionUpload(msg);
+        _recordTimelineEvent(msg, _logCurrentTimeUSecs);
         emit dataReceived(bytes);
         emit playbackPercentCompleteChanged((static_cast<float>(_logCurrentTimeUSecs - _logStartTimeUSecs) / static_cast<float>(_logDurationUSecs)) * 100);
 
@@ -741,8 +743,18 @@ bool LogReplayWorker::_loadLogFile()
     const quint64 logDurationSecondsTotal = _logDurationUSecs / 1000000;
     emit logFileStats(logDurationSecondsTotal);
 
-    _buildMissionTimeline();
-    _buildParamTimeline();
+    // The timelines are built incrementally as the log is read rather than by scanning
+    // the whole file up front, so opening a log costs a single pass (_findLastTimestamp)
+    // no matter how large it is.
+    _missionTimeline.clear();
+    _paramTimelineByKey.clear();
+    _pendingUploadItems.clear();
+    _pendingUploadCount.clear();
+    _timelinePendingItems.clear();
+    _timelinePendingCount.clear();
+    _timelineLastParamValue.clear();
+    _timelineScannedThroughPos = 0;
+    _timelineCoverageUSecs = 0;
 
     return true;
 }

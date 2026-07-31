@@ -22,8 +22,9 @@ using MissionItemsByType = QMap<int, QList<mavlink_mission_item_int_t>>;
 Q_DECLARE_METATYPE(MissionItemsByType)
 
 /// Resolved parameter value emitted by replaySeekParamResolved.
-/// When resetToInitial is true the receiver should revert the parameter to
-/// its params-file initial value; rawValue and paramType are unused in that case.
+/// When resetToInitial is true the seek target precedes the parameter's first recorded
+/// change, so the receiver should revert it to its initial value; rawValue and paramType
+/// are unused in that case.
 struct ParamSeekValue {
     int     compId         = 0;
     QString paramId;
@@ -90,6 +91,14 @@ public:
     bool isConnected() const { return _isConnected; }
     bool isPlaying() const;
 
+    /// Log time through which the mission and parameter timelines have been scanned.
+    /// The timelines are built incrementally from the reads playback and seek already
+    /// perform, so this tracks how far the session has progressed through the log
+    /// rather than the size of the log itself. A parameter or mission which the session
+    /// has not read yet is therefore absent from a seek resolution rather than reported
+    /// as needing a reset - nothing has applied it, so there is nothing to revert.
+    quint64 timelineCoverageUSecs() const { return _timelineCoverageUSecs; }
+
 signals:
     void connected();
     void disconnected();
@@ -145,8 +154,12 @@ private:
     void _resetPlaybackToBeginning();
     void _signalCurrentLogTimeSecs();
     void _detectReplayMissionUpload(const mavlink_message_t &msg);
-    void _buildMissionTimeline();
-    void _buildParamTimeline();
+    /// Folds one message into the mission and parameter timelines. Called from every
+    /// forward read of the log - bootstrap, playback and the seek replay pass - so the
+    /// timelines cost no file reads of their own. Messages at or before the furthest
+    /// point already scanned are ignored, making repeated and backward seeks free.
+    ///     @param timeUSecs Timestamp of msg itself, not of the message which follows it
+    void _recordTimelineEvent(const mavlink_message_t &msg, quint64 timeUSecs);
     void _emitParamSeekReset();
 
     struct MissionSnapshot {
@@ -184,13 +197,23 @@ private:
     QMap<uint8_t, QList<mavlink_mission_item_int_t>> _pendingUploadItems;
     QMap<uint8_t, uint16_t>                          _pendingUploadCount;
 
-    // Pre-scanned timeline of mission state changes, keyed by MAV_MISSION_TYPE
+    // Timeline of mission state changes, keyed by MAV_MISSION_TYPE
     QMap<uint8_t, QList<MissionSnapshot>> _missionTimeline;
 
-    // Pre-scanned timeline of parameter value changes.
+    // Timeline of parameter value changes.
     // Outer key: sysId. Inner key: (compId, paramId). Value: chronologically sorted entries.
     // Only records actual value changes (initial download flood filtered out).
     QMap<uint8_t, QMap<QPair<int,QString>, QList<ParamTimelineEntry>>> _paramTimelineByKey;
+
+    // Incremental timeline scan state. The position high water mark is what makes the
+    // scan free: it is exact where a timestamp comparison would not be, since several
+    // messages can share a microsecond. The mission accumulators persist across reads
+    // so an upload split by the high water mark still completes.
+    qint64  _timelineScannedThroughPos = 0;
+    quint64 _timelineCoverageUSecs = 0;
+    QMap<uint8_t, QList<mavlink_mission_item_int_t>> _timelinePendingItems;
+    QMap<uint8_t, uint16_t>                          _timelinePendingCount;
+    QMap<uint8_t, QMap<QPair<int,QString>, float>>   _timelineLastParamValue;
 };
 
 /*===========================================================================*/
