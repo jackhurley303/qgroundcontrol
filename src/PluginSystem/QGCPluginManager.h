@@ -147,7 +147,6 @@ private:
     /// The one mutation epilogue: both recalcs plus the emit, called at every
     /// site that changes _records' active membership.
     void _notifyRecordsChanged();
-    void _applyTrustGate(PluginLoadInfo& record);
     void _activateIfEnabled(PluginLoadInfo& record);
     QString _statusText(const PluginLoadInfo& record) const;
 

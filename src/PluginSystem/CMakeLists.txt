@@ -29,6 +29,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         PluginManifest.h
         PluginRecordStore.cc
         PluginRecordStore.h
+        PluginTrustGate.cc
+        PluginTrustGate.h
         QGCPluginLoader.cc
         QGCPluginLoader.h
         QGCPluginManager.cc

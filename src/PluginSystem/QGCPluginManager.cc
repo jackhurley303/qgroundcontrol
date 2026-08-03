@@ -11,6 +11,7 @@
 #include "QGCPlugin.h"
 #include "QGCLoggingCategory.h"
 #include "PluginInstaller.h"
+#include "PluginTrustGate.h"
 #include "Fact.h"
 #include "HostServices/QGCAppServiceImpl.h"
 #include "HostServices/QGCHostServicesImpl.h"
@@ -21,64 +22,12 @@
 #include "HostServices/QGCVehicleServiceImpl.h"
 
 #include <QtCore/QApplicationStatic>
-#include <QtCore/QCryptographicHash>
 #include <QtCore/QDir>
-#include <QtCore/QFile>
-#include <QtCore/QFileInfo>
 #include <QtQml/qqml.h>
 
 QGC_LOGGING_CATEGORY(QGCPluginManagerLog, "PluginSystem.QGCPluginManager");
 
 namespace {
-
-// A record's container is the entry the search directory scan found: the package
-// directory, or the bare dylib file itself. Its parent being the user plugins dir is
-// what makes a plugin user-dir (untrusted until approved, D10). Direct parent-path
-// comparison, not a string-prefix check — same rationale as knownPlugins().
-bool isUserDirPlugin(const PluginLoadInfo& record)
-{
-    const QString userPluginsDir = PluginInstaller::userPluginsDir();
-    if (userPluginsDir.isEmpty()) {
-        return false;
-    }
-    const QString container = record.packageDir.isEmpty() ? record.filePath : record.packageDir;
-    return !container.isEmpty()
-        && QFileInfo(container).dir().absolutePath() == QDir(userPluginsDir).absolutePath();
-}
-
-QString packageManifestPath(const PluginLoadInfo& record)
-{
-    return QDir(record.packageDir).filePath(QStringLiteral("qgcplugin.json"));
-}
-
-// Consent digest for a user-dir plugin: manifest version + SHA-256 over the manifest
-// file and the resolved binary (R3's bounded scope — the same two files whose
-// quarantine status matters, D15). This deliberately does NOT cover a package's QML/
-// asset tree: those files are code too (a plugin's QML can run JS and call host
-// services), but hashing an arbitrary-depth tree on every startup was decided against
-// as disproportionate to the risk (R3) — swapping only the QML in an already-approved
-// package is a residual gap, not an oversight. A bare dylib embeds its manifest, so the
-// binary alone covers both; a qml-tier package has no binary, so the manifest alone
-// does. Empty on read failure, which callers must treat as "cannot consent".
-QString consentDigest(const PluginLoadInfo& record)
-{
-    QStringList files;
-    if (!record.packageDir.isEmpty()) {
-        files << packageManifestPath(record);
-    }
-    if (record.filePath != record.packageDir) {
-        files << record.filePath;
-    }
-
-    QCryptographicHash hash(QCryptographicHash::Sha256);
-    for (const QString& filePath : files) {
-        QFile file(filePath);
-        if (!file.open(QIODevice::ReadOnly) || !hash.addData(&file)) {
-            return QString();
-        }
-    }
-    return record.manifest.version.toString() + QLatin1Char(':') + QString::fromLatin1(hash.result().toHex());
-}
 
 QString pluginStateName(PluginState state)
 {
@@ -215,12 +164,7 @@ QVariantList QGCPluginManager::knownPlugins() const
         info["statusText"]  = _statusText(record);
         // Only a package installed under the user plugins directory can be removed
         // through the settings page; bundle-shipped and dev-loop bare dylibs cannot.
-        // QDir::filePath(id) is exactly how PluginInstaller lays packages out, so a
-        // direct parent-path comparison (not a string-prefix check, which could match
-        // an unrelated sibling directory sharing a prefix) is both correct and simple.
-        const QString userPluginsDir = PluginInstaller::userPluginsDir();
-        info["removable"]   = !record.packageDir.isEmpty() && !userPluginsDir.isEmpty()
-            && QFileInfo(record.packageDir).dir().absolutePath() == QDir(userPluginsDir).absolutePath();
+        info["removable"]   = !record.packageDir.isEmpty() && PluginTrustGate::isUserDirPlugin(record);
         pluginList.append(info);
     }
     return pluginList;
@@ -246,58 +190,6 @@ QString QGCPluginManager::_statusText(const PluginLoadInfo& record) const
         return tr("Pending");
     }
     return tr("Unknown");
-}
-
-void QGCPluginManager::_applyTrustGate(PluginLoadInfo& record)
-{
-    if (record.state != PluginState::Discovered) {
-        return;
-    }
-
-    // Crash sentinel: the last run died inside this plugin's activation. Checked
-    // first — it outranks NeedsApproval, because a plugin that crashed the host must
-    // not become runnable by mere consent. Only an explicit re-enable
-    // (setPluginEnabled) clears the marker.
-    const QString crashedPluginId = _recordStore.crashedPluginId();
-    if (!crashedPluginId.isEmpty() && record.manifest.id == crashedPluginId) {
-        record.state = PluginState::Quarantined;
-        record.errorString = tr("QGC crashed while loading this plugin last run — re-enable to retry");
-        return;
-    }
-
-#if defined(Q_OS_MACOS)
-    // Manually-dropped plugins (not extracted in-process by installFromFile(), 01 §1.4)
-    // may carry com.apple.quarantine from however they arrived. Check the manifest and
-    // the resolved binary (D15): manifest-only would miss a fresh quarantined dylib
-    // swapped into an otherwise clean package, which Gatekeeper then kills cryptically
-    // at dlopen. Applies in every search dir — quarantine means "downloaded", wherever
-    // the file was dropped.
-    bool quarantined = false;
-    if (!record.packageDir.isEmpty()) {
-        quarantined = PluginInstaller::isFileQuarantined(packageManifestPath(record));
-    }
-    if (!quarantined && record.filePath != record.packageDir) {
-        quarantined = PluginInstaller::isFileQuarantined(record.filePath);
-    }
-    if (quarantined) {
-        record.state = PluginState::NeedsApproval;
-        record.errorString = tr("Downloaded plugin — approve to run");
-        return;
-    }
-#endif
-
-    // D10: bundle-dir plugins are trusted; a user-dir plugin runs only with recorded
-    // consent, keyed to its content — a changed plugin must re-prompt.
-    if (isUserDirPlugin(record)) {
-        const QString approved = _recordStore.approvedPluginDigest(record.manifest.id);
-        const QString digest = consentDigest(record);
-        if (digest.isEmpty() || digest != approved) {
-            record.state = PluginState::NeedsApproval;
-            record.errorString = approved.isEmpty()
-                ? tr("New plugin — approve to run")
-                : tr("Plugin changed since approval — approve again to run");
-        }
-    }
 }
 
 void QGCPluginManager::_activateIfEnabled(PluginLoadInfo& record)
@@ -340,12 +232,12 @@ void QGCPluginManager::_processInspected(const QList<PluginLoadInfo>& infos)
 
         // Failed records without a readable manifest have no id to key settings by.
         // Enabled by default across the board: what gates an untrusted plugin is the
-        // consent model (_applyTrustGate, D10), not the enabled Fact.
+        // consent model (PluginTrustGate::applyTrustGate, D10), not the enabled Fact.
         if (!pluginId.isEmpty()) {
             _recordStore.registerPlugin(pluginId, record.manifest.name, true);
         }
 
-        _applyTrustGate(record);
+        PluginTrustGate::applyTrustGate(record, _recordStore);
 
         if (record.state == PluginState::Discovered) {
             _activateIfEnabled(record);
@@ -511,7 +403,7 @@ void QGCPluginManager::setPluginEnabled(const QString& pluginId, bool enabled)
             _recordStore.clearCrashQuarantine();
             record->state = PluginState::Discovered;
             record->errorString.clear();
-            _applyTrustGate(*record);
+            PluginTrustGate::applyTrustGate(*record, _recordStore);
             if (record->state == PluginState::Discovered) {
                 _activateRecord(*record);
             }
@@ -563,7 +455,7 @@ void QGCPluginManager::reloadPlugin(const QString& pluginId)
             : QStringLiteral("plugin id changed on disk (now %1); restart to load it").arg(fresh.manifest.id);
         qCWarning(QGCPluginManagerLog) << "Reload inspection failed:" << record->filePath << "-" << record->errorString;
     } else {
-        _applyTrustGate(fresh);
+        PluginTrustGate::applyTrustGate(fresh, _recordStore);
 
         if (fresh.state == PluginState::Discovered) {
             _activateIfEnabled(fresh);
@@ -674,7 +566,7 @@ void QGCPluginManager::approvePlugin(const QString& pluginId)
 
     // Consent is keyed to the plugin's content (D10): a digest we cannot compute is a
     // plugin we cannot vouch for on the next scan, so approval fails closed.
-    const QString digest = consentDigest(*record);
+    const QString digest = PluginTrustGate::consentDigest(*record);
     if (digest.isEmpty()) {
         qCWarning(QGCPluginManagerLog) << "Could not read" << pluginId << "to record consent - leaving unapproved";
         return;

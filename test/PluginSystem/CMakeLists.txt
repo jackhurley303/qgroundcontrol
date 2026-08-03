@@ -19,6 +19,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         PluginManifestTest.h
         PluginRecordStoreTest.cc
         PluginRecordStoreTest.h
+        PluginTrustGateTest.cc
+        PluginTrustGateTest.h
         QGCPluginManagerTest.cc
         QGCPluginManagerTest.h
 )
@@ -40,4 +42,5 @@ add_qgc_test(PluginInstallerTest LABELS Unit)
 add_qgc_test(PluginLoaderGateTest LABELS Unit)
 add_qgc_test(PluginManifestTest LABELS Unit)
 add_qgc_test(PluginRecordStoreTest LABELS Unit)
+add_qgc_test(PluginTrustGateTest LABELS Unit)
 add_qgc_test(QGCPluginManagerTest LABELS Unit)
