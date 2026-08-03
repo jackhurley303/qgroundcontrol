@@ -158,16 +158,11 @@ void QGCPluginManager::cleanup()
     }
     _records.clear();
     _toolMenuItems.clear();
-    if (_replayExtension) {
-        _replayExtension = nullptr;
-        emit replayExtensionChanged();
-    }
     _flyViewPanelItems.clear();
     _planViewPanelItems.clear();
-    _hasLoggingController = false;
     emit flyViewPanelItemsChanged();
     emit planViewPanelItemsChanged();
-    emit loadedPluginsChanged();
+    _notifyRecordsChanged();
     emit toolMenuItemsChanged();
 }
 
@@ -198,6 +193,13 @@ void QGCPluginManager::_recalcReplayExtension()
         _replayExtension = newExt;
         emit replayExtensionChanged();
     }
+}
+
+void QGCPluginManager::_notifyRecordsChanged()
+{
+    _recalcReplayExtension();
+    _recalcLoggingController();
+    emit loadedPluginsChanged();
 }
 
 QVariantList QGCPluginManager::loadedPlugins() const
@@ -395,8 +397,7 @@ void QGCPluginManager::_processInspected(const QList<PluginLoadInfo>& infos)
         _records.append(record);
     }
 
-    _recalcLoggingController();
-    emit loadedPluginsChanged();
+    _notifyRecordsChanged();
 }
 
 void QGCPluginManager::_ensureHostServices()
@@ -449,17 +450,15 @@ void QGCPluginManager::_activateRecord(PluginLoadInfo& record)
         _ensureHostServices();
         plugin->init(_hostServices);
 
-        // Register the replay extension when the manifest declares one; undeclared
-        // extensions are never queried (the manifest is the contract)
+        // Diagnostics only — registering _replayExtension is _recalcReplayExtension()'s
+        // job alone (single owner, Pillar 2; it runs right after via
+        // _notifyRecordsChanged() and picks in _records list order, "first wins").
         if (record.contributions.providesReplayExtension) {
             QGCReplayExtension* ext = plugin->replayExtension();
             if (!ext) {
                 qCWarning(QGCPluginManagerLog) << "Plugin" << pluginId
                     << "declares a replay extension in its manifest but provides none";
-            } else if (!_replayExtension) {
-                _replayExtension = ext;
-                emit replayExtensionChanged();
-            } else {
+            } else if (_replayExtension && _replayExtension != ext) {
                 qCWarning(QGCPluginManagerLog) << "Plugin" << pluginId
                     << "provides a replay extension, but one is already registered by another plugin"
                     << "- ignoring (first registration wins)";
@@ -505,9 +504,7 @@ void QGCPluginManager::_deactivateRecord(PluginLoadInfo& record)
     record.state = PluginState::Disabled;
 
     _removeContributionsForPlugin(record.manifest.id);
-    _recalcReplayExtension();
-    _recalcLoggingController();
-    emit loadedPluginsChanged();
+    _notifyRecordsChanged();
 }
 
 void QGCPluginManager::_removeContributionsForPlugin(const QString& pluginId)
@@ -566,14 +563,12 @@ void QGCPluginManager::setPluginEnabled(const QString& pluginId, bool enabled)
             _applyTrustGate(*record);
             if (record->state == PluginState::Discovered) {
                 _activateRecord(*record);
-                _recalcLoggingController();
             }
-            emit loadedPluginsChanged();
+            _notifyRecordsChanged();
         } else if (record->state == PluginState::Disabled || record->state == PluginState::Discovered) {
             qCDebug(QGCPluginManagerLog) << "Enabling plugin:" << pluginId;
             _activateRecord(*record);
-            _recalcLoggingController();
-            emit loadedPluginsChanged();
+            _notifyRecordsChanged();
         }
     } else {
         if (record->state == PluginState::Active) {
@@ -627,8 +622,7 @@ void QGCPluginManager::reloadPlugin(const QString& pluginId)
         *record = fresh;
     }
 
-    _recalcLoggingController();
-    emit loadedPluginsChanged();
+    _notifyRecordsChanged();
 }
 
 QString QGCPluginManager::installPlugin(const QString& zipPath)
@@ -691,8 +685,7 @@ QString QGCPluginManager::removePlugin(const QString& pluginId)
         // leaving it disabled with no recorded reason.
         if (wasActive && record) {
             _activateRecord(*record);
-            _recalcLoggingController();
-            emit loadedPluginsChanged();
+            _notifyRecordsChanged();
         }
         return removeResult.errorString;
     }
@@ -705,7 +698,7 @@ QString QGCPluginManager::removePlugin(const QString& pluginId)
     // means) starts unapproved again rather than inheriting the old approval.
     SettingsManager::instance()->pluginSettings()->setApprovedPluginDigest(pluginId, QString());
 
-    emit loadedPluginsChanged();
+    _notifyRecordsChanged();
 
     return QString();
 }
@@ -742,6 +735,5 @@ void QGCPluginManager::approvePlugin(const QString& pluginId)
 
     _activateIfEnabled(*record);
 
-    _recalcLoggingController();
-    emit loadedPluginsChanged();
+    _notifyRecordsChanged();
 }

@@ -144,6 +144,9 @@ private:
     void _removeContributionsForPlugin(const QString& pluginId);
     void _recalcReplayExtension();
     void _recalcLoggingController();
+    /// The one mutation epilogue: both recalcs plus the emit, called at every
+    /// site that changes _records' active membership.
+    void _notifyRecordsChanged();
     void _applyTrustGate(PluginLoadInfo& record);
     void _activateIfEnabled(PluginLoadInfo& record);
     PluginLoadInfo* _findRecord(const QString& pluginId);

@@ -8,11 +8,14 @@
 #include <QtCore/QStandardPaths>
 
 #include "Fact.h"
+#include "MultiSignalSpy.h"
 #include "PluginContributions.h"
 #include "PluginInstaller.h"
 #include "PluginSettings.h"
+#include "QGCPlugin.h"
 #include "QGCPluginInterface.h"
 #include "QGCPluginManager.h"
+#include "QGCReplayExtension.h"
 #include "SettingsManager.h"
 
 #if defined(Q_OS_MACOS)
@@ -45,6 +48,63 @@ PluginSettings* pluginSettings()
 // Crash-sentinel keys, mirroring QGCPluginManager's constants
 constexpr const char* kLoadingPluginIdKey = "PluginSystem/loadingPluginId";
 constexpr const char* kCrashedPluginIdKey = "PluginSystem/crashedPluginId";
+
+// Minimal stub satisfying QGCReplayExtension's pure virtuals — never invoked,
+// only its identity (pointer value) matters to the emission-ordering test.
+class StubReplayExtension : public QGCReplayExtension
+{
+public:
+    bool isActive() const override { return false; }
+    QObject* logReplayLink() const override { return nullptr; }
+    bool isPlaying() const override { return false; }
+    qreal playbackSpeed() const override { return 1.0; }
+    bool hasVideo() const override { return false; }
+    QString videoUrl() const override { return QString(); }
+    qreal videoOffsetSecs() const override { return 0.0; }
+    qint64 videoPositionMs() const override { return 0; }
+    qint64 videoDurationMs() const override { return 0; }
+    void openFlight(QObject*) override {}
+    void closeFlight() override {}
+    void setPlaybackSpeed(qreal) override {}
+    void seekTo(qreal) override {}
+    void adjustVideoOffset(qreal) override {}
+};
+
+// A plugin whose replayExtension() always returns the same owned instance —
+// for tests exercising _recalcReplayExtension()'s selection across records
+// with a real (non-null) record.plugin.
+class ReplayProvidingPlugin : public QGCPlugin
+{
+public:
+    explicit ReplayProvidingPlugin(QObject* parent = nullptr)
+        : QGCPlugin(parent), _extension(new StubReplayExtension)
+    {
+        _extension->setParent(this);
+    }
+    QGCReplayExtension* replayExtension() const override { return _extension; }
+
+private:
+    StubReplayExtension* _extension;
+};
+
+// An Active record with a real plugin instance declaring a replay extension —
+// unlike discoveredFixture(), this is what _recalcReplayExtension() actually
+// scans for (record.plugin non-null, contributions.providesReplayExtension).
+PluginLoadInfo activeReplayProviderFixture(const QString& id, QObject* parent)
+{
+    PluginLoadInfo info;
+    info.filePath = QStringLiteral("/nonexistent/%1.dylib").arg(id);
+    info.state = PluginState::Active;
+    info.manifest.id = id;
+    info.manifest.name = id;
+    info.manifest.version = QVersionNumber(1, 0, 0);
+    info.manifest.vendor = QStringLiteral("Test Org");
+    info.manifest.tier = PluginManifest::Tier::HostPinned;
+    info.manifest.apiVersion = QGCPluginApiVersion;
+    info.contributions.providesReplayExtension = true;
+    info.plugin = new ReplayProvidingPlugin(parent);
+    return info;
+}
 
 } // namespace
 
@@ -370,6 +430,95 @@ void QGCPluginManagerTest::_loggingControllerFromManifest_test()
     manager._records.first().state = PluginState::Disabled;
     manager._recalcLoggingController();
     QVERIFY(!manager.hasLoggingController());
+}
+
+void QGCPluginManagerTest::_notifyEpilogueEmitsOnce_test()
+{
+    const QString id = QStringLiteral("org.test.notifyepilogue");
+
+    // Registered disabled so the first scan below records it as Disabled rather
+    // than attempting (and failing) activation, keeping it in the
+    // Disabled/Discovered class that setPluginEnabled(true) below can re-activate.
+    pluginSettings()->registerPlugin(id, QStringLiteral("Notify Plugin"), false);
+
+    QGCPluginManager manager;
+    MultiSignalSpy spy;
+    QVERIFY(spy.init(&manager, {"loadedPluginsChanged", "replayExtensionChanged"}));
+
+    // Discovery: disabled, so no activation attempt — still exactly one epilogue run.
+    manager._processInspected({discoveredFixture(id, QStringLiteral("Notify Plugin"))});
+    QCOMPARE(manager._records.first().state, PluginState::Disabled);
+    QVERIFY_SIGNAL_COUNT(spy, "loadedPluginsChanged", 1);
+    QVERIFY_NO_SIGNAL(spy, "replayExtensionChanged");
+    spy.clearAllSignals();
+
+    // Enable: one activation attempt (fails on the bogus path), one epilogue run.
+    // No plugin ever loads, so the replay extension never actually changes.
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Failed to activate plugin"));
+    manager.setPluginEnabled(id, true);
+    verifyExpectedLogMessage();
+    QCOMPARE(manager._records.first().state, PluginState::Failed);
+    QVERIFY_SIGNAL_COUNT(spy, "loadedPluginsChanged", 1);
+    QVERIFY_NO_SIGNAL(spy, "replayExtensionChanged");
+    spy.clearAllSignals();
+
+    // Disable: state is Failed, not Active, so _deactivateRecord is never reached
+    // and no epilogue runs at all here — setPluginEnabled(false) has no matching
+    // branch for Failed.
+    manager.setPluginEnabled(id, false);
+    QVERIFY_NO_SIGNAL(spy, "loadedPluginsChanged");
+    spy.clearAllSignals();
+
+    // Reload: re-inspection of the same bogus path fails identically; exactly one
+    // epilogue run despite the failure.
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Reload inspection failed"));
+    manager.reloadPlugin(id);
+    verifyExpectedLogMessage();
+    QVERIFY_SIGNAL_COUNT(spy, "loadedPluginsChanged", 1);
+    QVERIFY_NO_SIGNAL(spy, "replayExtensionChanged");
+    QCOMPARE(manager._records.first().manifest.id, id);
+}
+
+void QGCPluginManagerTest::_notifyEpilogueOwnsReplayExtension_test()
+{
+    // Two Active records, both declaring a replay extension via a real plugin
+    // instance — _recalcReplayExtension() is the only writer of _replayExtension
+    // now (Pillar 2), and must pick in _records list order: first provider wins.
+    QGCPluginManager manager;
+    manager._records = {
+        activeReplayProviderFixture(QStringLiteral("org.test.replayfirst"), &manager),
+        activeReplayProviderFixture(QStringLiteral("org.test.replaysecond"), &manager),
+    };
+    QGCReplayExtension* const firstExt = manager._records[0].plugin->replayExtension();
+    QGCReplayExtension* const secondExt = manager._records[1].plugin->replayExtension();
+
+    MultiSignalSpy spy;
+    QVERIFY(spy.init(&manager, {"replayExtensionChanged"}));
+
+    // First recalc: nothing registered yet, list order picks index 0.
+    manager._notifyRecordsChanged();
+    QCOMPARE(manager.replayExtension(), firstExt);
+    QVERIFY_SIGNAL_COUNT(spy, "replayExtensionChanged", 1);
+    spy.clearAllSignals();
+
+    // Idempotent: re-running with the same records is a no-op, no re-emit.
+    manager._notifyRecordsChanged();
+    QCOMPARE(manager.replayExtension(), firstExt);
+    QVERIFY_NO_SIGNAL(spy, "replayExtensionChanged");
+
+    // Deactivating the first provider (list order still [first, second], but
+    // first no longer qualifies — _deactivateRecord() always nulls record.plugin,
+    // which is what _recalcReplayExtension() actually keys on) hands ownership to
+    // the second — exactly one emission. This pins the recalc's own selection and
+    // idempotence directly; it does not drive setPluginEnabled()/reloadPlugin(),
+    // so it does not reproduce the specific double-emit the review found in
+    // _activateRecord() — that path needs a real loadable-plugin fixture to cover
+    // end-to-end (see TestPlugin/), left for a follow-up rather than U1.
+    manager._records[0].state = PluginState::Disabled;
+    manager._records[0].plugin = nullptr;
+    manager._notifyRecordsChanged();
+    QCOMPARE(manager.replayExtension(), secondExt);
+    QVERIFY_SIGNAL_COUNT(spy, "replayExtensionChanged", 1);
 }
 
 void QGCPluginManagerTest::_userDirPluginNeedsApprovalFirstSight_test()

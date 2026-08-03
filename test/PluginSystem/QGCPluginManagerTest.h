@@ -25,6 +25,8 @@ private slots:
     void _knownPluginsReflectsRecords_test();
     void _contributionsAddedAndRemoved_test();
     void _loggingControllerFromManifest_test();
+    void _notifyEpilogueEmitsOnce_test();
+    void _notifyEpilogueOwnsReplayExtension_test();
 
     void _userDirPluginNeedsApprovalFirstSight_test();
     void _approvalActivatesAndPersists_test();
