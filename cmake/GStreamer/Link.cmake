@@ -145,6 +145,28 @@ function(_gst_strip_macos_absent_link_libs _gsmal_VAR)
     set(${_gsmal_VAR} "${_gsmal_out}" PARENT_SCOPE)
 endfunction()
 
+# The macOS GStreamer SDK's gstreamer-1.0.pc bakes `-Wl,-rpath,${libdir}` into its Libs:
+# line (a relocatable-framework packaging choice), so every component .pc re-exports it
+# too via `Requires: gstreamer-1.0`. As a raw link option it reaches the link command
+# ahead of every rpath entry CMake itself emits, which puts the SDK's lib dir in front of
+# Qt's no matter how BUILD_RPATH is ordered - and the two ship colliding libav* dylibs
+# (see src/VideoManager/VideoReceiver/GStreamer/CMakeLists.txt). QGC adds an equivalent
+# rpath from GSTREAMER_LIB_PATH there, so dropping the baked-in one loses nothing and
+# leaves that file the single place the order is decided.
+# Operates on the named list variable in the caller's scope; no-op off APPLE.
+function(_gst_strip_macos_baked_in_rpath_flags _gsbirf_VAR)
+    if(NOT APPLE)
+        return()
+    endif()
+    set(_gsbirf_out "")
+    foreach(_gsbirf_flag IN LISTS ${_gsbirf_VAR})
+        if(NOT _gsbirf_flag MATCHES "^-Wl,-rpath,")
+            list(APPEND _gsbirf_out "${_gsbirf_flag}")
+        endif()
+    endforeach()
+    set(${_gsbirf_VAR} "${_gsbirf_out}" PARENT_SCOPE)
+endfunction()
+
 # Save/restore macros for CMAKE_FIND_LIBRARY_SUFFIXES/PREFIXES.
 # Used by FindGStreamer.cmake and the Android mobile-target macro when resolving static libs.
 macro(_gst_save_find_suffixes)

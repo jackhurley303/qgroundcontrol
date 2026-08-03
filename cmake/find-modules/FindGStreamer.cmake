@@ -17,6 +17,13 @@
 #        components without editing this file.
 #     4. Hash parsing moved out — qgc_parse_expected_hash lives in
 #        cmake/modules/Download.cmake; this module no longer parses hashes.
+#     5. gstreamer-1.0.pc's baked-in `-Wl,-rpath,${libdir}` is stripped on macOS via
+#        _gst_strip_macos_baked_in_rpath_flags (cmake/GStreamer/Link.cmake), on both the
+#        core target and every _gst_create_component_target — the flag rides Libs:, so
+#        every component .pc re-exports it through Requires: gstreamer-1.0. As a raw
+#        link option it landed ahead of all of CMake's own rpath entries and made
+#        GStreamer's libav* shadow Qt's. QGC adds the equivalent rpath itself from
+#        GSTREAMER_LIB_PATH, so nothing is lost.
 #   When syncing from upstream, re-apply each listed patch and update this
 #   block. Do NOT remove this block during sync.
 
@@ -199,6 +206,7 @@ if(PC_GStreamer_FOUND AND (NOT TARGET GStreamer::GStreamer))
     else()
         _gst_filter_missing_directories(PC_GStreamer_INCLUDE_DIRS)
         _gst_coalesce_existing_paths(PC_GStreamer_LIBRARY_DIRS)
+        _gst_strip_macos_baked_in_rpath_flags(PC_GStreamer_LDFLAGS_OTHER)
         set_target_properties(GStreamer::GStreamer PROPERTIES
             INTERFACE_COMPILE_OPTIONS "${PC_GStreamer_CFLAGS_OTHER}"
             INTERFACE_INCLUDE_DIRECTORIES "${PC_GStreamer_INCLUDE_DIRS}"
@@ -277,6 +285,7 @@ function(_gst_create_component_target _gst_PLUGIN _gst_PC_NAME)
     else()
         _gst_coalesce_existing_paths(${_pc}_LIBRARY_DIRS)
         _gst_strip_macos_absent_link_libs(${_pc}_LINK_LIBRARIES)
+        _gst_strip_macos_baked_in_rpath_flags(${_ldflags_var})
         set_target_properties(GStreamer::${_gst_PLUGIN} PROPERTIES
             INTERFACE_LINK_OPTIONS "${${_ldflags_var}}"
             INTERFACE_LINK_LIBRARIES "${${_pc}_LINK_LIBRARIES}"

@@ -164,9 +164,16 @@ include(GStreamer/Helpers)
 
 # Build-time rpath so the unrelocated binary finds component dylibs in the SDK
 # (framework /lib or flat /lib); install-time rpath is set in cmake/install/Install.cmake.
+#
+# Qt's lib dir is named first and deliberately: the SDK ships its own libav*/libsw* beside
+# the GStreamer dylibs, under the same install names Qt's FFmpeg media plugin resolves
+# (@rpath/libavformat.NN.dylib). First rpath entry wins, and the SDK's build lacks symbols
+# that plugin needs - so with the SDK first the plugin fails to load and Qt falls back to
+# the AVFoundation backend, which cannot demux most formats. CMake emits BUILD_RPATH ahead
+# of the entries it derives from linked libraries, where Qt's would otherwise land.
 if(MACOS AND GSTREAMER_LIB_PATH)
     set_property(TARGET ${CMAKE_PROJECT_NAME} APPEND PROPERTY
-        BUILD_RPATH "${GSTREAMER_LIB_PATH}")
+        BUILD_RPATH "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_LIBS}" "${GSTREAMER_LIB_PATH}")
 endif()
 
 gstreamer_install_platform_sdk(${CMAKE_PROJECT_NAME})

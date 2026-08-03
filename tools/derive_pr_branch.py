@@ -250,9 +250,25 @@ REPLAY_FIDELITY = PRSpec(
     ),
 )
 
+GSTREAMER_RPATH = PRSpec(
+    branch="upstream-pr-gstreamer-rpath",
+    source_ref="upstream/master",
+    mainline_ref="plugin-infrastructure-with-qdrive",
+    # Independent of the other two specs — a stock-QGC defect fix (routing rule 1), sharing no
+    # file with them, so it is a sibling of replay-fidelity rather than stacked on it. All three
+    # paths are unmodified-upstream on mainline apart from this fix, which is what makes a
+    # wholesale take sound here.
+    include_paths=(
+        "cmake/GStreamer/Link.cmake",
+        "cmake/find-modules/FindGStreamer.cmake",
+        "src/VideoManager/VideoReceiver/GStreamer/CMakeLists.txt",
+    ),
+)
+
 SPECS: dict[str, PRSpec] = {
     "plugin-sdk": PLUGIN_SDK,
     "replay-fidelity": REPLAY_FIDELITY,
+    "gstreamer-rpath": GSTREAMER_RPATH,
 }
 
 
