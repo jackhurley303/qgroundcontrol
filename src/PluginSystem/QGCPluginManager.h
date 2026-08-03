@@ -14,6 +14,7 @@
 #include <QtCore/QVariantList>
 #include <QtQmlIntegration/QtQmlIntegration>
 
+#include "PluginRecordStore.h"
 #include "QGCPluginLoader.h"
 #include "QGCReplayExtension.h"
 
@@ -135,7 +136,6 @@ signals:
 
 private:
     void _loadPlugins();
-    void _checkCrashSentinel();
     void _ensureHostServices();
     void _processInspected(const QList<PluginLoadInfo>& infos);
     void _activateRecord(PluginLoadInfo& record);
@@ -149,17 +149,15 @@ private:
     void _notifyRecordsChanged();
     void _applyTrustGate(PluginLoadInfo& record);
     void _activateIfEnabled(PluginLoadInfo& record);
-    PluginLoadInfo* _findRecord(const QString& pluginId);
     QString _statusText(const PluginLoadInfo& record) const;
 
     QVariantList _toolMenuItems;           // List of tool menu items (from plugins)
     QVariantList _flyViewPanelItems;       // List of fly-view panel items (from plugins)
     QVariantList _planViewPanelItems;      // List of plan-view panel items (from plugins)
-    QList<PluginLoadInfo> _records;        // One record per discovered plugin, any state
+    PluginRecordStore _recordStore;        // Owns the record collection and all plugin persistence
     QGCHostServicesImpl* _hostServices = nullptr; // Service registry handed to every plugin's init()
     QGCReplayExtension* _replayExtension = nullptr; // First replay extension found across active plugins
     bool _hasLoggingController = false;   // True if any active plugin claims telemetry-logging control
-    QString _crashedPluginId;             // Plugin blamed for crashing a previous run during its load (crash sentinel)
 
     friend class QGCPluginManagerTest;
 };

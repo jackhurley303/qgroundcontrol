@@ -10,9 +10,7 @@
 #include "QGCPluginManager.h"
 #include "QGCPlugin.h"
 #include "QGCLoggingCategory.h"
-#include "SettingsManager.h"
 #include "PluginInstaller.h"
-#include "PluginSettings.h"
 #include "Fact.h"
 #include "HostServices/QGCAppServiceImpl.h"
 #include "HostServices/QGCHostServicesImpl.h"
@@ -27,8 +25,6 @@
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
-#include <QtCore/QScopeGuard>
-#include <QtCore/QSettings>
 #include <QtQml/qqml.h>
 
 QGC_LOGGING_CATEGORY(QGCPluginManagerLog, "PluginSystem.QGCPluginManager");
@@ -83,17 +79,6 @@ QString consentDigest(const PluginLoadInfo& record)
     }
     return record.manifest.version.toString() + QLatin1Char(':') + QString::fromLatin1(hash.result().toHex());
 }
-
-// Crash sentinel (U3.4): loadingPluginId spans each activation attempt — a value
-// still present at the next startup means the process died inside that plugin's
-// load. It is then promoted to crashedPluginId, the persistent marker that keeps
-// the plugin Quarantined until the user explicitly re-enables it (later
-// activations of other plugins overwrite loadingPluginId, so the blame must not
-// live there). Single-id by design: with two independently-crashing plugins the
-// newest crash overwrites the older marker and the pair alternate across boots —
-// anything better is a multi-id bisect, deliberately out of this scope.
-constexpr const char* kLoadingPluginIdKey = "PluginSystem/loadingPluginId";
-constexpr const char* kCrashedPluginIdKey = "PluginSystem/crashedPluginId";
 
 QString pluginStateName(PluginState state)
 {
@@ -150,13 +135,13 @@ void QGCPluginManager::init()
 void QGCPluginManager::cleanup()
 {
     // Clean up plugins
-    for (const PluginLoadInfo& record : _records) {
+    for (const PluginLoadInfo& record : _recordStore.records()) {
         if (record.plugin) {
             record.plugin->cleanup();
             delete record.plugin;
         }
     }
-    _records.clear();
+    _recordStore.clear();
     _toolMenuItems.clear();
     _flyViewPanelItems.clear();
     _planViewPanelItems.clear();
@@ -169,7 +154,7 @@ void QGCPluginManager::cleanup()
 void QGCPluginManager::_recalcLoggingController()
 {
     bool found = false;
-    for (const PluginLoadInfo& record : _records) {
+    for (const PluginLoadInfo& record : _recordStore.records()) {
         if (record.state == PluginState::Active && record.contributions.controlsTelemetryLogging) {
             found = true;
             break;
@@ -181,7 +166,7 @@ void QGCPluginManager::_recalcLoggingController()
 void QGCPluginManager::_recalcReplayExtension()
 {
     QGCReplayExtension* newExt = nullptr;
-    for (const PluginLoadInfo& record : _records) {
+    for (const PluginLoadInfo& record : _recordStore.records()) {
         if (record.plugin && record.contributions.providesReplayExtension) {
             newExt = record.plugin->replayExtension();
             if (newExt) {
@@ -205,7 +190,7 @@ void QGCPluginManager::_notifyRecordsChanged()
 QVariantList QGCPluginManager::loadedPlugins() const
 {
     QVariantList pluginList;
-    for (const PluginLoadInfo& record : _records) {
+    for (const PluginLoadInfo& record : _recordStore.records()) {
         if (record.state == PluginState::Active) {
             QVariantMap pluginInfo;
             pluginInfo["name"] = record.manifest.name;
@@ -218,7 +203,7 @@ QVariantList QGCPluginManager::loadedPlugins() const
 QVariantList QGCPluginManager::knownPlugins() const
 {
     QVariantList pluginList;
-    for (const PluginLoadInfo& record : _records) {
+    for (const PluginLoadInfo& record : _recordStore.records()) {
         QVariantMap info;
         info["id"]          = record.manifest.id;
         info["name"]        = record.manifest.name;
@@ -263,16 +248,6 @@ QString QGCPluginManager::_statusText(const PluginLoadInfo& record) const
     return tr("Unknown");
 }
 
-PluginLoadInfo* QGCPluginManager::_findRecord(const QString& pluginId)
-{
-    for (PluginLoadInfo& record : _records) {
-        if (record.manifest.id == pluginId) {
-            return &record;
-        }
-    }
-    return nullptr;
-}
-
 void QGCPluginManager::_applyTrustGate(PluginLoadInfo& record)
 {
     if (record.state != PluginState::Discovered) {
@@ -283,7 +258,8 @@ void QGCPluginManager::_applyTrustGate(PluginLoadInfo& record)
     // first — it outranks NeedsApproval, because a plugin that crashed the host must
     // not become runnable by mere consent. Only an explicit re-enable
     // (setPluginEnabled) clears the marker.
-    if (!_crashedPluginId.isEmpty() && record.manifest.id == _crashedPluginId) {
+    const QString crashedPluginId = _recordStore.crashedPluginId();
+    if (!crashedPluginId.isEmpty() && record.manifest.id == crashedPluginId) {
         record.state = PluginState::Quarantined;
         record.errorString = tr("QGC crashed while loading this plugin last run — re-enable to retry");
         return;
@@ -313,7 +289,7 @@ void QGCPluginManager::_applyTrustGate(PluginLoadInfo& record)
     // D10: bundle-dir plugins are trusted; a user-dir plugin runs only with recorded
     // consent, keyed to its content — a changed plugin must re-prompt.
     if (isUserDirPlugin(record)) {
-        const QString approved = SettingsManager::instance()->pluginSettings()->approvedPluginDigest(record.manifest.id);
+        const QString approved = _recordStore.approvedPluginDigest(record.manifest.id);
         const QString digest = consentDigest(record);
         if (digest.isEmpty() || digest != approved) {
             record.state = PluginState::NeedsApproval;
@@ -326,31 +302,18 @@ void QGCPluginManager::_applyTrustGate(PluginLoadInfo& record)
 
 void QGCPluginManager::_activateIfEnabled(PluginLoadInfo& record)
 {
-    if (SettingsManager::instance()->pluginSettings()->isPluginEnabled(record.manifest.id)) {
+    if (_recordStore.isPluginEnabled(record.manifest.id)) {
         _activateRecord(record);
     } else {
         record.state = PluginState::Disabled;
     }
 }
 
-void QGCPluginManager::_checkCrashSentinel()
-{
-    QSettings settings;
-    const QString lingering = settings.value(QString::fromLatin1(kLoadingPluginIdKey)).toString();
-    if (!lingering.isEmpty()) {
-        qCWarning(QGCPluginManagerLog) << "Previous run crashed while loading plugin:" << lingering;
-        settings.setValue(QString::fromLatin1(kCrashedPluginIdKey), lingering);
-        settings.remove(QString::fromLatin1(kLoadingPluginIdKey));
-        settings.sync();
-    }
-    _crashedPluginId = settings.value(QString::fromLatin1(kCrashedPluginIdKey)).toString();
-}
-
 void QGCPluginManager::_loadPlugins()
 {
     qCDebug(QGCPluginManagerLog) << "=== Plugin Loading Start ===";
 
-    _checkCrashSentinel();
+    _recordStore.checkCrashSentinel();
 
     const QStringList pluginPaths = QGCPluginLoader::defaultPluginPaths();
     qCDebug(QGCPluginManagerLog) << "Plugin search paths:" << pluginPaths;
@@ -362,18 +325,16 @@ void QGCPluginManager::_loadPlugins()
 
 void QGCPluginManager::_processInspected(const QList<PluginLoadInfo>& infos)
 {
-    PluginSettings* pluginSettings = SettingsManager::instance()->pluginSettings();
-
     for (const PluginLoadInfo& info : infos) {
         PluginLoadInfo record = info;
         const QString pluginId = record.manifest.id;
         qCDebug(QGCPluginManagerLog) << "Processing plugin:" << pluginId << "from" << record.filePath;
 
-        if (!pluginId.isEmpty() && _findRecord(pluginId)) {
+        if (!pluginId.isEmpty() && _recordStore.find(pluginId)) {
             record.state = PluginState::Failed;
             record.errorString = QStringLiteral("duplicate plugin id: %1").arg(pluginId);
             qCWarning(QGCPluginManagerLog) << "  -" << record.errorString << "(" << record.filePath << ")";
-            _records.append(record);
+            _recordStore.append(record);
             continue;
         }
 
@@ -381,7 +342,7 @@ void QGCPluginManager::_processInspected(const QList<PluginLoadInfo>& infos)
         // Enabled by default across the board: what gates an untrusted plugin is the
         // consent model (_applyTrustGate, D10), not the enabled Fact.
         if (!pluginId.isEmpty()) {
-            pluginSettings->registerPlugin(pluginId, record.manifest.name, true);
+            _recordStore.registerPlugin(pluginId, record.manifest.name, true);
         }
 
         _applyTrustGate(record);
@@ -394,7 +355,7 @@ void QGCPluginManager::_processInspected(const QList<PluginLoadInfo>& infos)
             qCWarning(QGCPluginManagerLog) << "  - Not activating:" << record.errorString;
         }
 
-        _records.append(record);
+        _recordStore.append(record);
     }
 
     _notifyRecordsChanged();
@@ -426,13 +387,7 @@ void QGCPluginManager::_activateRecord(PluginLoadInfo& record)
     // Crash sentinel: if the process dies anywhere inside this activation (dlopen,
     // static initializers, init(), contribution wiring), the synced id lingers and
     // the next boot quarantines the plugin instead of crash-looping.
-    QSettings settings;
-    settings.setValue(QString::fromLatin1(kLoadingPluginIdKey), record.manifest.id);
-    settings.sync();
-    const auto clearSentinel = qScopeGuard([&settings] {
-        settings.remove(QString::fromLatin1(kLoadingPluginIdKey));
-        settings.sync();
-    });
+    const auto clearSentinel = _recordStore.armLoadingSentinel(record.manifest.id);
 
     QGCPluginLoader::activate(record);
 
@@ -536,28 +491,24 @@ void QGCPluginManager::_removeContributionsForPlugin(const QString& pluginId)
 
 void QGCPluginManager::setPluginEnabled(const QString& pluginId, bool enabled)
 {
-    PluginLoadInfo* record = _findRecord(pluginId);
+    PluginLoadInfo* record = _recordStore.find(pluginId);
     if (!record) {
         qCWarning(QGCPluginManagerLog) << "Plugin not found:" << pluginId;
         return;
     }
 
     // Persist the setting; QML sliders may already have written it, which is fine
-    PluginSettings* pluginSettings = SettingsManager::instance()->pluginSettings();
-    Fact* fact = pluginSettings->pluginEnabledFact(pluginId);
+    Fact* fact = _recordStore.pluginEnabledFact(pluginId);
     if (fact && fact->rawValue().toBool() != enabled) {
         fact->setRawValue(enabled);
     }
 
     if (enabled) {
-        if (record->state == PluginState::Quarantined && record->manifest.id == _crashedPluginId) {
+        if (record->state == PluginState::Quarantined && record->manifest.id == _recordStore.crashedPluginId()) {
             // Re-enable is the one path out of crash quarantine: clear the marker and
             // route back through the trust gate — consent may still be required.
             qCDebug(QGCPluginManagerLog) << "Clearing crash quarantine for:" << pluginId;
-            QSettings settings;
-            settings.remove(QString::fromLatin1(kCrashedPluginIdKey));
-            settings.sync();
-            _crashedPluginId.clear();
+            _recordStore.clearCrashQuarantine();
             record->state = PluginState::Discovered;
             record->errorString.clear();
             _applyTrustGate(*record);
@@ -584,7 +535,7 @@ void QGCPluginManager::reloadPlugin(const QString& pluginId)
 {
     qCDebug(QGCPluginManagerLog) << "Reloading plugin:" << pluginId;
 
-    PluginLoadInfo* record = _findRecord(pluginId);
+    PluginLoadInfo* record = _recordStore.find(pluginId);
     if (!record) {
         qCWarning(QGCPluginManagerLog) << "Plugin not found for reload:" << pluginId;
         return;
@@ -637,12 +588,12 @@ QString QGCPluginManager::installPlugin(const QString& zipPath)
 
     // Replacing an existing install: drop the old record (deactivating first) so the
     // freshly-inspected one below isn't rejected as a duplicate id.
-    PluginLoadInfo* existing = _findRecord(installResult.pluginId);
+    PluginLoadInfo* existing = _recordStore.find(installResult.pluginId);
     if (existing) {
         if (existing->state == PluginState::Active) {
             _deactivateRecord(*existing);
         }
-        _records.removeIf([&installResult](const PluginLoadInfo& r) {
+        _recordStore.removeIf([&installResult](const PluginLoadInfo& r) {
             return r.manifest.id == installResult.pluginId;
         });
     }
@@ -653,10 +604,10 @@ QString QGCPluginManager::installPlugin(const QString& zipPath)
     // Picking the file in the install dialog is the explicit consent D10 asks for
     // (same intent reasoning as D14), so route the fresh record through the one
     // approval flow rather than making the user re-approve on the same page.
-    PluginLoadInfo* installed = _findRecord(installResult.pluginId);
+    PluginLoadInfo* installed = _recordStore.find(installResult.pluginId);
     if (installed && installed->state == PluginState::NeedsApproval) {
         approvePlugin(installResult.pluginId);
-        installed = _findRecord(installResult.pluginId);
+        installed = _recordStore.find(installResult.pluginId);
         if (installed && installed->state == PluginState::NeedsApproval) {
             return tr("Installed, but could not be auto-approved: %1").arg(installed->errorString);
         }
@@ -669,7 +620,7 @@ QString QGCPluginManager::removePlugin(const QString& pluginId)
 {
     qCDebug(QGCPluginManagerLog) << "Removing plugin:" << pluginId;
 
-    PluginLoadInfo* record = _findRecord(pluginId);
+    PluginLoadInfo* record = _recordStore.find(pluginId);
 
     // A loaded plugin's binary must be deactivated before its files can be deleted
     // (mapped-in-process dylibs can't be removed on some platforms while active).
@@ -690,13 +641,13 @@ QString QGCPluginManager::removePlugin(const QString& pluginId)
         return removeResult.errorString;
     }
 
-    _records.removeIf([&pluginId](const PluginLoadInfo& r) {
+    _recordStore.removeIf([&pluginId](const PluginLoadInfo& r) {
         return r.manifest.id == pluginId;
     });
 
     // Removal revokes consent: a copy of the same content arriving later (by any
     // means) starts unapproved again rather than inheriting the old approval.
-    SettingsManager::instance()->pluginSettings()->setApprovedPluginDigest(pluginId, QString());
+    _recordStore.setApprovedPluginDigest(pluginId, QString());
 
     _notifyRecordsChanged();
 
@@ -707,7 +658,7 @@ void QGCPluginManager::approvePlugin(const QString& pluginId)
 {
     qCDebug(QGCPluginManagerLog) << "Approving plugin:" << pluginId;
 
-    PluginLoadInfo* record = _findRecord(pluginId);
+    PluginLoadInfo* record = _recordStore.find(pluginId);
     if (!record || record->state != PluginState::NeedsApproval) {
         qCWarning(QGCPluginManagerLog) << "Plugin not awaiting approval:" << pluginId;
         return;
@@ -728,7 +679,7 @@ void QGCPluginManager::approvePlugin(const QString& pluginId)
         qCWarning(QGCPluginManagerLog) << "Could not read" << pluginId << "to record consent - leaving unapproved";
         return;
     }
-    SettingsManager::instance()->pluginSettings()->setApprovedPluginDigest(pluginId, digest);
+    _recordStore.setApprovedPluginDigest(pluginId, digest);
 
     record->state = PluginState::Discovered;
     record->errorString.clear();

@@ -187,8 +187,8 @@ void QGCPluginManagerTest::_disabledNeverActivated_test()
     QGCPluginManager manager;
     manager._processInspected({discoveredFixture(id, QStringLiteral("Disabled Plugin"))});
 
-    QCOMPARE(manager._records.size(), 1);
-    const PluginLoadInfo& record = manager._records.first();
+    QCOMPARE(manager._recordStore.records().size(), 1);
+    const PluginLoadInfo& record = manager._recordStore.records().first();
     // Disabled, not Failed: activation was never attempted on the bogus path
     QCOMPARE(record.state, PluginState::Disabled);
     QVERIFY(record.plugin == nullptr);
@@ -208,7 +208,7 @@ void QGCPluginManagerTest::_incompatibleRecorded_test()
     manager._processInspected({fixture});
     verifyExpectedLogMessage();
 
-    const PluginLoadInfo& record = manager._records.first();
+    const PluginLoadInfo& record = manager._recordStore.records().first();
     QCOMPARE(record.state, PluginState::Incompatible);
     QCOMPARE(record.errorString, QStringLiteral("requires host version >= 9.9"));
     QVERIFY(record.plugin == nullptr);
@@ -236,7 +236,7 @@ void QGCPluginManagerTest::_settingsKeyedById_test()
     QCOMPARE(fact->label(), name);
 
     // Enabled by default, so activation was attempted and failed on the bogus path
-    const PluginLoadInfo& record = manager._records.first();
+    const PluginLoadInfo& record = manager._recordStore.records().first();
     QCOMPARE(record.state, PluginState::Failed);
     QVERIFY(!record.errorString.isEmpty());
     QVERIFY(record.plugin == nullptr);
@@ -257,8 +257,8 @@ void QGCPluginManagerTest::_failedWithoutIdNotRegistered_test()
     verifyExpectedLogMessage();
 
     // Record kept for display purposes, but no settings key without an id
-    QCOMPARE(manager._records.size(), 1);
-    QCOMPARE(manager._records.first().state, PluginState::Failed);
+    QCOMPARE(manager._recordStore.records().size(), 1);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::Failed);
     QCOMPARE(pluginSettings()->registeredPluginIds(), idsBefore);
 }
 
@@ -277,10 +277,10 @@ void QGCPluginManagerTest::_duplicateIdFails_test()
     });
     verifyExpectedLogMessage();
 
-    QCOMPARE(manager._records.size(), 2);
-    QCOMPARE(manager._records[0].state, PluginState::Disabled);
-    QCOMPARE(manager._records[1].state, PluginState::Failed);
-    QVERIFY(manager._records[1].errorString.contains(QStringLiteral("duplicate")));
+    QCOMPARE(manager._recordStore.records().size(), 2);
+    QCOMPARE(manager._recordStore.records()[0].state, PluginState::Disabled);
+    QCOMPARE(manager._recordStore.records()[1].state, PluginState::Failed);
+    QVERIFY(manager._recordStore.records()[1].errorString.contains(QStringLiteral("duplicate")));
 }
 
 void QGCPluginManagerTest::_setPluginEnabledPersistsAndReconciles_test()
@@ -291,26 +291,26 @@ void QGCPluginManagerTest::_setPluginEnabledPersistsAndReconciles_test()
 
     QGCPluginManager manager;
     manager._processInspected({discoveredFixture(id, QStringLiteral("Toggle Plugin"))});
-    QCOMPARE(manager._records.first().state, PluginState::Disabled);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::Disabled);
 
     // Enabling persists the Fact and attempts activation, which fails on the bogus path
     expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Failed to activate plugin"));
     manager.setPluginEnabled(id, true);
     verifyExpectedLogMessage();
     QVERIFY(pluginSettings()->isPluginEnabled(id));
-    QCOMPARE(manager._records.first().state, PluginState::Failed);
-    QVERIFY(!manager._records.first().errorString.isEmpty());
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::Failed);
+    QVERIFY(!manager._recordStore.records().first().errorString.isEmpty());
 
     // Disabling persists the Fact; idempotent on a plugin that never activated
     manager.setPluginEnabled(id, false);
     QVERIFY(!pluginSettings()->isPluginEnabled(id));
-    QVERIFY(manager._records.first().plugin == nullptr);
+    QVERIFY(manager._recordStore.records().first().plugin == nullptr);
 
     // Unknown id warns without side effects
     expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Plugin not found"));
     manager.setPluginEnabled(QStringLiteral("org.test.unknown"), true);
     verifyExpectedLogMessage();
-    QCOMPARE(manager._records.size(), 1);
+    QCOMPARE(manager._recordStore.records().size(), 1);
 }
 
 void QGCPluginManagerTest::_reloadUnknownId_test()
@@ -321,7 +321,7 @@ void QGCPluginManagerTest::_reloadUnknownId_test()
     expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Plugin not found for reload"));
     manager.reloadPlugin(QStringLiteral("org.test.nope"));
     verifyExpectedLogMessage();
-    QVERIFY(manager._records.isEmpty());
+    QVERIFY(manager._recordStore.records().isEmpty());
 }
 
 void QGCPluginManagerTest::_reloadKeepsIdentityOnFailedInspect_test()
@@ -332,18 +332,18 @@ void QGCPluginManagerTest::_reloadKeepsIdentityOnFailedInspect_test()
 
     QGCPluginManager manager;
     manager._processInspected({discoveredFixture(id, QStringLiteral("Reload Plugin"))});
-    QCOMPARE(manager._records.first().state, PluginState::Disabled);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::Disabled);
 
     // Re-inspection of the bogus path fails; the record must keep its manifest id
     // so the settings key and id lookups stay coherent
     expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Reload inspection failed"));
     manager.reloadPlugin(id);
     verifyExpectedLogMessage();
-    QCOMPARE(manager._records.size(), 1);
-    QCOMPARE(manager._records.first().manifest.id, id);
-    QCOMPARE(manager._records.first().state, PluginState::Failed);
-    QVERIFY(!manager._records.first().errorString.isEmpty());
-    QVERIFY(manager._findRecord(id) != nullptr);
+    QCOMPARE(manager._recordStore.records().size(), 1);
+    QCOMPARE(manager._recordStore.records().first().manifest.id, id);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::Failed);
+    QVERIFY(!manager._recordStore.records().first().errorString.isEmpty());
+    QVERIFY(manager._recordStore.find(id) != nullptr);
 }
 
 void QGCPluginManagerTest::_knownPluginsReflectsRecords_test()
@@ -360,7 +360,7 @@ void QGCPluginManagerTest::_knownPluginsReflectsRecords_test()
     incompatibleFixture.errorString = QStringLiteral("requires host version >= 9.9");
 
     QGCPluginManager manager;
-    manager._records = {activeFixture, incompatibleFixture};
+    manager._recordStore.records() = {activeFixture, incompatibleFixture};
 
     const QVariantList known = manager.knownPlugins();
     QCOMPARE(known.size(), 2);
@@ -422,12 +422,12 @@ void QGCPluginManagerTest::_loggingControllerFromManifest_test()
     record.contributions.controlsTelemetryLogging = true;
 
     QGCPluginManager manager;
-    manager._records = {record};
+    manager._recordStore.records() = {record};
     manager._recalcLoggingController();
     QVERIFY(manager.hasLoggingController());
 
     // The claim only counts while the plugin is active
-    manager._records.first().state = PluginState::Disabled;
+    manager._recordStore.records().first().state = PluginState::Disabled;
     manager._recalcLoggingController();
     QVERIFY(!manager.hasLoggingController());
 }
@@ -447,7 +447,7 @@ void QGCPluginManagerTest::_notifyEpilogueEmitsOnce_test()
 
     // Discovery: disabled, so no activation attempt — still exactly one epilogue run.
     manager._processInspected({discoveredFixture(id, QStringLiteral("Notify Plugin"))});
-    QCOMPARE(manager._records.first().state, PluginState::Disabled);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::Disabled);
     QVERIFY_SIGNAL_COUNT(spy, "loadedPluginsChanged", 1);
     QVERIFY_NO_SIGNAL(spy, "replayExtensionChanged");
     spy.clearAllSignals();
@@ -457,7 +457,7 @@ void QGCPluginManagerTest::_notifyEpilogueEmitsOnce_test()
     expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Failed to activate plugin"));
     manager.setPluginEnabled(id, true);
     verifyExpectedLogMessage();
-    QCOMPARE(manager._records.first().state, PluginState::Failed);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::Failed);
     QVERIFY_SIGNAL_COUNT(spy, "loadedPluginsChanged", 1);
     QVERIFY_NO_SIGNAL(spy, "replayExtensionChanged");
     spy.clearAllSignals();
@@ -476,7 +476,7 @@ void QGCPluginManagerTest::_notifyEpilogueEmitsOnce_test()
     verifyExpectedLogMessage();
     QVERIFY_SIGNAL_COUNT(spy, "loadedPluginsChanged", 1);
     QVERIFY_NO_SIGNAL(spy, "replayExtensionChanged");
-    QCOMPARE(manager._records.first().manifest.id, id);
+    QCOMPARE(manager._recordStore.records().first().manifest.id, id);
 }
 
 void QGCPluginManagerTest::_notifyEpilogueOwnsReplayExtension_test()
@@ -485,12 +485,12 @@ void QGCPluginManagerTest::_notifyEpilogueOwnsReplayExtension_test()
     // instance — _recalcReplayExtension() is the only writer of _replayExtension
     // now (Pillar 2), and must pick in _records list order: first provider wins.
     QGCPluginManager manager;
-    manager._records = {
+    manager._recordStore.records() = {
         activeReplayProviderFixture(QStringLiteral("org.test.replayfirst"), &manager),
         activeReplayProviderFixture(QStringLiteral("org.test.replaysecond"), &manager),
     };
-    QGCReplayExtension* const firstExt = manager._records[0].plugin->replayExtension();
-    QGCReplayExtension* const secondExt = manager._records[1].plugin->replayExtension();
+    QGCReplayExtension* const firstExt = manager._recordStore.records()[0].plugin->replayExtension();
+    QGCReplayExtension* const secondExt = manager._recordStore.records()[1].plugin->replayExtension();
 
     MultiSignalSpy spy;
     QVERIFY(spy.init(&manager, {"replayExtensionChanged"}));
@@ -514,8 +514,8 @@ void QGCPluginManagerTest::_notifyEpilogueOwnsReplayExtension_test()
     // so it does not reproduce the specific double-emit the review found in
     // _activateRecord() — that path needs a real loadable-plugin fixture to cover
     // end-to-end (see TestPlugin/), left for a follow-up rather than U1.
-    manager._records[0].state = PluginState::Disabled;
-    manager._records[0].plugin = nullptr;
+    manager._recordStore.records()[0].state = PluginState::Disabled;
+    manager._recordStore.records()[0].plugin = nullptr;
     manager._notifyRecordsChanged();
     QCOMPARE(manager.replayExtension(), secondExt);
     QVERIFY_SIGNAL_COUNT(spy, "replayExtensionChanged", 1);
@@ -532,9 +532,9 @@ void QGCPluginManagerTest::_userDirPluginNeedsApprovalFirstSight_test()
 
     // Enabled by default — it is the consent gate, not the enabled Fact, that blocks it
     QVERIFY(pluginSettings()->isPluginEnabled(id));
-    QCOMPARE(manager._records.size(), 1);
-    QCOMPARE(manager._records.first().state, PluginState::NeedsApproval);
-    QVERIFY(manager._records.first().plugin == nullptr);
+    QCOMPARE(manager._recordStore.records().size(), 1);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::NeedsApproval);
+    QVERIFY(manager._recordStore.records().first().plugin == nullptr);
     QVERIFY(manager.loadedPlugins().isEmpty());
     QVERIFY(pluginSettings()->approvedPluginDigest(id).isEmpty());
 }
@@ -547,17 +547,17 @@ void QGCPluginManagerTest::_approvalActivatesAndPersists_test()
 
     QGCPluginManager manager;
     manager._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
-    QCOMPARE(manager._records.first().state, PluginState::NeedsApproval);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::NeedsApproval);
 
     // Approval records the consent digest and activates (qml tier: trivially)
     manager.approvePlugin(id);
-    QCOMPARE(manager._records.first().state, PluginState::Active);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::Active);
     QVERIFY(!pluginSettings()->approvedPluginDigest(id).isEmpty());
 
     // "Restart": a fresh manager scanning unchanged content activates without re-prompting
     QGCPluginManager restarted;
     restarted._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
-    QCOMPARE(restarted._records.first().state, PluginState::Active);
+    QCOMPARE(restarted._recordStore.records().first().state, PluginState::Active);
 
     // Removal revokes consent — identical content arriving later starts unapproved
     QVERIFY2(restarted.removePlugin(id).isEmpty(), "removePlugin failed");
@@ -573,7 +573,7 @@ void QGCPluginManagerTest::_changedContentReprompts_test()
     QGCPluginManager manager;
     manager._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
     manager.approvePlugin(id);
-    QCOMPARE(manager._records.first().state, PluginState::Active);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::Active);
 
     // The manifest changes on disk after approval: the recorded digest no longer vouches
     packageDir = _writePackage(PluginInstaller::userPluginsDir(), id, QStringLiteral("qml"), QStringLiteral("Changed content"));
@@ -581,9 +581,9 @@ void QGCPluginManagerTest::_changedContentReprompts_test()
 
     QGCPluginManager restarted;
     restarted._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
-    QCOMPARE(restarted._records.first().state, PluginState::NeedsApproval);
-    QVERIFY2(restarted._records.first().errorString.contains(QStringLiteral("changed")),
-             qPrintable(restarted._records.first().errorString));
+    QCOMPARE(restarted._recordStore.records().first().state, PluginState::NeedsApproval);
+    QVERIFY2(restarted._recordStore.records().first().errorString.contains(QStringLiteral("changed")),
+             qPrintable(restarted._recordStore.records().first().errorString));
 }
 
 void QGCPluginManagerTest::_bundleDirPluginTrusted_test()
@@ -595,7 +595,7 @@ void QGCPluginManagerTest::_bundleDirPluginTrusted_test()
     // Trusted class: activates on first sight, and no consent digest is ever recorded
     QGCPluginManager manager;
     manager._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
-    QCOMPARE(manager._records.first().state, PluginState::Active);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::Active);
     QVERIFY(pluginSettings()->approvedPluginDigest(id).isEmpty());
 }
 
@@ -608,17 +608,17 @@ void QGCPluginManagerTest::_crashSentinelQuarantines_test()
     settings.setValue(QString::fromLatin1(kLoadingPluginIdKey), id);
 
     QGCPluginManager manager;
-    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Previous run crashed while loading plugin"));
+    expectLogMessage("PluginSystem.PluginRecordStore", QtWarningMsg, QRegularExpression("Previous run crashed while loading plugin"));
     expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("QGC crashed while loading this plugin last run"));
-    manager._checkCrashSentinel();
+    manager._recordStore.checkCrashSentinel();
     manager._processInspected({discoveredFixture(id, QStringLiteral("Crashed Plugin"))});
     verifyExpectedLogMessage();
     verifyExpectedLogMessage();
 
     // Quarantined with no activation attempt (an attempt on the bogus path would
     // have flipped the state to Failed), despite the enabled-by-default Fact
-    QCOMPARE(manager._records.first().state, PluginState::Quarantined);
-    QVERIFY(manager._records.first().plugin == nullptr);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::Quarantined);
+    QVERIFY(manager._recordStore.records().first().plugin == nullptr);
     QVERIFY(manager.loadedPlugins().isEmpty());
 
     // The lingering id was promoted to the persistent marker
@@ -631,7 +631,7 @@ void QGCPluginManagerTest::_crashSentinelQuarantines_test()
     expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Failed to activate plugin"));
     manager.setPluginEnabled(id, true);
     verifyExpectedLogMessage();
-    QCOMPARE(manager._records.first().state, PluginState::Failed);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::Failed);
     settings.sync();
     QVERIFY(settings.value(QString::fromLatin1(kCrashedPluginIdKey)).toString().isEmpty());
 }
@@ -646,20 +646,20 @@ void QGCPluginManagerTest::_crashSentinelOutranksConsent_test()
     settings.setValue(QString::fromLatin1(kLoadingPluginIdKey), id);
 
     QGCPluginManager manager;
-    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Previous run crashed while loading plugin"));
+    expectLogMessage("PluginSystem.PluginRecordStore", QtWarningMsg, QRegularExpression("Previous run crashed while loading plugin"));
     expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("QGC crashed while loading this plugin last run"));
-    manager._checkCrashSentinel();
+    manager._recordStore.checkCrashSentinel();
     manager._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
     verifyExpectedLogMessage();
     verifyExpectedLogMessage();
 
     // Crash quarantine outranks the consent gate: a plugin that crashed the host
     // must not be runnable by mere approval
-    QCOMPARE(manager._records.first().state, PluginState::Quarantined);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::Quarantined);
 
     // Re-enable clears the crash marker but not the consent requirement
     manager.setPluginEnabled(id, true);
-    QCOMPARE(manager._records.first().state, PluginState::NeedsApproval);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::NeedsApproval);
     QVERIFY(manager.loadedPlugins().isEmpty());
     settings.sync();
     QVERIFY(settings.value(QString::fromLatin1(kCrashedPluginIdKey)).toString().isEmpty());
@@ -676,7 +676,7 @@ void QGCPluginManagerTest::_sentinelClearedAfterActivation_test()
 
     // Activation was attempted (and failed on the bogus path); a completed attempt
     // — even a failed one — must leave no lingering sentinel to blame next boot
-    QCOMPARE(manager._records.first().state, PluginState::Failed);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::Failed);
     QSettings settings;
     settings.sync();
     QVERIFY(settings.value(QString::fromLatin1(kLoadingPluginIdKey)).toString().isEmpty());
@@ -697,9 +697,9 @@ void QGCPluginManagerTest::_quarantinedBinaryGated_test()
 
     QGCPluginManager manager;
     manager._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
-    QCOMPARE(manager._records.first().state, PluginState::NeedsApproval);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::NeedsApproval);
     manager.approvePlugin(id);
-    QCOMPARE(manager._records.first().state, PluginState::Disabled);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::Disabled);
 
     // The D15 partial case: manifest stays clean while a freshly-downloaded (quarantined)
     // binary is swapped in. Content is unchanged, so the consent digest still matches —
@@ -711,9 +711,9 @@ void QGCPluginManagerTest::_quarantinedBinaryGated_test()
 
     QGCPluginManager restarted;
     restarted._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
-    QCOMPARE(restarted._records.first().state, PluginState::NeedsApproval);
-    QVERIFY2(restarted._records.first().errorString.contains(QStringLiteral("Downloaded")),
-             qPrintable(restarted._records.first().errorString));
+    QCOMPARE(restarted._recordStore.records().first().state, PluginState::NeedsApproval);
+    QVERIFY2(restarted._recordStore.records().first().errorString.contains(QStringLiteral("Downloaded")),
+             qPrintable(restarted._recordStore.records().first().errorString));
 }
 #endif
 
