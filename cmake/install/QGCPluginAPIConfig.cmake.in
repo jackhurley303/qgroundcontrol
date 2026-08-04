@@ -14,4 +14,16 @@ find_dependency(Qt6 @QGC_QT_MINIMUM_VERSION@ COMPONENTS Core)
 
 include("${CMAKE_CURRENT_LIST_DIR}/QGCPluginAPITargets.cmake")
 
+# QML import path for the published QGroundControl.PluginUI module — the vocabulary
+# a plugin's QML may use. Pass it to qmllint (and to nothing else: the host engine
+# provides the implementations at runtime, so there is nothing here to link or
+# deploy):
+#
+#   qmllint --import error --missing-property error --unresolved-type error \
+#           -I "${QGCPluginAPI_QML_IMPORT_PATH}" MyPanel.qml
+#
+# Those severity flags are not optional. qmllint diagnoses an unresolved type and
+# still exits 0 by default, so a check that omits them reports problems and passes.
+set_and_check(QGCPluginAPI_QML_IMPORT_PATH "@PACKAGE_QGC_PLUGIN_API_QML_DIR@")
+
 check_required_components(QGCPluginAPI)

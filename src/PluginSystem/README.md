@@ -178,6 +178,64 @@ inline constexpr int QGCPluginApiVersion = 2;
 `pluginInterfaceVersion()` is a belt-and-braces runtime check; the manifest's
 `apiVersion` (checked during `inspect()`, before any code runs) is authoritative.
 
+## The QML Contract — `QGroundControl.PluginUI`
+
+The second published surface. Where the C++ services say what a plugin may *call*, this
+says what its QML may be *built from*.
+
+A plugin's QML has no compile step: it ships in the plugin's own resources and every
+`import` resolves at runtime, inside the host's `QQmlEngine`. So the module is a
+**resolution contract, not a code library** — it exists so plugin QML can be checked
+against a named, curated vocabulary at lint time, while the host keeps supplying every
+implementation at runtime. Nothing is vendored, nothing is reimplemented, and a
+contributed panel cannot drift from the host's look or theming.
+
+### One roster, two forms
+
+[PluginUI/qmldir](PluginUI/qmldir) is the whole declaration, and the only hand-maintained
+list. It ships verbatim as a resource at `:/qml/QGroundControl/PluginUI/qmldir`, which the
+engine finds because `QGCCorePlugin::createQmlApplicationEngine()` already puts
+`qrc:/qml` on the import path.
+
+Its entries use **explicit relative paths** into the owning module's resource directory
+(`QGCLabel 1.0 ../Controls/QGCLabel.qml`). That is load-bearing, not cosmetic:
+
+- `QQmlTypeLoader` keys composite types by URL, so pointing both URIs at one URL yields
+  **one type and one singleton instance**. Registering copies of the same `.qml` under a
+  second URI instead — the obvious approach, a second `qt_add_qml_module` over the same
+  sources — produces two distinct types and two singleton instances that still render
+  identically. `test/PluginSystem/PluginUIModuleTest.cc` asserts against that, because
+  appearance cannot catch it.
+- A `prefer` line achieves the same shared URL but resolves *any* `.qml` sitting in the
+  preferred directory, which defeats curation. So does a qmldir `import` directive, which
+  re-exports a whole module.
+
+C++ types cannot be declared in a qmldir, so the few the module publishes are
+re-registered under the second URI by [PluginUIModule.cc](PluginUIModule.cc). That
+registration is additive and yields the *same* C++ type under both URIs — no class moves
+out of the executable to be published.
+
+For a package, `tools/derive_plugin_ui_sdk.py` reduces the same roster to the flat form an
+out-of-tree consumer needs: a qmldir with bare filenames, copies of the control bodies
+(Qt generates no metadata for composite types, so the bodies themselves are the lint
+fixture), and a `.qmltypes` carved out of the host build's own generated metadata with its
+exports retargeted. `find_package(QGCPluginAPI)` exposes the result as
+`QGCPluginAPI_QML_IMPORT_PATH`.
+
+### Two stability tiers
+
+Both tiers are published metadata and resolve identically; they differ in what a consumer
+may rely on. The **frozen tier** — the controls, the singletons and the C++ types — accepts
+additions freely, but a removal or a shape change is a breaking change needing a version
+bump. The **unstable tier** — the map and mission visuals — is published so plugin QML
+resolves at lint time, and is explicitly exempt from the freeze: freezing a core
+controller's QML surface is not a commitment the host can credibly keep. The roster marks
+which is which.
+
+Engine-level services need no publishing. The `coloredsvg` image provider that
+`QGCColoredImage` routes through is registered on the host engine, which the plugin's QML
+is already running in.
+
 ## Plugin Lifecycle
 
 ```

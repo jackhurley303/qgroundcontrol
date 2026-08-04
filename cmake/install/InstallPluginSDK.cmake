@@ -54,6 +54,23 @@ install(DIRECTORY "${QGC_MAVLINK_GENERATED_ROOT}/"
     COMPONENT QGCPluginSDK
 )
 
+# The published QML contract (out-of-tree-plugins.md U2): the QGroundControl.PluginUI
+# module, flattened for a package that has no host resource tree to point into.
+# Composite types are shipped as bodies rather than metadata because Qt generates no
+# metadata for them at all — these are copies made by this rule from the host's own
+# sources, never hand-edited, and they exist only to be linted against. The host still
+# supplies every implementation at runtime, since a plugin's QML runs in the host's
+# engine. src/PluginSystem/CMakeLists.txt derives all three inputs from one roster.
+get_target_property(QGC_PLUGIN_UI_SDK_DIR QGCPluginUISDKModule QGC_PLUGIN_UI_SDK_DIR)
+get_target_property(QGC_PLUGIN_UI_QML_BODIES QGCPluginUISDKModule QGC_PLUGIN_UI_QML_BODIES)
+install(FILES
+    "${QGC_PLUGIN_UI_SDK_DIR}/qmldir"
+    "${QGC_PLUGIN_UI_SDK_DIR}/QGroundControl.PluginUI.qmltypes"
+    ${QGC_PLUGIN_UI_QML_BODIES}
+    DESTINATION "qml/QGroundControl/PluginUI"
+    COMPONENT QGCPluginSDK
+)
+
 install(EXPORT QGCPluginAPITargets
     FILE QGCPluginAPITargets.cmake
     NAMESPACE QGCPluginAPI::
@@ -61,10 +78,12 @@ install(EXPORT QGCPluginAPITargets
     COMPONENT QGCPluginSDK
 )
 
+set(QGC_PLUGIN_API_QML_DIR "qml")
 configure_package_config_file(
     "${CMAKE_SOURCE_DIR}/cmake/install/QGCPluginAPIConfig.cmake.in"
     "${CMAKE_BINARY_DIR}/QGCPluginAPIConfig.cmake"
     INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/QGCPluginAPI"
+    PATH_VARS QGC_PLUGIN_API_QML_DIR
 )
 
 # Tracks the SDK target's own VERSION/SOVERSION (src/PluginAPI/CMakeLists.txt), which

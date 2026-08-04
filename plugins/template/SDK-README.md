@@ -9,9 +9,35 @@ include/QGCPluginAPI/...          # public headers (QGCPlugin, QGCPluginInterfac
                                    # QGCHostServices, and the host service interfaces)
 lib/libQGCPluginAPI.*.dylib       # the versioned SDK shared library (macOS)
 lib/cmake/QGCPluginAPI/...        # find_package(QGCPluginAPI) config
+qml/QGroundControl/PluginUI/...   # the published QML vocabulary (see below)
 template/                         # a copy-and-build starting point (see below)
 SDK-README.md                     # this file
 ```
+
+## The QML vocabulary
+
+If your plugin contributes UI, its QML may use the types published by the
+`QGroundControl.PluginUI` module in `qml/`. There is nothing to link or deploy: your
+plugin's QML runs inside the host's QML engine, so the host supplies every
+implementation. The package's copy exists so you can *check* your QML without a QGC
+checkout:
+
+```bash
+qmllint --import error --missing-property error --unresolved-type error \
+        -I "$SDK/qml" MyPanel.qml
+```
+
+`find_package(QGCPluginAPI)` sets `QGCPluginAPI_QML_IMPORT_PATH` to that directory.
+
+**Pass those severity flags.** qmllint diagnoses an unresolved type, an unknown property
+or a missing import and still exits 0 by default, so a check without them prints the
+problem and passes anyway.
+
+The module has two tiers, marked in its `qmldir`. The frozen tier (controls, `ScreenTools`,
+`QGCPalette`) gains types but never loses or reshapes one without a major version bump.
+The map and mission types are published for lint-time resolvability only and are
+explicitly exempt from that freeze — use them knowing they can change. Anything not in the
+`qmldir` is not part of the contract, even if it exists in a QGC build you happen to have.
 
 ## Compatibility contract
 

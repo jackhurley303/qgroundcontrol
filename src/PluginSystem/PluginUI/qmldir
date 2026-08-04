@@ -1,0 +1,65 @@
+# QGroundControl.PluginUI — the published QML vocabulary for plugins.
+#
+# THIS FILE IS THE ROSTER. Everything else about the contract is derived from it:
+# the SDK-side qmldir, the installed control bodies and (for the C++ types listed
+# in src/PluginSystem/CMakeLists.txt) the published .qmltypes. Add a type here and
+# the package picks it up; there is no second list to keep in step.
+#
+# Entries use explicit relative paths into the owning module's resource directory
+# rather than a `prefer` line or a second qt_add_qml_module over the same sources.
+# That is deliberate and load-bearing: a shared URL makes the host's type and the
+# plugin's type ONE type (and one singleton instance), while `prefer` would leak
+# every unlisted .qml sitting in the preferred directory into this URI and defeat
+# curation. Both alternatives were measured before this shape was chosen.
+#
+# Two stability tiers, marked below. Frozen: additions are fine, removals and shape
+# changes are a breaking change needing a version bump. Unstable: published so
+# plugin QML resolves at lint time, but exempt from the freeze — a consumer accepts
+# churn. See src/PluginSystem/README.md.
+
+module QGroundControl.PluginUI
+
+# Without this every QColor-typed property on the published C++ types reports
+# unresolved-type to qmllint out of tree.
+depends QtQuick
+
+# ---------------------------------------------------------------------------
+# Frozen tier — controls
+# ---------------------------------------------------------------------------
+QGCButton 1.0 ../Controls/QGCButton.qml
+QGCColoredImage 1.0 ../Controls/QGCColoredImage.qml
+QGCComboBox 1.0 ../Controls/QGCComboBox.qml
+QGCFileDialog 1.0 ../Controls/QGCFileDialog.qml
+QGCFlickable 1.0 ../Controls/QGCFlickable.qml
+QGCFlickableScrollIndicator 1.0 ../Controls/QGCFlickableScrollIndicator.qml
+QGCLabel 1.0 ../Controls/QGCLabel.qml
+QGCListView 1.0 ../Controls/QGCListView.qml
+QGCMenu 1.0 ../Controls/QGCMenu.qml
+QGCMenuItem 1.0 ../Controls/QGCMenuItem.qml
+QGCMenuSeparator 1.0 ../Controls/QGCMenuSeparator.qml
+QGCMouseArea 1.0 ../Controls/QGCMouseArea.qml
+QGCPopupDialog 1.0 ../Controls/QGCPopupDialog.qml
+QGCPopupDialogFactory 1.0 ../Controls/QGCPopupDialogFactory.qml
+QGCTabBar 1.0 ../Controls/QGCTabBar.qml
+QGCTabButton 1.0 ../Controls/QGCTabButton.qml
+QGCTextField 1.0 ../Controls/QGCTextField.qml
+FileButton 1.0 ../Controls/FileButton.qml
+SectionHeader 1.0 ../Controls/SectionHeader.qml
+SettingsButton 1.0 ../Controls/SettingsButton.qml
+
+# ---------------------------------------------------------------------------
+# Frozen tier — singletons. Sizing and fonts; theming is the C++ QGCPalette.
+# ---------------------------------------------------------------------------
+singleton ScreenTools 1.0 ../Controls/ScreenTools.qml
+
+# ---------------------------------------------------------------------------
+# Unstable tier — map and mission visuals. Published for lint-time
+# resolvability only; freezing a core controller's QML surface is not a
+# commitment the host can credibly keep.
+# ---------------------------------------------------------------------------
+FlightMap 1.0 ../FlightMap/FlightMap.qml
+MapFitFunctions 1.0 ../FlightMap/Widgets/MapFitFunctions.qml
+MissionLineView 1.0 ../FlightMap/MapItems/MissionLineView.qml
+GeoFenceMapVisuals 1.0 ../PlanView/GeoFenceMapVisuals.qml
+MissionItemMapVisual 1.0 ../PlanView/MissionItemMapVisual.qml
+RallyPointMapVisuals 1.0 ../PlanView/RallyPointMapVisuals.qml

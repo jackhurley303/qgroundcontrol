@@ -29,6 +29,7 @@
 #include "MultiVehicleManager.h"
 #include "NTRIPManager.h"
 #include "ParameterManager.h"
+#include "PluginUIModule.h"
 #include "PositionManager.h"
 #include "QGCCommandLineParser.h"
 #include "QGCCorePlugin.h"
@@ -235,6 +236,11 @@ void QGCApplication::init()
     }
 
     LogManager::instance()->init();
+
+    // Must run before any QQmlEngine resolves an import of QGroundControl.PluginUI.
+    // Here rather than in _initForNormalAppBoot() so unit tests that stand up their
+    // own engine see the module too.
+    PluginUIModule::registerTypes();
 
     // Although this should really be in _initForNormalAppBoot putting it here allowws us to create unit tests which pop
     // up more easily

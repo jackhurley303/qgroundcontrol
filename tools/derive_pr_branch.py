@@ -105,6 +105,10 @@ PLUGIN_SDK = PRSpec(
         "cmake/modules/PluginHelpers.cmake",
         "cmake/install/InstallPluginSDK.cmake",
         "cmake/install/QGCPluginAPIConfig.cmake.in",
+        # Derives the packaged form of the QGroundControl.PluginUI module from
+        # src/PluginSystem/PluginUI/qmldir; InstallPluginSDK.cmake invokes it.
+        "tools/derive_plugin_ui_sdk.py",
+        "tools/tests/test_derive_plugin_ui_sdk.py",
         "src/QGCApplication.h",
         "src/QGCApplication.cc",
         "src/Comms/MAVLinkProtocol.h",
