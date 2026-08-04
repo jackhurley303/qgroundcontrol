@@ -16,9 +16,10 @@
 include(CMakePackageConfigHelpers)
 
 # No INCLUDES DESTINATION here: src/PluginAPI/CMakeLists.txt's own
-# target_include_directories() already sets $<INSTALL_INTERFACE:include>, the only
-# install-side include dir this target needs — adding INCLUDES DESTINATION too would
-# just duplicate that same entry in the exported target's interface.
+# target_include_directories() already sets every install-side include dir this
+# target needs (the headers dir plus, since U1, the two mavlink dirs below) via
+# $<INSTALL_INTERFACE:...> — adding INCLUDES DESTINATION too would just duplicate
+# those same entries in the exported target's interface.
 install(TARGETS QGCPluginAPI
     EXPORT QGCPluginAPITargets
     COMPONENT QGCPluginSDK
@@ -36,6 +37,20 @@ list(TRANSFORM QGC_PLUGIN_API_PUBLIC_HEADERS PREPEND "${CMAKE_SOURCE_DIR}/src/Pl
 )
 install(FILES ${QGC_PLUGIN_API_PUBLIC_HEADER_PATHS}
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/QGCPluginAPI"
+    COMPONENT QGCPluginSDK
+)
+
+# Pinned MAVLink dialect headers (out-of-tree-plugins.md U1): the generated tree
+# CPM builds for src/MAVLink/CMakeLists.txt's QGC_MAVLINK_INCLUDE_DIRS, republished
+# here so a plugin with no QGC source tree still gets the bare `#include <mavlink.h>` /
+# `<mavlink_types.h>` style plugins/qdrive/src/utilities/MAVLinkLib.h relies on. Whole
+# tree, not just the pinned dialect subdir, since QGC's own QGC_MAVLINK_DIALECT="all"
+# already generates every dialect under one root. QGC_MAVLINK_INCLUDE_DIRS is a
+# CACHE INTERNAL list (mavlink_BINARY_DIR itself, a plain CPM variable, doesn't
+# propagate to this root-level scope) — its first entry is that root include dir.
+list(GET QGC_MAVLINK_INCLUDE_DIRS 0 QGC_MAVLINK_GENERATED_ROOT)
+install(DIRECTORY "${QGC_MAVLINK_GENERATED_ROOT}/"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/QGCPluginAPI/mavlink"
     COMPONENT QGCPluginSDK
 )
 

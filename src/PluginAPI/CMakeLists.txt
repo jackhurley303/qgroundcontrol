@@ -86,10 +86,19 @@ endif()
 # in-tree shim dirs above are build-only and the packaged SDK gets its own installed
 # include/ tree instead (see InstallPluginSDK.cmake) — same <QGCPluginAPI/...> spelling
 # either way.
+#
+# The two mavlink INSTALL_INTERFACE entries (out-of-tree-plugins.md U1) mirror
+# QGC_MAVLINK_INCLUDE_DIRS' own shape (src/MAVLink/CMakeLists.txt) install-rooted
+# instead of build-rooted, so a packaged plugin's bare `#include <mavlink.h>` /
+# `<mavlink_types.h>` resolves with no QGC source tree present. No BUILD_INTERFACE
+# counterpart: in-tree SDK-tier plugins (e.g. plugins/qdrive) already consume
+# QGC_MAVLINK_INCLUDE_DIRS directly rather than through this target.
 target_include_directories(QGCPluginAPI PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<BUILD_INTERFACE:${QGC_PLUGIN_API_INCLUDE_SHIM_DIR}>
     $<INSTALL_INTERFACE:include>
+    $<INSTALL_INTERFACE:include/QGCPluginAPI/mavlink>
+    $<INSTALL_INTERFACE:include/QGCPluginAPI/mavlink/${QGC_MAVLINK_DIALECT}>
 )
 
 target_link_libraries(QGCPluginAPI
