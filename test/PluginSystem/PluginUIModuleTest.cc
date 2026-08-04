@@ -185,6 +185,94 @@ void PluginUIModuleTest::_cppSingletonIsSharedWithHost_test()
              "QGroundControl.PluginUI.QGCFileDialogController is a second instance, not the host's");
 }
 
+void PluginUIModuleTest::_facadeMembersResolve_test()
+{
+    // Every member Part 3b lists for the facade must resolve through it.
+    QScopedPointer<QObject> root(_create(R"(
+        import QtQuick
+        import QGroundControl.PluginUI
+
+        QtObject {
+            property var multiVehicleManager: QGCPluginUIGlobal.multiVehicleManager
+            property var corePlugin: QGCPluginUIGlobal.corePlugin
+            property var settingsManager: QGCPluginUIGlobal.settingsManager
+            property var pluginManager: QGCPluginUIGlobal.pluginManager
+            property var globalPalette: QGCPluginUIGlobal.globalPalette
+            property real zOrderTopMost: QGCPluginUIGlobal.zOrderTopMost
+            property var flightMapPosition: QGCPluginUIGlobal.flightMapPosition
+            property real flightMapZoom: QGCPluginUIGlobal.flightMapZoom
+        }
+    )"));
+    QVERIFY2(root, qPrintable(_lastError));
+
+    QVERIFY(root->property("multiVehicleManager").value<QObject*>() != nullptr);
+    QVERIFY(root->property("corePlugin").value<QObject*>() != nullptr);
+    QVERIFY(root->property("settingsManager").value<QObject*>() != nullptr);
+    QVERIFY(root->property("pluginManager").value<QObject*>() != nullptr);
+    QVERIFY(root->property("globalPalette").value<QObject*>() != nullptr);
+}
+
+void PluginUIModuleTest::_facadeDelegatesToHostGlobal_test()
+{
+    // The facade must forward to the one real QGroundControlQmlGlobal instance,
+    // not hold a second copy of its state — a write through either URI must be
+    // visible through the other.
+    QScopedPointer<QObject> root(_create(R"(
+        import QtQuick
+        import QGC as App
+        import QGroundControl.PluginUI as Published
+
+        QtObject {
+            function writeThroughPublished() {
+                Published.QGCPluginUIGlobal.flightMapZoom = 11
+            }
+            function readThroughHost() {
+                return App.QGroundControl.flightMapZoom
+            }
+            function writeThroughHost() {
+                App.QGroundControl.flightMapZoom = 13
+            }
+            function readThroughPublished() {
+                return Published.QGCPluginUIGlobal.flightMapZoom
+            }
+        }
+    )"));
+    QVERIFY2(root, qPrintable(_lastError));
+
+    QMetaObject::invokeMethod(root.data(), "writeThroughPublished");
+    QVariant afterPublishedWrite;
+    QMetaObject::invokeMethod(root.data(), "readThroughHost", Q_RETURN_ARG(QVariant, afterPublishedWrite));
+    QCOMPARE(afterPublishedWrite.toDouble(), 11.0);
+
+    QMetaObject::invokeMethod(root.data(), "writeThroughHost");
+    QVariant afterHostWrite;
+    QMetaObject::invokeMethod(root.data(), "readThroughPublished", Q_RETURN_ARG(QVariant, afterHostWrite));
+    QCOMPARE(afterHostWrite.toDouble(), 13.0);
+}
+
+void PluginUIModuleTest::_facadeShowMessageDialogForwardsToHostGlobal_test()
+{
+    // showMessageDialog forwards to the real instance rather than being
+    // reimplemented — proven by catching the host singleton's own signal.
+    QScopedPointer<QObject> root(_create(R"(
+        import QtQuick
+        import QGC as App
+        import QGroundControl.PluginUI as Published
+
+        QtObject {
+            property bool requested: false
+            Component.onCompleted: {
+                App.QGroundControl.showMessageDialogRequested.connect(function() { requested = true })
+                Published.QGCPluginUIGlobal.showMessageDialog(null, "title", "text", 0x00000400)
+            }
+        }
+    )"));
+    QVERIFY2(root, qPrintable(_lastError));
+
+    QVERIFY2(root->property("requested").toBool(),
+             "QGroundControl.PluginUI's showMessageDialog did not reach the host singleton's signal");
+}
+
 void PluginUIModuleTest::_cppTypesResolve_test()
 {
     for (const QString& name : kCppTypes) {

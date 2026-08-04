@@ -37,6 +37,9 @@ private slots:
     void _everyRosterTypeResolves_test();
     void _unpublishedHostTypeIsNotReachable_test();
     void _unknownTypeIsNotReachable_test();
+    void _facadeMembersResolve_test();
+    void _facadeDelegatesToHostGlobal_test();
+    void _facadeShowMessageDialogForwardsToHostGlobal_test();
 
 private:
     /// Builds \a qml against the shared engine. Returns the root object, or null

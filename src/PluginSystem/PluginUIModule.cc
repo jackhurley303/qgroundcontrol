@@ -13,6 +13,7 @@
 #include <QtQml/qqml.h>
 
 #include "PlanMasterController.h"
+#include "PluginUIGlobal.h"
 #include "QGCFileDialogController.h"
 #include "QGCPalette.h"
 
@@ -48,5 +49,19 @@ void PluginUIModule::registerTypes()
         kUri, kVersionMajor, kVersionMinor, "QGCFileDialogController", [](QQmlEngine* engine, QJSEngine*) -> QObject* {
             return engine->singletonInstance<QGCFileDialogController*>(QStringLiteral("QGC"),
                                                                        QStringLiteral("QGCFileDialogController"));
+        });
+
+    // The host-global facade. QGroundControlQmlGlobal itself is not published —
+    // only this narrow view over it. Registered under its own class name, like
+    // every other C++ type here: tools/derive_plugin_ui_sdk.py carves the SDK's
+    // .qmltypes by class name from this module's auto-registration under QGC
+    // (needed only to get an exports: line — see PluginUIGlobal.h), so the name
+    // used here must match it exactly or the SDK-side type would be unreachable
+    // under the name a plugin actually imports. create() forwards to whatever
+    // the engine already resolves as the real QGC-URI singleton rather than
+    // holding a second copy of its state.
+    qmlRegisterSingletonType<QGCPluginUIGlobal>(
+        kUri, kVersionMajor, kVersionMinor, "QGCPluginUIGlobal", [](QQmlEngine* engine, QJSEngine* jsEngine) -> QObject* {
+            return QGCPluginUIGlobal::create(engine, jsEngine);
         });
 }

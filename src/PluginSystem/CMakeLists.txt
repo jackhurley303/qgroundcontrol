@@ -31,6 +31,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         PluginRecordStore.h
         PluginTrustGate.cc
         PluginTrustGate.h
+        PluginUIGlobal.cc
+        PluginUIGlobal.h
         PluginUIModule.cc
         PluginUIModule.h
         QGCPluginLoader.cc
@@ -73,6 +75,7 @@ set(QGC_PLUGIN_UI_CPP_TYPES
     QGCPalette
     QGCFileDialogController
     PlanMasterController
+    QGCPluginUIGlobal
 )
 
 set(_qgc_plugin_ui_sdk_dir "${CMAKE_BINARY_DIR}/plugin-sdk/qml/QGroundControl/PluginUI")

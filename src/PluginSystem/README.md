@@ -236,6 +236,31 @@ Engine-level services need no publishing. The `coloredsvg` image provider that
 `QGCColoredImage` routes through is registered on the host engine, which the plugin's QML
 is already running in.
 
+### The host-global facade
+
+`QGroundControlQmlGlobal` — the app's god object, exposed to base QML as the `QGroundControl`
+singleton under URI `QGC` — is itself **not** published, and neither is the `import QGC`
+re-export that would drag along `ParameterEditorController` and every other app-level type.
+Instead [PluginUIGlobal.h](PluginUIGlobal.h) publishes `QGCPluginUIGlobal`, a narrow facade
+carrying only the members that are contract: `multiVehicleManager`, `corePlugin`,
+`settingsManager`, `pluginManager`, `globalPalette`, `zOrderTopMost`, `flightMapPosition`,
+`flightMapZoom`, `showMessageDialog`, `copyToClipboard`.
+
+It is registered under `QGroundControl.PluginUI` as `QGCPluginUIGlobal` — its own class
+name, not the host singleton's QML name (`QGroundControl`). That is a consequence of how
+the SDK derivation works, not a stylistic choice: `tools/derive_plugin_ui_sdk.py` carves
+this type's SDK-side metadata from its auto-registration under the executable's own `QGC`
+module (needed only to give it an `exports:` line at all — composite-style name aliasing
+isn't visible to the carve step), so the display name used in `PluginUIModule.cc` must match
+the class name exactly or the derived package would publish a type under a name no plugin
+actually imports.
+
+Every member **forwards** to the one real `QGroundControlQmlGlobal` singleton instance
+(located via `QQmlEngine::singletonInstance()`, the same mechanism `QGCFileDialogController`'s
+delegate lambda in [PluginUIModule.cc](PluginUIModule.cc) uses) rather than holding a second
+copy of its state — a write through either URI is visible through the other, asserted by
+`PluginUIModuleTest::_facadeDelegatesToHostGlobal_test`.
+
 ## Plugin Lifecycle
 
 ```
