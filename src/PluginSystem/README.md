@@ -237,6 +237,20 @@ Engine-level services need no publishing. The `coloredsvg` image provider that
 `QGCColoredImage` routes through is registered on the host engine, which the plugin's QML
 is already running in.
 
+### The contract watchdog
+
+There is no vtable on this surface, so a renamed property on a frozen-tier control fails
+silently at panel-load time in someone else's build, invisible to this repo's CI. CI catches
+it instead: `tools/check_plugin_ui_contract.py` diffs the freshly derived module (the same
+`qmldir` and `.qmltypes` `derive_plugin_ui_sdk.py` produces above) against a committed
+snapshot at [`test/PluginSystem/golden/`](../../test/PluginSystem/golden/), per tier — a
+frozen-tier removal or shape change fails the build; an addition passes; any change on the
+unstable tier is printed but never fails. Both artifacts are compared because Qt generates
+no `.qmltypes` metadata for composite types at all, so the `.qmltypes` diff alone cannot see
+the control roster, and the qmldir diff alone cannot see a C++ type's property/signal/method
+shape. A deliberate, version-bumped frozen-tier break updates the snapshot with
+`--update` rather than editing it by hand.
+
 ### The host-global facade
 
 `QGroundControlQmlGlobal` — the app's god object, exposed to base QML as the `QGroundControl`
