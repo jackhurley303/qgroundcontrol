@@ -26,6 +26,7 @@ class ParameterManager : public QObject
     Q_PROPERTY(bool     pendingWrites               READ pendingWrites              NOTIFY pendingWritesChanged)            ///< true: There are still pending write updates against the vehicle
     Q_PROPERTY(bool     parameterDownloadSkipped    READ parameterDownloadSkipped   NOTIFY parameterDownloadSkippedChanged) ///< true: Parameter download was intentionally skipped (e.g. flying)
     friend class ParameterEditorController;
+    friend class QGCParameterDiffServiceImpl;
 
 public:
     ParameterManager(Vehicle *vehicle);

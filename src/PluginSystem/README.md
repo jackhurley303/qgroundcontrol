@@ -163,6 +163,7 @@ registry the manager constructs (lazily, on first plugin activation) and passes 
 | `qgc.vehicles/1` | [QGCVehicleService.h](../PluginAPI/QGCVehicleService.h) | `MultiVehicleManager`: active vehicle, vehicle list, add/remove signals (vehicles handed over as `QObject*`) |
 | `qgc.missions/1` | [QGCMissionService.h](../PluginAPI/QGCMissionService.h) | Per-vehicle mission readiness (`Vehicle::initialPlanRequestComplete`) and mission snapshot to a `.plan` file via a transient `PlanMasterController` |
 | `qgc.parameters/1` | [QGCParameterService.h](../PluginAPI/QGCParameterService.h) | Per-vehicle parameter readiness (`ParameterManager::parametersReady`) and parameter snapshot to a `.params` file via `ParameterManager::writeParametersToStream` |
+| `qgc.parameterDiff/1` | [QGCParameterDiffService.h](../PluginAPI/QGCParameterDiffService.h) | Diffing a QGC- or Mission Planner-format parameter file against a vehicle and writing the accepted differences back, over `ParameterManager` — the same comparison the host's own parameter editor performs, exposed as plain `QVariantMap` entries so a plugin needs no host QML type to load a parameter file |
 | `qgc.app/1` | [QGCAppService.h](../PluginAPI/QGCAppService.h) | `QCoreApplication` identity (name/org/version) and `AppSettings` storage paths |
 
 Plugins acquire a service with `host->service(id)` and `qobject_cast` to the SDK

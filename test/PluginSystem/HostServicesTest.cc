@@ -7,12 +7,14 @@
 #include "HostServices/QGCAppServiceImpl.h"
 #include "HostServices/QGCHostServicesImpl.h"
 #include "HostServices/QGCMissionServiceImpl.h"
+#include "HostServices/QGCParameterDiffServiceImpl.h"
 #include "HostServices/QGCReplayServiceImpl.h"
 #include "HostServices/QGCTelemetryLoggingServiceImpl.h"
 #include "HostServices/QGCVehicleServiceImpl.h"
 #include "MAVLinkProtocol.h"
 #include "QGCAppService.h"
 #include "QGCMissionService.h"
+#include "QGCParameterDiffService.h"
 #include "QGCReplayService.h"
 #include "QGCTelemetryLoggingService.h"
 #include "QGCVehicleService.h"
@@ -54,6 +56,7 @@ void HostServicesTest::_defaultServicesResolveAndCast_test()
     services.registerService(QGCTelemetryLoggingServiceId, new QGCTelemetryLoggingServiceImpl(&services));
     services.registerService(QGCVehicleServiceId, new QGCVehicleServiceImpl(&services));
     services.registerService(QGCMissionServiceId, new QGCMissionServiceImpl(&services));
+    services.registerService(QGCParameterDiffServiceId, new QGCParameterDiffServiceImpl(&services));
     services.registerService(QGCAppServiceId, new QGCAppServiceImpl(&services));
 
     // Plugins acquire by id and qobject_cast to the SDK interface: the casts
@@ -73,6 +76,10 @@ void HostServicesTest::_defaultServicesResolveAndCast_test()
     QObject* missionObj = services.service(QGCMissionServiceId);
     QVERIFY(missionObj);
     QVERIFY(qobject_cast<QGCMissionService*>(missionObj));
+
+    QObject* parameterDiffObj = services.service(QGCParameterDiffServiceId);
+    QVERIFY(parameterDiffObj);
+    QVERIFY(qobject_cast<QGCParameterDiffService*>(parameterDiffObj));
 
     QObject* appObj = services.service(QGCAppServiceId);
     QVERIFY(appObj);
@@ -187,6 +194,12 @@ void HostServicesTest::_vehicleAndMissionServicesNoVehicle_test()
     QGCMissionServiceImpl missionService;
     QVERIFY(!missionService.missionReady(1));
     QVERIFY(!missionService.saveVehicleMissionToFile(1, QStringLiteral("/nonexistent/out.plan")));
+
+    QGCParameterDiffServiceImpl diffService;
+    const QVariantMap result = diffService.diffParametersFromFile(1, QStringLiteral("/nonexistent/in.params"));
+    QVERIFY(!result.value(QGCParameterDiffResult::error).toString().isEmpty());
+    QVERIFY(result.value(QGCParameterDiffResult::entries).toList().isEmpty());
+    QCOMPARE(diffService.writeParameterDiff(1, QVariantList()), -1);
 }
 
 UT_REGISTER_TEST(HostServicesTest, TestLabel::Unit)
