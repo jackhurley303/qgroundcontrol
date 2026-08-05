@@ -1,9 +1,15 @@
 # Example Plugin
 
 Demonstrates the QGC plugin architecture with a minimal working example. This is a
-**Tier SDK (Tier B)** plugin: it links only the published `QGCPluginAPI` shared library
-+ Qt, via `#include <QGCPluginAPI/...>` — no QGC internals, no `src/` include path. See
-[plugins/README.md](../README.md) for the tier model.
+**Tier SDK (Tier B)** plugin on both axes:
+
+- **C++** — links only the published `QGCPluginAPI` shared library + Qt, via
+  `#include <QGCPluginAPI/...>`; no QGC internals, no `src/` include path.
+- **QML** — resolves only against the published `QGroundControl.PluginUI` module. It does
+  **not** import `QGroundControl.Controls` or `QGroundControl`: those are host-internal and
+  no package publishes them, so a plugin built outside the QGC tree cannot resolve them.
+
+See [plugins/README.md](../README.md) for the tier model and the published QML vocabulary.
 
 ## Building
 

@@ -200,15 +200,22 @@ jobs:
       # diagnostic by default (measured, S1); the escalation flags below are what make
       # this a gate instead of a report. This is the QML half of Pillar 4's ratchet;
       # the C++ half is the ABI watchdog step above.
-      - name: Check template QML against the packaged SDK only (out-of-tree gate)
+      - name: Check plugin QML against the packaged SDK only (out-of-tree gate)
         if: matrix.build_type == 'Release'
         working-directory: ${{ runner.temp }}/build
         run: |
           QMLLINT="${QT_ROOT_DIR}/bin/qmllint"
           SDK_QML_DIR="$(pwd)/${SDK_NAME}/qml"
 
+          # Both bundled plugins are Tier SDK, so both must resolve against the
+          # published module alone. The example covers more of the frozen subset than
+          # the template does on its own (QGCLabel, QGCMouseArea, QGCPalette,
+          # ScreenTools across six files), which is what keeps this gate meaningful
+          # as the roster grows.
           "$QMLLINT" --import error --missing-property error --unresolved-type error \
-            -I "$SDK_QML_DIR" "${{ github.workspace }}/plugins/template/TemplatePanel.qml"
+            -I "$SDK_QML_DIR" \
+            "${{ github.workspace }}/plugins/template/TemplatePanel.qml" \
+            "${{ github.workspace }}"/plugins/example/*.qml
 
           # Negative control: this fixture reaches ToolStrip, a real host type
           # QGroundControl.PluginUI does not publish. A gate that doesn't reject it

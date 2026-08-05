@@ -1,6 +1,6 @@
 import QtQuick
 
-import QGroundControl.Controls
+import QGroundControl.PluginUI
 
 // Custom dock item for the fly-view plugin strip.
 //

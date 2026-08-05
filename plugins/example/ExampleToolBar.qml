@@ -10,8 +10,7 @@
 import QtQuick
 import QtQuick.Controls
 
-import QGroundControl
-import QGroundControl.Controls
+import QGroundControl.PluginUI
 
 /**
  * @brief Custom toolbar for the Example plugin

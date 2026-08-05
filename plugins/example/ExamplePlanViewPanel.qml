@@ -1,8 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 
-import QGroundControl
-import QGroundControl.Controls
+import QGroundControl.PluginUI
 
 // Plan-view panel content for the Example plugin.
 //
