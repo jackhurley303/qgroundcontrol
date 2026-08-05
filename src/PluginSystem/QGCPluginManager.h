@@ -11,6 +11,7 @@
 
 #include <QtCore/QLoggingCategory>
 #include <QtCore/QObject>
+#include <QtCore/QPointer>
 #include <QtCore/QVariantList>
 #include <QtQmlIntegration/QtQmlIntegration>
 
@@ -21,6 +22,7 @@
 Q_DECLARE_LOGGING_CATEGORY(QGCPluginManagerLog)
 
 class QGCHostServicesImpl;
+class QQmlEngine;
 
 /**
  * @class QGCPluginManager
@@ -52,6 +54,14 @@ public:
 
     /// Initialize the plugin manager and load plugins
     void init();
+
+    /// Hand over the application's QML engine, once it exists, or nullptr when it
+    /// goes away. A plugin activated after the engine has started resolving QML
+    /// registers its resources too late for the engine's cached directory listings;
+    /// the manager invalidates them at activation. Plugins loaded before the engine
+    /// is built need nothing, so this may legitimately never be called (unit tests,
+    /// headless runs).
+    void setQmlEngine(QQmlEngine *engine);
 
     /// Cleanup all loaded plugins
     void cleanup();
@@ -148,6 +158,7 @@ private:
     /// site that changes _records' active membership.
     void _notifyRecordsChanged();
     void _activateIfEnabled(PluginLoadInfo& record);
+    void _invalidateQmlCache(const PluginLoadInfo& record);
     QString _statusText(const PluginLoadInfo& record) const;
 
     QVariantList _toolMenuItems;           // List of tool menu items (from plugins)
@@ -156,6 +167,7 @@ private:
     PluginRecordStore _recordStore;        // Owns the record collection and all plugin persistence
     QGCHostServicesImpl* _hostServices = nullptr; // Service registry handed to every plugin's init()
     QGCReplayExtension* _replayExtension = nullptr; // First replay extension found across active plugins
+    QPointer<QQmlEngine> _qmlEngine;      // Application QML engine, null until it exists (see setQmlEngine)
     bool _hasLoggingController = false;   // True if any active plugin claims telemetry-logging control
 
     friend class QGCPluginManagerTest;

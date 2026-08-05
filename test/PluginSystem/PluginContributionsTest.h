@@ -16,6 +16,7 @@ private slots:
     void _badDefaultPosition_test();
     void _unknownKeysIgnored_test();
     void _flags_test();
+    void _contributesQml_test();
     void _relativeUrlsResolvedPackageRelative_test();
     void _qrcAndHostResourceUrlsPassThrough_test();
     void _relativeUrlWithoutPackageContextPassesThrough_test();

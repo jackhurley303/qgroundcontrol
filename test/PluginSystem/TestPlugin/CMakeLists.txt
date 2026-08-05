@@ -17,4 +17,6 @@ qgc_add_plugin(TestPluginFixture
     SOURCES
         TestPluginFixture.h
         TestPluginFixture.cc
+    QRC_FILES
+        TestPluginFixture.qrc
 )

@@ -285,6 +285,7 @@ bool QGCApplication::_initQmlRootWindow()
     MAVLinkProtocol::instance()->init();
     MultiVehicleManager::instance()->init();
     _qmlAppEngine = QGCCorePlugin::instance()->createQmlApplicationEngine(this);
+    QGCPluginManager::instance()->setQmlEngine(_qmlAppEngine);
     QObject::connect(_qmlAppEngine, &QQmlApplicationEngine::objectCreationFailed, this, QCoreApplication::quit,
                      Qt::QueuedConnection);
 
@@ -403,6 +404,16 @@ void QGCApplication::_missingParamsDisplay()
     showAppMessage(tr("Parameters are missing from firmware. You may be running a version of firmware which is not "
                       "fully supported or your firmware has a bug in it. Missing params: %1")
                        .arg(params));
+}
+
+void QGCApplication::setQmlAppEngine(QQmlApplicationEngine *engine)
+{
+    _qmlAppEngine = engine;
+    _mainRootWindow = nullptr;    // cached from the previous engine's root object
+    _uiTestMode = (engine != nullptr);
+    // Same hand-over _initQmlRootWindow() makes for the real engine: the plugin
+    // manager invalidates this engine's QML cache when a plugin is activated.
+    QGCPluginManager::instance()->setQmlEngine(engine);
 }
 
 QObject* QGCApplication::_rootQmlObject()

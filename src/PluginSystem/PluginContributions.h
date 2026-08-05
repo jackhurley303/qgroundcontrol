@@ -65,6 +65,12 @@ public:
     /// built-in auto-start/auto-save behaviour.
     bool controlsTelemetryLogging = false;
 
+    /// True if any contribution carries a QML url the host has to resolve — the
+    /// tool menu entry, the fly-view panel or the plan-view panel. Keep this in
+    /// step with the members above: a new url-bearing contribution left out here
+    /// renders blank when its plugin is enabled without restarting the app.
+    bool contributesQml() const;
+
     /// Parses a manifest's "contributes" object, resolving relative URLs against
     /// packageDir (empty for non-package plugins — see the URL rule above). On failure
     /// returns default-constructed contributions and, if errorOut is non-null, a

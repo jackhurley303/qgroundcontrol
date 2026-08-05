@@ -27,6 +27,7 @@ private slots:
     void _loggingControllerFromManifest_test();
     void _notifyEpilogueEmitsOnce_test();
     void _notifyEpilogueOwnsReplayExtension_test();
+    void _lateActivationResolvesPluginQml_test();
 
     void _userDirPluginNeedsApprovalFirstSight_test();
     void _approvalActivatesAndPersists_test();

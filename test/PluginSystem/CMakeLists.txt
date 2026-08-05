@@ -29,6 +29,14 @@ target_sources(${CMAKE_PROJECT_NAME}
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# Compiled into the app's own qrc:/qml tree, so it exists before any QML engine
+# does — the host half of the late-activation cache test (see the file's comment).
+qt_add_resources(${CMAKE_PROJECT_NAME} "PluginSystemTest_qml"
+    PREFIX "/qml"
+    FILES
+        PluginActivationHostProbe.qml
+)
+
 # Real SDK-tier dylib fixture backing PluginLoaderGateTest (see TestPlugin/CMakeLists.txt
 # for why it's a hand-rolled MODULE rather than a qgc_add_plugin() call).
 add_subdirectory(TestPlugin)

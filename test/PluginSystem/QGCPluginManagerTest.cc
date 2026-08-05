@@ -1,11 +1,14 @@
 #include "QGCPluginManagerTest.h"
 
 #include <QtCore/QDir>
+#include <QtCore/QFile>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QRegularExpression>
 #include <QtCore/QSettings>
 #include <QtCore/QStandardPaths>
+#include <QtQml/QQmlComponent>
+#include <QtQml/QQmlEngine>
 
 #include "Fact.h"
 #include "MultiSignalSpy.h"
@@ -104,6 +107,15 @@ PluginLoadInfo activeReplayProviderFixture(const QString& id, QObject* parent)
     info.contributions.providesReplayExtension = true;
     info.plugin = new ReplayProvidingPlugin(parent);
     return info;
+}
+
+// Path to the real TestPluginFixture dylib, injected by
+// test/PluginSystem/CMakeLists.txt as a compile definition. Its qrc registers
+// TestPluginFixturePanel.qml into /qml when the library is loaded, which is the
+// late registration _lateActivationResolvesPluginQml_test is about.
+QString testPluginFixturePath()
+{
+    return QStringLiteral(QGC_TEST_PLUGIN_FIXTURE_PATH);
 }
 
 } // namespace
@@ -519,6 +531,77 @@ void QGCPluginManagerTest::_notifyEpilogueOwnsReplayExtension_test()
     manager._notifyRecordsChanged();
     QCOMPARE(manager.replayExtension(), secondExt);
     QVERIFY_SIGNAL_COUNT(spy, "replayExtensionChanged", 1);
+}
+
+void QGCPluginManagerTest::_lateActivationResolvesPluginQml_test()
+{
+    // The regression guard for "enable a plugin without restarting and its QML
+    // renders blank, silently". Every other test here activates plugins with no QML
+    // engine in the process, which is exactly why none of them ever saw this.
+    //
+    // Pre-fix this fails with "File name case mismatch", a message Qt only produces
+    // on macOS and Windows — the stale directory listing itself is platform-neutral,
+    // but do not assume this slot has been seen to fail anywhere else.
+    QQmlEngine engine;
+    engine.addImportPath(QStringLiteral("qrc:/qml"));  // what createQmlApplicationEngine() does
+
+    // Host startup: loading QML out of qrc:/qml makes the engine enumerate that
+    // directory, and the type loader caches the listing. Anything registered into it
+    // afterwards is invisible to the engine unless the cache is invalidated — even
+    // though QFile::exists() finds it.
+    QQmlComponent hostComponent(&engine, QUrl(QStringLiteral("qrc:/qml/PluginActivationHostProbe.qml")));
+    QVERIFY2(hostComponent.isReady(), qPrintable(hostComponent.errorString()));
+    QScopedPointer<QObject> hostObject(hostComponent.create());
+    QVERIFY(hostObject);
+
+    QGCPluginManager manager;
+    manager.setQmlEngine(&engine);
+
+    // Resolve the panel from inside the contribution signal, because that is when the
+    // QML side does it: the Repeater/Loader bound to flyViewPanelItems fetches the new
+    // url synchronously within this emission. An invalidation that ran after
+    // _addContributions() would still pass a check made after activation returns.
+    bool signalled = false;
+    bool resolvedDuringEmit = false;
+    QString resolveError;
+    const QMetaObject::Connection connection =
+        QObject::connect(&manager, &QGCPluginManager::flyViewPanelItemsChanged, &manager, [&]() {
+            signalled = true;
+            QQmlComponent panel(&engine, QUrl(manager.flyViewPanelItems().constFirst().toMap()[QStringLiteral("panelUrl")].toString()));
+            resolvedDuringEmit = panel.isReady();
+            resolveError = panel.errorString();
+        });
+
+    // Positive control: the whole test is only meaningful if the fixture's resources
+    // are registered *after* the engine enumerated the directory above. If some
+    // earlier slot ever loads the fixture first, the cache is never stale and this
+    // test would pass for the wrong reason, silently and forever.
+    QVERIFY2(!QFile::exists(QStringLiteral(":/qml/TestPluginFixturePanel.qml")),
+             "fixture resources were already registered — this test no longer reproduces late registration");
+
+    PluginLoadInfo record = QGCPluginLoader::inspect(testPluginFixturePath());
+    QCOMPARE(record.state, PluginState::Discovered);
+    QCOMPARE(record.contributions.flyViewPanelItem[QStringLiteral("panelUrl")].toString(),
+             QStringLiteral("qrc:/qml/TestPluginFixturePanel.qml"));
+
+    manager._activateRecord(record);
+    // The other half of the control: activation dlopened the library, so the file is
+    // there now. The bug is that the engine cannot see it, not that it is missing.
+    QVERIFY(QFile::exists(QStringLiteral(":/qml/TestPluginFixturePanel.qml")));
+    // Load-bearing, not tidiness: the manager's destructor clears the panel list and
+    // then re-emits, and the handler would call constFirst() on an empty list.
+    QObject::disconnect(connection);
+    QCOMPARE(record.state, PluginState::Active);
+
+    QVERIFY(signalled);
+    QVERIFY2(resolvedDuringEmit, qPrintable(QStringLiteral("plugin QML did not resolve on activation: %1").arg(resolveError)));
+
+    // Invalidating the cache must not cost the host the QML it already has running:
+    // a live object's bindings have to keep re-evaluating.
+    hostObject->setProperty("scale2", 7.0);
+    QCOMPARE(hostObject->property("derived").toDouble(), 14.0);
+
+    delete record.plugin;
 }
 
 void QGCPluginManagerTest::_userDirPluginNeedsApprovalFirstSight_test()

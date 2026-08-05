@@ -296,6 +296,10 @@ copy of its state — a write through either URI is visible through the other, a
                    ├── plugin->init(host) iff a plugin instance exists (tier != Qml)
                    ├── replayExtension() queried iff the manifest declares "replay";
                    │   first plugin wins, a second is logged (qCWarning) and ignored
+                   ├── Clears the QML component cache iff an engine exists and the
+                   │   plugin contributes QML — the plugin's resources were only
+                   │   registered by the dlopen above, and must be visible before
+                   │   the contribution signals below reach QML
                    └── Publishes the manifest-derived contributions to QML
 
 2. Runtime

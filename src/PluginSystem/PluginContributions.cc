@@ -188,6 +188,11 @@ bool parsePanel(const QJsonObject &contributes, const char *key, const PluginMan
 
 } // namespace
 
+bool PluginContributions::contributesQml() const
+{
+    return !toolMenuItem.isEmpty() || !flyViewPanelItem.isEmpty() || !planViewPanelItem.isEmpty();
+}
+
 PluginContributions PluginContributions::fromManifest(const PluginManifest &manifest, const QString &packageDir, QString *errorOut)
 {
     QString error;

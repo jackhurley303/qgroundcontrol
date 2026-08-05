@@ -12,6 +12,9 @@
         "toolMenu": {
             "title": "Test Plugin Fixture",
             "source": "qrc:/nonexistent/TestPluginFixtureView.qml"
+        },
+        "flyViewPanel": {
+            "panel": "qrc:/qml/TestPluginFixturePanel.qml"
         }
     }
 }

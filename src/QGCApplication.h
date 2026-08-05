@@ -83,12 +83,7 @@ public:
     QQmlApplicationEngine *qmlAppEngine() const { return _qmlAppEngine; }
     /// UI test harnesses create their own QML engine; registering it here lets app-level
     /// messaging (showAppMessage) reach the test's MainWindow. Pass nullptr on teardown.
-    void setQmlAppEngine(QQmlApplicationEngine *engine)
-    {
-        _qmlAppEngine = engine;
-        _mainRootWindow = nullptr;    // cached from the previous engine's root object
-        _uiTestMode = (engine != nullptr);
-    }
+    void setQmlAppEngine(QQmlApplicationEngine *engine);
     /// showRebootAppMessage() debounces repeat messages (2 min). Tests reset the
     /// debounce per-test so each one deterministically sees its own message.
     void resetRebootMessageDebounce() { _lastRebootMessageTime = QTime(); }

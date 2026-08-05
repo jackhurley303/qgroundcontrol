@@ -232,6 +232,39 @@ void PluginContributionsTest::_flags_test()
     QVERIFY(contributions.toolMenuItem.isEmpty());
 }
 
+void PluginContributionsTest::_contributesQml_test()
+{
+    // What QGCPluginManager keys its activation-time QML cache invalidation on: a
+    // plugin declaring only behaviour flags gives the engine nothing to resolve.
+    QJsonObject flagsOnly;
+    flagsOnly[QStringLiteral("replay")]           = true;
+    flagsOnly[QStringLiteral("telemetryLogging")] = true;
+
+    QString error;
+    QVERIFY(!PluginContributions::fromManifest(manifestWithContributes(flagsOnly), QString(), &error).contributesQml());
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+
+    // Each of the three url-bearing contributions counts on its own.
+    QJsonObject toolMenu;
+    toolMenu[QStringLiteral("title")]  = QStringLiteral("Contrib");
+    toolMenu[QStringLiteral("source")] = QStringLiteral("qrc:/qml/ContribView.qml");
+    QJsonObject withToolMenu;
+    withToolMenu[QStringLiteral("toolMenu")] = toolMenu;
+    QVERIFY(PluginContributions::fromManifest(manifestWithContributes(withToolMenu), QString(), &error).contributesQml());
+
+    QJsonObject panel;
+    panel[QStringLiteral("panel")] = QStringLiteral("qrc:/qml/ContribPanel.qml");
+    QJsonObject withFlyView;
+    withFlyView[QStringLiteral("flyViewPanel")] = panel;
+    QVERIFY(PluginContributions::fromManifest(manifestWithContributes(withFlyView), QString(), &error).contributesQml());
+
+    QJsonObject withPlanView;
+    withPlanView[QStringLiteral("planViewPanel")] = panel;
+    QVERIFY(PluginContributions::fromManifest(manifestWithContributes(withPlanView), QString(), &error).contributesQml());
+
+    QVERIFY(!PluginContributions().contributesQml());
+}
+
 void PluginContributionsTest::_relativeUrlsResolvedPackageRelative_test()
 {
     QJsonObject toolMenu;

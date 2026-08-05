@@ -24,6 +24,7 @@
 
 #include <QtCore/QApplicationStatic>
 #include <QtCore/QDir>
+#include <QtQml/QQmlEngine>
 #include <QtQml/qqml.h>
 
 QGC_LOGGING_CATEGORY(QGCPluginManagerLog, "PluginSystem.QGCPluginManager");
@@ -80,6 +81,11 @@ void QGCPluginManager::registerQmlTypes()
 void QGCPluginManager::init()
 {
     _loadPlugins();
+}
+
+void QGCPluginManager::setQmlEngine(QQmlEngine *engine)
+{
+    _qmlEngine = engine;
 }
 
 void QGCPluginManager::cleanup()
@@ -316,7 +322,29 @@ void QGCPluginManager::_activateRecord(PluginLoadInfo& record)
         }
     }
 
+    _invalidateQmlCache(record);
     _addContributions(record);
+}
+
+void QGCPluginManager::_invalidateQmlCache(const PluginLoadInfo& record)
+{
+    // A plugin's QML arrives with its library: the resources are registered by the
+    // dlopen above, long after the engine started resolving QML. The QML type loader
+    // caches a file listing per directory, so anything registered into a directory it
+    // has already enumerated stays invisible for the life of the engine — the plugin
+    // loads, its panels render blank, and nothing reports an error. Clearing the
+    // component cache is the only invalidation Qt offers; trimComponentCache() and
+    // re-adding the import path do not clear it.
+    //
+    // Ordering is load-bearing: _addContributions() below emits the contribution
+    // signals, and the QML side fetches the new urls synchronously inside those
+    // emissions. Clearing afterwards is too late for the first render.
+    if (!_qmlEngine || !record.contributions.contributesQml()) {
+        return;
+    }
+
+    qCDebug(QGCPluginManagerLog) << "  - Clearing QML component cache for:" << record.manifest.id;
+    _qmlEngine->clearComponentCache();
 }
 
 void QGCPluginManager::_addContributions(const PluginLoadInfo& record)
