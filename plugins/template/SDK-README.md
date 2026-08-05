@@ -91,8 +91,16 @@ cmake --build build
 ```
 
 (`CMAKE_PREFIX_PATH` points `find_package(QGCPluginAPI)` at this unpacked SDK — set it
-to wherever you extracted the zip.) Then copy the built library into QGC's per-user
-plugins directory and relaunch:
+to wherever you extracted the zip.) The template already contributes a real fly-view
+panel (`TemplatePanel.qml`, bundled via `MyPlugin.qrc`) built entirely against the
+`QGroundControl.PluginUI` module documented above — lint it the same way:
+
+```bash
+qmllint --import error --missing-property error --unresolved-type error \
+        -I "$SDK/qml" template/TemplatePanel.qml
+```
+
+Then copy the built library into QGC's per-user plugins directory and relaunch:
 
 | Platform | Plugins directory |
 |---|---|

@@ -8,5 +8,12 @@
     "apiVersion": @QGCPluginAPI_VERSION_MAJOR@,
     "hostVersion": { "min": "5.0", "max": "" },
     "hostBuildId": null,
-    "contributes": {}
+    "contributes": {
+        "flyViewPanel": {
+            "panel": "qrc:/qml/TemplatePanel.qml",
+            "defaultWidth": 35,
+            "defaultHeight": 18,
+            "defaultPosition": [0.0, 0.0]
+        }
+    }
 }

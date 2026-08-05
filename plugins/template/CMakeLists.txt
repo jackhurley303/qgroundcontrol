@@ -26,6 +26,7 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
 # Major version pin: rejects an SDK whose major doesn't match what this plugin
 # was written against (D3's SOVERSION rule, surfaced through find_package()).
@@ -35,6 +36,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core)
 add_library(MyPlugin MODULE
     MyPlugin.h
     MyPlugin.cc
+    MyPlugin.qrc
 )
 
 # QGCPluginAPI_VERSION_MAJOR comes from find_package() above (QGCPluginAPIConfigVersion.cmake) —
