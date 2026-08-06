@@ -430,6 +430,16 @@ ApplicationWindow {
             anchors.fill: parent
         }
 
+        // Belt-and-braces escape hatch: if a custom toolbar fails to load, the
+        // default toolbar's visible binding below already restores the exit
+        // button, but Escape works even if that binding is ever bypassed.
+        focus: toolDrawer.visible
+        Keys.onEscapePressed: {
+            if (mainWindow.allowViewSwitch()) {
+                toolDrawer.visible = false
+            }
+        }
+
         // Custom toolbar loader (if plugin provides one)
         Loader {
             id:             toolDrawerToolbarLoader
@@ -468,7 +478,9 @@ ApplicationWindow {
             anchors.top:    parent.top
             height:         ScreenTools.toolbarHeight
             color:          qgcPal.toolbarBackground
-            visible:        toolDrawer.toolbarSource === ""
+            // Also reasserts itself if the custom toolbar failed to load, so the
+            // QGC-logo exit button is never hidden with no way to bring it back.
+            visible:        toolDrawer.toolbarSource === "" || toolDrawerToolbarLoader.status !== Loader.Ready
 
             RowLayout {
                 id:                 toolDrawerToolbarLayout
@@ -499,7 +511,7 @@ ApplicationWindow {
             id:             toolDrawerLoader
             anchors.left:   parent.left
             anchors.right:  parent.right
-            anchors.top:    toolDrawer.toolbarSource !== "" ? toolDrawerToolbarLoader.bottom : toolDrawerToolbar.bottom
+            anchors.top:    (toolDrawer.toolbarSource !== "" && toolDrawerToolbarLoader.status === Loader.Ready) ? toolDrawerToolbarLoader.bottom : toolDrawerToolbar.bottom
             anchors.bottom: parent.bottom
         }
     }
