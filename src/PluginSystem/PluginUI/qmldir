@@ -59,6 +59,7 @@ singleton ScreenTools 1.0 ../Controls/ScreenTools.qml
 # ---------------------------------------------------------------------------
 FlightMap 1.0 ../FlightMap/FlightMap.qml
 MapFitFunctions 1.0 ../FlightMap/Widgets/MapFitFunctions.qml
+MapLineArrow 1.0 ../FlightMap/MapItems/MapLineArrow.qml
 MissionLineView 1.0 ../FlightMap/MapItems/MissionLineView.qml
 GeoFenceMapVisuals 1.0 ../PlanView/GeoFenceMapVisuals.qml
 MissionItemMapVisual 1.0 ../PlanView/MissionItemMapVisual.qml
