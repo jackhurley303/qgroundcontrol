@@ -4,8 +4,8 @@
 # Packages the QGCPluginAPI SDK (D2/D3, src/PluginAPI/) as a standalone,
 # distributable artifact: public headers, the versioned shared library, a
 # CMake package config so `find_package(QGCPluginAPI)` works from a project
-# that has never cloned QGC, a copy-and-build plugin-project template, and
-# the compatibility-contract doc (plugins/template/SDK-README.md).
+# that has never cloned QGC, the bundled reference plugin (plugins/example/,
+# dual-mode), and the compatibility-contract doc (plugins/example/SDK-README.md).
 #
 # Everything here installs under one component, QGCPluginSDK, so it never
 # rides along with a plain `cmake --install .` of the app bundle — CI (and
@@ -85,6 +85,10 @@ configure_package_config_file(
     INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/QGCPluginAPI"
     PATH_VARS QGC_PLUGIN_API_QML_DIR
 )
+# QGC_APP_NAME/QGC_ORG_NAME/QGC_STABLE_BUILD are plain @VAR@ substitutions (not
+# PATH_VARS — they aren't paths), resolved from this scope's existing cache variables
+# (cmake/CustomOptions.cmake) by configure_package_config_file()'s underlying
+# configure_file() call — no extra PATH_VARS entry needed for them.
 
 # Tracks the SDK target's own VERSION/SOVERSION (src/PluginAPI/CMakeLists.txt), which
 # is itself kept in lockstep with QGC_PLUGIN_API_VERSION_MAJOR by F7's cross-reference
@@ -106,16 +110,25 @@ install(FILES
     COMPONENT QGCPluginSDK
 )
 
-# Copy-and-build starting point (plan §5 U2.7): a standalone CMake project that
-# links the SDK via find_package(QGCPluginAPI), never qgc_add_plugin() — that helper
-# is an in-tree build convenience, not part of the published package.
-install(DIRECTORY "${CMAKE_SOURCE_DIR}/plugins/template/"
-    DESTINATION "template"
+# Copy-and-build starting point (plan §5 U2.7): the one bundled reference plugin,
+# dual-mode (out-of-tree-verifier.md U1) — in-tree it builds via qgc_add_plugin() for
+# the dev loop; packaged here, it's a standalone CMake project that links the SDK via
+# find_package(QGCPluginAPI), the actual out-of-tree path a real SDK consumer uses.
+# EXCLUDEs drop the in-tree dev-loop's own docs/scripts (SDK-README.md installs
+# separately below; build.sh/build.bat/README.md assume a $QGC_ROOT/build tree that
+# doesn't exist in a standalone-extracted SDK zip, so they'd only confuse a
+# third-party author) — the package ships plugin sources plus the standalone
+# CMakeLists.txt only.
+install(DIRECTORY "${CMAKE_SOURCE_DIR}/plugins/example/"
+    DESTINATION "example"
     COMPONENT QGCPluginSDK
     PATTERN "SDK-README.md" EXCLUDE
+    PATTERN "README.md" EXCLUDE
+    PATTERN "build.sh" EXCLUDE
+    PATTERN "build.bat" EXCLUDE
 )
 
-install(FILES "${CMAKE_SOURCE_DIR}/plugins/template/SDK-README.md"
+install(FILES "${CMAKE_SOURCE_DIR}/plugins/example/SDK-README.md"
     DESTINATION "."
     COMPONENT QGCPluginSDK
 )

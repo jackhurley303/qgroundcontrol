@@ -22,7 +22,7 @@
  * `QGCTelemetryLoggingService`, `QGCVehicleService`, `QGCAppService`) are the
  * host-side services a plugin consumes; `QGCReplayExtension` is a plugin-supplied
  * live extension object. See `plugins/README.md` for the manifest/tier model this
- * API sits under, and `plugins/template/SDK-README.md` for the plugin-author-facing
+ * API sits under, and `plugins/example/SDK-README.md` for the plugin-author-facing
  * ABI compatibility contract.
  */
 

@@ -99,7 +99,6 @@ PLUGIN_SDK = PRSpec(
         "test/UnitTestFramework/BaseClasses/TempDirectoryTest.h",
         "test/UnitTestFramework/BaseClasses/CMakeLists.txt",
         "plugins/example",
-        "plugins/template",
         "plugins/README.md",
         "plugins/CMakeLists.txt",
         "cmake/modules/PluginHelpers.cmake",

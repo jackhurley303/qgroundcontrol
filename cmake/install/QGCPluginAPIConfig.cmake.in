@@ -26,4 +26,12 @@ include("${CMAKE_CURRENT_LIST_DIR}/QGCPluginAPITargets.cmake")
 # still exits 0 by default, so a check that omits them reports problems and passes.
 set_and_check(QGCPluginAPI_QML_IMPORT_PATH "@PACKAGE_QGC_PLUGIN_API_QML_DIR@")
 
+# Host identity the standalone arm of a dual-mode plugin's CMakeLists.txt needs to
+# derive its own POST_BUILD deploy dir (cmake/modules/PluginHelpers.cmake:94-106) —
+# one source of truth, so a rebrand of the host doesn't leave a plugin deploying to a
+# stale path.
+set(QGCPluginAPI_APP_NAME "@QGC_APP_NAME@")
+set(QGCPluginAPI_ORG_NAME "@QGC_ORG_NAME@")
+set(QGCPluginAPI_STABLE_BUILD "@QGC_STABLE_BUILD@")
+
 check_required_components(QGCPluginAPI)

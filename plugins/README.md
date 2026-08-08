@@ -302,20 +302,23 @@ installer UX (`.qgcplugin` → "Install from file…") lands:
 
 ## SDK Package (out-of-tree Tier B)
 
-`plugins/template/` is the source of the standalone, copy-and-build plugin project
-shipped inside the packaged SDK zip (`qgc-plugin-sdk-macos-<version>.zip`, built by
-`cmake --install <build-dir> --component QGCPluginSDK`, packed in `macos.yml`). Unlike
-`plugins/example/`, it builds with **`find_package(QGCPluginAPI)`**, not
-`qgc_add_plugin()` — that helper is an in-tree build convenience, not part of the
-published package, so the template proves the actual out-of-tree path a real SDK
-consumer uses. See `plugins/template/SDK-README.md` (installed at the package root) for
-the full compatibility contract and ABI rules.
+`plugins/example/` is the one bundled reference plugin, and it's dual-mode
+(out-of-tree-verifier.md U1): in-tree it builds via `qgc_add_plugin()` for the dev loop
+(below); packaged inside the SDK zip (`qgc-plugin-sdk-macos-<version>.zip`, built by
+`cmake --install <build-dir> --component QGCPluginSDK`, packed in `macos.yml`) it
+builds standalone with **`find_package(QGCPluginAPI)`**, never `qgc_add_plugin()` —
+that helper is an in-tree build convenience, not part of the published package, so this
+is the actual out-of-tree path a real SDK consumer uses. See
+`plugins/example/SDK-README.md` (installed at the package root) for the full
+compatibility contract and ABI rules.
 
 ## Example Plugin
 
-See `example/` for a minimal working `TIER SDK` plugin: adds "Example Plugin" to the
-Tools menu, shows a custom QML view, demonstrates resource bundling and a host-service
-lookup shape (`ExampleRuntimePlugin::init()`).
+See `example/` for a working `TIER SDK` plugin: adds "Example Plugin" to the Tools
+menu, contributes fly-view and plan-view panels, shows a custom QML view, demonstrates
+resource bundling and a host-service lookup shape (`ExampleRuntimePlugin::init()`). It
+is the SDK's single bundled reference plugin and doubles as the out-of-tree copy-and-build
+starting point above.
 
 ## Troubleshooting
 

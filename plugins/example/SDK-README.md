@@ -10,7 +10,7 @@ include/QGCPluginAPI/...          # public headers (QGCPlugin, QGCPluginInterfac
 lib/libQGCPluginAPI.*.dylib       # the versioned SDK shared library (macOS)
 lib/cmake/QGCPluginAPI/...        # find_package(QGCPluginAPI) config
 qml/QGroundControl/PluginUI/...   # the published QML vocabulary (see below)
-template/                         # a copy-and-build starting point (see below)
+example/                          # a copy-and-build starting point (see below)
 SDK-README.md                     # this file
 ```
 
@@ -86,18 +86,20 @@ QGC maintainers share one discipline:
 ## Try it
 
 ```bash
-cmake -B build -S template -DCMAKE_PREFIX_PATH=$(pwd)
+cmake -B build -S example -DCMAKE_PREFIX_PATH=$(pwd)
 cmake --build build
 ```
 
 (`CMAKE_PREFIX_PATH` points `find_package(QGCPluginAPI)` at this unpacked SDK — set it
-to wherever you extracted the zip.) The template already contributes a real fly-view
-panel (`TemplatePanel.qml`, bundled via `MyPlugin.qrc`) built entirely against the
+to wherever you extracted the zip.) The example already contributes a real fly-view and
+plan-view panel plus a tool-menu page (`ExampleFlyViewPanel.qml`,
+`ExamplePlanViewPanel.qml`, `ExamplePluginView.qml`, and their dock/toolbar
+counterparts, bundled via `ExamplePlugin.qrc`) built entirely against the
 `QGroundControl.PluginUI` module documented above — lint it the same way:
 
 ```bash
 qmllint --import error --missing-property error --unresolved-type error \
-        -I "$SDK/qml" template/TemplatePanel.qml
+        -I "$SDK/qml" example/*.qml
 ```
 
 Then copy the built library into QGC's per-user plugins directory and relaunch:
