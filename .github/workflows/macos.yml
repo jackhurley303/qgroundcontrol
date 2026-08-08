@@ -169,21 +169,31 @@ jobs:
           echo "SDK_ZIP=${SDK_NAME}.zip" >> "$GITHUB_ENV"
           echo "SDK_NAME=${SDK_NAME}" >> "$GITHUB_ENV"
 
-      # Plugin SDK ABI watchdog: the permanent "different-SDK-zip-host" proof. Builds
-      # plugins/example/ standalone against the SDK just packaged above and loads it
-      # through PluginLoaderGateTest's env-var-gated slot; a real ABI break here crashes
-      # loudly rather than passing silently, so this must run on PRs too, not just
-      # Release pushes.
-      - name: Build SDK-example plugin against the just-packaged SDK
+      # Out-of-tree verifier (out-of-tree-verifier.md U3): the single plugin-agnostic
+      # gate that replaces the two hand-maintained inline steps this comment used to
+      # sit above (a bespoke standalone build, a bespoke qmllint invocation + negative
+      # control). Same proof, one SDK-shipped implementation: builds plugins/example
+      # standalone against the just-packaged SDK with no QGC source in its scratch
+      # tree, then runs its Qt-component, QML-lint and negative-control axes per
+      # plugins/example/plugin-verify.json. --keep retains the scratch tree (and the
+      # built artifact) past a successful run, since the ABI watchdog step below needs
+      # the dylib to still exist; --report-json is how it hands that path over.
+      - name: Verify plugin builds and lints out-of-tree (plugins/example)
         if: matrix.build_type == 'Release'
         working-directory: ${{ runner.temp }}/build
         run: |
-          cmake -B example-build -S "${SDK_NAME}/example" \
-            -DCMAKE_PREFIX_PATH="$(pwd)/${SDK_NAME};${QT_ROOT_DIR}" \
-            -DCMAKE_TOOLCHAIN_FILE="${QT_ROOT_DIR}/lib/cmake/Qt6/qt.toolchain.cmake"
-          cmake --build example-build
-          echo "TEMPLATE_PLUGIN_PATH=$(pwd)/example-build/libExamplePlugin.dylib" >> "$GITHUB_ENV"
+          python3 "${{ github.workspace }}/tools/verify_plugin_out_of_tree.py" \
+            "${{ github.workspace }}/plugins/example" \
+            --sdk "$(pwd)/${SDK_NAME}" \
+            --qt-root "${QT_ROOT_DIR}" \
+            --keep \
+            --report-json out-of-tree-report.json
+          echo "TEMPLATE_PLUGIN_PATH=$(python3 -c 'import json; print(json.load(open("out-of-tree-report.json"))["artifact"])')" >> "$GITHUB_ENV"
 
+      # Plugin SDK ABI watchdog: the permanent "different-SDK-zip-host" proof. Loads
+      # the verifier's standalone-built artifact through PluginLoaderGateTest's
+      # env-var-gated slot; a real ABI break here crashes loudly rather than passing
+      # silently, so this must run on PRs too, not just Release pushes.
       - name: Run SDK-example ABI watchdog (PluginLoaderGateTest)
         if: matrix.build_type == 'Release'
         working-directory: ${{ runner.temp }}/build
@@ -192,38 +202,6 @@ jobs:
         run: |
           "${{ matrix.build_type }}/QGroundControl.app/Contents/MacOS/QGroundControl" \
             --unittest:PluginLoaderGateTest --unittest-output:sdk-example-plugin-results.xml
-
-      # Out-of-tree QML gate (out-of-tree-plugins.md U6): proves the example plugin's
-      # own panels lint clean against nothing but the just-packaged SDK's QML dir — no
-      # QGC source tree present — and that the gate actually rejects QML reaching
-      # outside the published subset (the negative control). qmllint exits 0 on every
-      # diagnostic by default (measured, S1); the escalation flags below are what make
-      # this a gate instead of a report. This is the QML half of Pillar 4's ratchet;
-      # the C++ half is the ABI watchdog step above.
-      - name: Check plugin QML against the packaged SDK only (out-of-tree gate)
-        if: matrix.build_type == 'Release'
-        working-directory: ${{ runner.temp }}/build
-        run: |
-          QMLLINT="${QT_ROOT_DIR}/bin/qmllint"
-          SDK_QML_DIR="$(pwd)/${SDK_NAME}/qml"
-
-          # plugins/example is the SDK's one bundled reference plugin (Tier SDK,
-          # out-of-tree-verifier.md U1) — six QML files covering the frozen subset
-          # (QGCLabel, QGCMouseArea, QGCPalette, ScreenTools), which is what keeps
-          # this gate meaningful as the roster grows.
-          "$QMLLINT" --import error --missing-property error --unresolved-type error \
-            -I "$SDK_QML_DIR" \
-            "${{ github.workspace }}"/plugins/example/*.qml
-
-          # Negative control: this fixture reaches ToolStrip, a real host type
-          # QGroundControl.PluginUI does not publish. A gate that doesn't reject it
-          # is decorative.
-          if "$QMLLINT" --import error --missing-property error --unresolved-type error \
-               -I "$SDK_QML_DIR" \
-               "${{ github.workspace }}/tools/fixtures/plugin_ui_gate_negative_control.qml"; then
-            echo "::error::qmllint negative control passed (exit 0) — the out-of-subset type was not rejected; the gate is decorative"
-            exit 1
-          fi
 
       # QML contract watchdog (out-of-tree-plugins.md U5): the QML analogue of the
       # ABI watchdog above. There is no vtable on this surface, so a renamed
