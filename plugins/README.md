@@ -312,6 +312,12 @@ is the actual out-of-tree path a real SDK consumer uses. See
 `plugins/example/SDK-README.md` (installed at the package root) for the full
 compatibility contract and ABI rules.
 
+Proving that out-of-tree build (and its QML/test/symbol axes) is
+`tools/verify_plugin_out_of_tree.py`, installed into the package at `<sdk>/tools/` — the
+same plugin-agnostic tool CI runs against `plugins/example`, driven by its
+`plugin-verify.json` manifest. It has no plugin name or per-plugin branch in it, so any
+plugin (out-of-tree QDrive included) can adopt it by adding its own manifest.
+
 ## Example Plugin
 
 See `example/` for a working `TIER SDK` plugin: adds "Example Plugin" to the Tools

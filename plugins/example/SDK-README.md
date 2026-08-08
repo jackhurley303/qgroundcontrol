@@ -11,6 +11,8 @@ lib/libQGCPluginAPI.*.dylib       # the versioned SDK shared library (macOS)
 lib/cmake/QGCPluginAPI/...        # find_package(QGCPluginAPI) config
 qml/QGroundControl/PluginUI/...   # the published QML vocabulary (see below)
 example/                          # a copy-and-build starting point (see below)
+tools/verify_plugin_out_of_tree.py  # the out-of-tree gate (see Try it below)
+tools/plugin-verify.schema.json     # its manifest schema
 SDK-README.md                     # this file
 ```
 
@@ -20,18 +22,22 @@ If your plugin contributes UI, its QML may use the types published by the
 `QGroundControl.PluginUI` module in `qml/`. There is nothing to link or deploy: your
 plugin's QML runs inside the host's QML engine, so the host supplies every
 implementation. The package's copy exists so you can *check* your QML without a QGC
-checkout:
+checkout — but don't lint it by hand; use `tools/verify_plugin_out_of_tree.py` (see
+*Try it* below), which is the actual local gate and also closes a gap a bare `qmllint`
+call cannot:
 
-```bash
-qmllint --import error --missing-property error --unresolved-type error \
-        -I "$SDK/qml" MyPanel.qml
-```
-
-`find_package(QGCPluginAPI)` sets `QGCPluginAPI_QML_IMPORT_PATH` to that directory.
-
-**Pass those severity flags.** qmllint diagnoses an unresolved type, an unknown property
-or a missing import and still exits 0 by default, so a check without them prints the
-problem and passes anyway.
+**A plain `qmllint` run does not isolate you from your own Qt install.** If your machine
+happens to have a Qt module installed that the SDK does not guarantee (`Qt5Compat`,
+`QtCharts`, ...), an ordinary `qmllint -I "$SDK/qml" MyPanel.qml` resolves it from your
+default import path and passes — then fails for the next person whose Qt is leaner, or in
+CI. The verifier avoids this by running `qmllint --bare` (no default import directories)
+against `$SDK/qml` plus a **staged, tool-published allowlist** of the Qt QML modules the
+SDK actually guarantees — not by inspecting your Qt install for "guarantee" metadata,
+because there is none. The C++ side gets the same treatment: your plugin's declared
+`find_package(Qt6 COMPONENTS ...)` is diffed against that same guaranteed set as a static
+text check, no second Qt install required. The guaranteed sets are versioned inside the
+tool (`GUARANTEED_QT_COMPONENTS`, `GUARANTEED_QML_MODULES` in
+`tools/verify_plugin_out_of_tree.py`).
 
 The module has two tiers, marked in its `qmldir`. The frozen tier (controls, `ScreenTools`,
 `QGCPalette`) gains types but never loses or reshapes one without a major version bump.
@@ -85,24 +91,33 @@ QGC maintainers share one discipline:
 
 ## Try it
 
+The example already contributes a real fly-view and plan-view panel plus a tool-menu
+page (`ExampleFlyViewPanel.qml`, `ExamplePlanViewPanel.qml`, `ExamplePluginView.qml`,
+and their dock/toolbar counterparts, bundled via `ExamplePlugin.qrc`) built entirely
+against the `QGroundControl.PluginUI` module documented above. `tools/verify_plugin_out_of_tree.py`
+(installed alongside its schema at `<sdk>/tools/`) is the one command that builds it
+standalone, runs its test/forbidden-symbol/QML axes (each claimed or declared N/A in
+`plugin-verify.json`), and lints its QML with the isolation described above — run it
+from the unpacked SDK root:
+
+```bash
+python3 tools/verify_plugin_out_of_tree.py example --sdk "$(pwd)" --qt-root <your Qt prefix>
+```
+
+Every plugin the tool verifies needs a `plugin-verify.json` manifest beside its
+`CMakeLists.txt` (see `example/plugin-verify.json`) — an unknown key, a missing axis, or
+an axis that resolves to zero work is an error, never a silent pass. Add `--deploy` to
+copy the built artifact into QGC's per-user plugins directory on success, or build and
+copy it manually:
+
 ```bash
 cmake -B build -S example -DCMAKE_PREFIX_PATH=$(pwd)
 cmake --build build
 ```
 
 (`CMAKE_PREFIX_PATH` points `find_package(QGCPluginAPI)` at this unpacked SDK — set it
-to wherever you extracted the zip.) The example already contributes a real fly-view and
-plan-view panel plus a tool-menu page (`ExampleFlyViewPanel.qml`,
-`ExamplePlanViewPanel.qml`, `ExamplePluginView.qml`, and their dock/toolbar
-counterparts, bundled via `ExamplePlugin.qrc`) built entirely against the
-`QGroundControl.PluginUI` module documented above — lint it the same way:
-
-```bash
-qmllint --import error --missing-property error --unresolved-type error \
-        -I "$SDK/qml" example/*.qml
-```
-
-Then copy the built library into QGC's per-user plugins directory and relaunch:
+to wherever you extracted the zip.) Then copy the built library into QGC's per-user
+plugins directory and relaunch:
 
 | Platform | Plugins directory |
 |---|---|
