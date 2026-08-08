@@ -1,0 +1,22 @@
+{
+  "artifact_name": "ExamplePlugin",
+  "qt_components": ["Core"],
+  "qml": {
+    "enabled": true,
+    "source_roots": ["."],
+    "own_module": null,
+    "accepted_triage": []
+  },
+  "tests": {
+    "enabled": false,
+    "reason": "The reference plugin ships no test suite of its own; its C++ axis is proven by the ABI watchdog, which loads this plugin's standalone-built artifact through PluginLoaderGateTest in the host."
+  },
+  "forbidden_symbols": {
+    "enabled": false,
+    "reason": "This plugin links nothing but QGCPluginAPI and Qt6::Core, so there is no host-supplied symbol it could start expecting at load time. A plugin that vendors headers-only third-party code (a MAVLink dialect, say) declares that here instead."
+  },
+  "missing_dependency_control": {
+    "enabled": false,
+    "reason": "The only SDK artifact this plugin consumes is the QGCPluginAPI library itself, and withholding that removes the find_package() the standalone arm is built on — a control that would fail before reaching the axis it claims to test. A plugin that also consumes packaged headers points this at them."
+  }
+}

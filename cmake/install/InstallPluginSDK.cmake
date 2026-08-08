@@ -133,6 +133,22 @@ install(FILES "${CMAKE_SOURCE_DIR}/plugins/example/SDK-README.md"
     COMPONENT QGCPluginSDK
 )
 
+# The out-of-tree gate itself (out-of-tree-verifier.md U2), so a third-party author runs
+# the same tool CI runs rather than a description of it. It is stdlib-only and single-file
+# precisely so it can ship here: nothing else under tools/ comes with it, and there is no
+# QGC checkout to fall back on. PROGRAMS, not FILES, so the shebang is usable. The schema
+# ships beside it as the human- and editor-readable statement of the manifest contract; the
+# tool validates manifests itself and never depends on it being present.
+install(PROGRAMS "${CMAKE_SOURCE_DIR}/tools/verify_plugin_out_of_tree.py"
+    DESTINATION "tools"
+    COMPONENT QGCPluginSDK
+)
+
+install(FILES "${CMAKE_SOURCE_DIR}/tools/plugin-verify.schema.json"
+    DESTINATION "tools"
+    COMPONENT QGCPluginSDK
+)
+
 # CI reads this to name qgc-plugin-sdk-<platform>-<version>.zip without re-deriving
 # `git describe` in the workflow (and risking divergence from what this configure run
 # already computed via cmake/modules/Git.cmake).

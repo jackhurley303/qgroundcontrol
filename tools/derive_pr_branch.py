@@ -108,6 +108,11 @@ PLUGIN_SDK = PRSpec(
         # src/PluginSystem/PluginUI/qmldir; InstallPluginSDK.cmake invokes it.
         "tools/derive_plugin_ui_sdk.py",
         "tools/tests/test_derive_plugin_ui_sdk.py",
+        # The out-of-tree gate. Ships inside the SDK package (InstallPluginSDK.cmake), so a
+        # third-party author runs the same tool CI does; the schema is its manifest contract.
+        "tools/verify_plugin_out_of_tree.py",
+        "tools/plugin-verify.schema.json",
+        "tools/tests/test_verify_plugin_out_of_tree.py",
         "src/QGCApplication.h",
         "src/QGCApplication.cc",
         "src/Comms/MAVLinkProtocol.h",
@@ -163,7 +168,15 @@ PLUGIN_SDK = PRSpec(
         "src/qgc_version.h.in",
         "test/CMakeLists.txt",
     ),
-    patch_paths=(".github/workflows/macos.yml",),
+    patch_paths=(
+        ".github/workflows/macos.yml",
+        # Shared with every other hook in the file, so it is patched rather than taken
+        # wholesale. The delta this PR needs is the schema hook for plugin-verify.json —
+        # without it the branch would carry the schema and the manifests with nothing
+        # enforcing them. NB the patch is the whole source_ref→mainline delta on this path,
+        # so a second fork-only hook landing here would ride along and need splitting out.
+        ".pre-commit-config.yaml",
+    ),
     delete_paths=("plugins/qdrive", ".gitmodules"),
     seam_tokens=("QGCPluginManager", "QGroundControl.pluginManager"),
     seam_exempt=(

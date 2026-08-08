@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "QGC plugin out-of-tree verification manifest",
+  "description": "Declares every axis of tools/verify_plugin_out_of_tree.py for one plugin. No key has a default: an axis a plugin does not need is declared off with a reason, never omitted, because a missing key would silently reduce the gate rather than fail it. The verifier applies these same rules itself at runtime — this schema is the editor/pre-commit half of that, not its only enforcement.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_name",
+    "qt_components",
+    "qml",
+    "tests",
+    "forbidden_symbols",
+    "missing_dependency_control"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference (ignored by the verifier)"
+    },
+    "artifact_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The CMake target name. Also names the plugin's resource file (<artifact_name>.qrc) and its built artifact (lib<artifact_name>.dylib / .so, <artifact_name>.dll)."
+    },
+    "qt_components": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "The Qt6 components the plugin's find_package(Qt6 ... COMPONENTS ...) call asks for. Checked against that call (so this cannot drift) and against the set the SDK guarantees (so a component that only exists on the developer's machine fails here)."
+    },
+    "qml": {
+      "description": "The QML axis: lint every .qml the plugin ships against the published SDK module and the guaranteed Qt subset only, and close the .qrc over the source tree both ways. The two QML negative controls run with it, and are skipped with it.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "source_roots", "own_module", "accepted_triage"],
+          "properties": {
+            "enabled": { "const": true },
+            "source_roots": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 },
+              "description": "Directories, relative to the plugin root, whose every .qml file must be shipped by the .qrc. The plugin's own build tree is skipped."
+            },
+            "own_module": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "description": "The plugin's own QML module URI (qt_add_qml_module), staged onto the lint import path from the standalone build tree; null when the plugin registers no module. Explicitly null rather than absent, so the decision is recorded."
+            },
+            "accepted_triage": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["pattern", "reason"],
+                "properties": {
+                  "pattern": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Regex matched against qmllint's 'Error: ...' lines, after paths are mapped back to real source files. Keep it narrow — a broad pattern swallows real diagnostics."
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Why this diagnostic is accepted rather than fixed or published."
+                  }
+                }
+              },
+              "description": "Named qmllint diagnostics accepted for this plugin. An entry that matches nothing in a run is an error, so the list can only shrink."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "reason"],
+          "properties": {
+            "enabled": { "const": false },
+            "reason": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "tests": {
+      "description": "The standalone test axis: build every test target, assert the registered count matches what the plugin's own CMake declares, then run them.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "cmake_lists", "count_pattern"],
+          "properties": {
+            "enabled": { "const": true },
+            "cmake_lists": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Path, relative to the plugin root, of the CMakeLists.txt that registers the tests."
+            },
+            "count_pattern": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Multiline regex whose match count is the expected number of tests. Deriving the count rather than hardcoding it means adding a test cannot leave the check behind."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "reason"],
+          "properties": {
+            "enabled": { "const": false },
+            "reason": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "forbidden_symbols": {
+      "description": "Undefined symbols the standalone artifact must not have — the check that a plugin has not started expecting the host to supply something at load time.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "patterns", "reason"],
+          "properties": {
+            "enabled": { "const": true },
+            "patterns": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 },
+              "description": "Case-insensitive regexes matched against `nm -u` output."
+            },
+            "reason": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "reason"],
+          "properties": {
+            "enabled": { "const": false },
+            "reason": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "missing_dependency_control": {
+      "description": "Negative control for the C++ axis: remove one thing the SDK ships that this plugin depends on, and prove the standalone build notices. A plugin whose only SDK dependency is the library itself declares this off.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "sdk_subpath", "build_target", "expected_pattern"],
+          "properties": {
+            "enabled": { "const": true },
+            "sdk_subpath": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Path within the SDK prefix to withhold. The verifier errors if it does not exist, so the control cannot quietly remove nothing."
+            },
+            "build_target": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Target to build against the crippled SDK when configure alone still succeeds."
+            },
+            "expected_pattern": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Regex the failure output must match. A non-zero exit alone is not evidence — any unrelated breakage produces one."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "reason"],
+          "properties": {
+            "enabled": { "const": false },
+            "reason": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -129,6 +129,14 @@ repos:
         name: Validate .github/build-config.json
         files: ^\.github/build-config\.json$
         args: ['--schemafile', '.github/build-config.schema.json']
+      # Every plugin's out-of-tree verification manifest. The verifier applies these rules
+      # itself at runtime too (it must — it runs from an SDK zip with no pre-commit); this
+      # hook is what catches a malformed manifest before a build cycle is spent on it.
+      - id: check-jsonschema
+        name: Validate plugin-verify.json manifests
+        alias: check-jsonschema-plugin-verify
+        files: ^plugins/[^/]+/plugin-verify\.json$
+        args: ['--schemafile', 'tools/plugin-verify.schema.json']
 
   # Renovate config validation (schema-checks the active renovate.json)
   - repo: https://github.com/renovatebot/pre-commit-hooks
