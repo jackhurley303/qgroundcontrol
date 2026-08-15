@@ -97,7 +97,7 @@ SettingsPage {
 
                     QGCLabel {
                         Layout.fillWidth:   true
-                        text:               modelData.tier + " — " + modelData.description
+                        text:               modelData.description
                         wrapMode:           Text.WordWrap
                         font.pointSize:     ScreenTools.smallFontPointSize
                         visible:            modelData.description.length > 0
@@ -105,7 +105,10 @@ SettingsPage {
 
                     QGCLabel {
                         Layout.fillWidth:   true
-                        text:               modelData.statusText
+                        // Tier and source lead because they say what kind of plugin this
+                        // is and who manages it — the two facts that decide which of the
+                        // controls to the right apply to it.
+                        text:               modelData.tier + " · " + modelData.sourceText + " · " + modelData.statusText
                         wrapMode:           Text.WordWrap
                         font.pointSize:     ScreenTools.smallFontPointSize
                         color: {
@@ -126,11 +129,19 @@ SettingsPage {
 
                     QGCLabel {
                         Layout.fillWidth:   true
-                        text:               qsTr("Build: %1").arg(modelData.buildMarker)
+                        text:               modelData.buildText
                         wrapMode:           Text.WordWrap
                         font.pointSize:     ScreenTools.smallFontPointSize
                         color:              qgcPal.text
-                        visible:            modelData.buildMarker.length > 0
+                        visible:            modelData.buildText.length > 0
+
+                        // The full marker is the identity; the line above is only its
+                        // readable half, so keep the string you would actually diff
+                        // against a log line reachable.
+                        ToolTip.text:       modelData.buildMarker
+                        ToolTip.visible:    markerHover.hovered && modelData.buildMarker.length > 0
+
+                        HoverHandler { id: markerHover }
                     }
                 }
 

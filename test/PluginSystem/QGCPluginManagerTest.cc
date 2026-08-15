@@ -5,6 +5,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
+#include <QtCore/QLocale>
 #include <QtCore/QPointer>
 #include <QtCore/QRegularExpression>
 #include <QtCore/QSettings>
@@ -398,6 +399,72 @@ void QGCPluginManagerTest::_knownPluginsReflectsRecords_test()
     const QVariantMap incompatibleInfo = known[1].toMap();
     QCOMPARE(incompatibleInfo["state"].toString(), QStringLiteral("Incompatible"));
     QVERIFY(incompatibleInfo["statusText"].toString().contains(QStringLiteral("requires host version >= 9.9")));
+}
+
+// The three sources differ in what a user can do with the plugin, so each has to be
+// named from the record alone: a bundled one is neither removable nor rebuildable, an
+// installed package is removable, a dev-loop bare dylib is the build system's.
+// isUserDirPlugin() compares directories only, so these fixtures need no files on disk.
+void QGCPluginManagerTest::_sourceTextNamesWhoManagesThePlugin_test()
+{
+    const QDir userDir(PluginInstaller::userPluginsDir());
+    QGCPluginManager manager;
+
+    PluginLoadInfo bundled = discoveredFixture(QStringLiteral("org.test.bundled"), QStringLiteral("Bundled"));
+    QCOMPARE(manager._sourceText(bundled), QStringLiteral("Bundled"));
+
+    PluginLoadInfo devLoop = discoveredFixture(QStringLiteral("org.test.devloop"), QStringLiteral("Dev Loop"));
+    devLoop.filePath = userDir.filePath(QStringLiteral("libDevLoop.dylib"));
+    QCOMPARE(manager._sourceText(devLoop), QStringLiteral("Development build"));
+
+    // A package is identified by packageDir, and its filePath points at the binary
+    // *inside* it — so the record must be judged by the container, not the binary.
+    PluginLoadInfo installed = discoveredFixture(QStringLiteral("org.test.installed"), QStringLiteral("Installed"));
+    installed.packageDir = userDir.filePath(QStringLiteral("org.test.installed"));
+    installed.filePath = installed.packageDir + QStringLiteral("/bin/macos-universal/libInstalled.dylib");
+    QCOMPARE(manager._sourceText(installed), QStringLiteral("Installed"));
+}
+
+// An absent build line must mean "no build can be named here", never "this plugin
+// declined to say" — the two were indistinguishable before, which is how a stale
+// dylib from a deleted plugin sat in the list looking like every other row.
+void QGCPluginManagerTest::_buildTextOnlyWhereABuildCanBeNamed_test()
+{
+    QGCPluginManager manager;
+
+    // Never activated: the marker is only ever read off a mapped image, so its
+    // absence here says nothing about the build.
+    PluginLoadInfo disabled = discoveredFixture(QStringLiteral("org.test.disabled"), QStringLiteral("Disabled"));
+    disabled.state = PluginState::Disabled;
+    QVERIFY(manager._buildText(disabled).isEmpty());
+
+    // Tier qml has no binary at all to carry a marker.
+    PluginLoadInfo qmlTier = discoveredFixture(QStringLiteral("org.test.qml"), QStringLiteral("Qml Tier"));
+    qmlTier.state = PluginState::Active;
+    qmlTier.manifest.tier = PluginManifest::Tier::Qml;
+    QVERIFY(manager._buildText(qmlTier).isEmpty());
+
+    // Active with a binary but no marker symbol: built without the marker, and that
+    // must be visible rather than silently absent.
+    PluginLoadInfo unmarked = discoveredFixture(QStringLiteral("org.test.unmarked"), QStringLiteral("Unmarked"));
+    unmarked.state = PluginState::Active;
+    QCOMPARE(manager._buildText(unmarked), QStringLiteral("Build unknown"));
+
+    // A real marker renders its leading timestamp and drops the random tail.
+    PluginLoadInfo marked = discoveredFixture(QStringLiteral("org.test.marked"), QStringLiteral("Marked"));
+    marked.state = PluginState::Active;
+    marked.buildMarker = QStringLiteral("20260815125124-uAtSAUK9gtc2S2fv");
+    const QString expected = QObject::tr("Built %1").arg(
+        QLocale().toString(QDateTime(QDate(2026, 8, 15), QTime(12, 51, 24)), QLocale::ShortFormat));
+    QCOMPARE(manager._buildText(marked), expected);
+    QVERIFY(!manager._buildText(marked).contains(QStringLiteral("uAtSAUK9gtc2S2fv")));
+
+    // An unparseable marker falls back to showing it whole rather than dropping the
+    // only build information there is.
+    PluginLoadInfo odd = discoveredFixture(QStringLiteral("org.test.odd"), QStringLiteral("Odd"));
+    odd.state = PluginState::Active;
+    odd.buildMarker = QStringLiteral("not-a-timestamp");
+    QCOMPARE(manager._buildText(odd), QStringLiteral("Build: not-a-timestamp"));
 }
 
 void QGCPluginManagerTest::_contributionsAddedAndRemoved_test()

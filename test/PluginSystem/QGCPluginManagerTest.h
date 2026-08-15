@@ -23,6 +23,8 @@ private slots:
     void _reloadUnknownId_test();
     void _reloadKeepsIdentityOnFailedInspect_test();
     void _knownPluginsReflectsRecords_test();
+    void _sourceTextNamesWhoManagesThePlugin_test();
+    void _buildTextOnlyWhereABuildCanBeNamed_test();
     void _contributionsAddedAndRemoved_test();
     void _loggingControllerFromManifest_test();
     void _notifyEpilogueEmitsOnce_test();

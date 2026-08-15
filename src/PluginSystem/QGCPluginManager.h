@@ -173,6 +173,13 @@ private:
     /// build is what is executing.
     bool _mapBinaryAndDetectStaleImage(const QString& filePath);
     QString _statusText(const PluginLoadInfo& record) const;
+    /// Where the plugin came from, in the terms that decide what a user can do with
+    /// it: an installed package is removable, a dev-loop bare dylib is the build
+    /// system's to replace, a bundle-shipped one is neither.
+    QString _sourceText(const PluginLoadInfo& record) const;
+    /// The build marker rendered for display — its leading timestamp as a local
+    /// date/time. Empty when the record has no binary whose build could be named.
+    QString _buildText(const PluginLoadInfo& record) const;
 
     QVariantList _toolMenuItems;           // List of tool menu items (from plugins)
     QVariantList _flyViewPanelItems;       // List of fly-view panel items (from plugins)

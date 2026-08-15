@@ -23,8 +23,10 @@
 #include "HostServices/QGCVehicleServiceImpl.h"
 
 #include <QtCore/QApplicationStatic>
+#include <QtCore/QDateTime>
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
+#include <QtCore/QLocale>
 #include <QtCore/QTimeZone>
 #include <QtQml/QQmlEngine>
 #include <QtQml/qqml.h>
@@ -169,6 +171,10 @@ QVariantList QGCPluginManager::knownPlugins() const
         info["tier"]        = PluginManifest::tierToString(record.manifest.tier);
         info["state"]       = pluginStateName(record.state);
         info["statusText"]  = _statusText(record);
+        info["sourceText"]  = _sourceText(record);
+        info["buildText"]   = _buildText(record);
+        // The raw discriminator stays available for the tooltip: two builds are told
+        // apart by the whole marker, not by the minute _buildText() renders.
         info["buildMarker"] = record.buildMarker;
         // Only a package installed under the user plugins directory can be removed
         // through the settings page; bundle-shipped and dev-loop bare dylibs cannot.
@@ -201,6 +207,43 @@ QString QGCPluginManager::_statusText(const PluginLoadInfo& record) const
         return tr("Pending");
     }
     return tr("Unknown");
+}
+
+QString QGCPluginManager::_sourceText(const PluginLoadInfo& record) const
+{
+    if (!PluginTrustGate::isUserDirPlugin(record)) {
+        // Everything outside the user plugins directory ships with the application:
+        // the macOS bundle's PlugIns, the Linux/Windows install's plugins folder.
+        return tr("Bundled");
+    }
+    return record.packageDir.isEmpty() ? tr("Development build") : tr("Installed");
+}
+
+QString QGCPluginManager::_buildText(const PluginLoadInfo& record) const
+{
+    // The marker is only ever read off a mapped image (QGCPluginLoader::activate),
+    // so a plugin that never activated has no marker for reasons that say nothing
+    // about how it was built — and a qml-tier package has no binary to carry one.
+    // Neither should be reported as an unknown build.
+    if (record.state != PluginState::Active || record.manifest.tier == PluginManifest::Tier::Qml) {
+        return QString();
+    }
+
+    // A plugin built without qgc_plugin_build_marker() exports no symbol at all. It
+    // runs fine, so this is not an error — but it must be visible rather than absent,
+    // because a missing line reads as "no build information exists" when what it
+    // means is "this plugin cannot tell you which build is running".
+    if (record.buildMarker.isEmpty()) {
+        return tr("Build unknown");
+    }
+
+    // Format is <yyyyMMddHHmmss>-<random>; the random tail exists to keep two builds
+    // within one second distinguishable and carries nothing a reader wants.
+    const QDateTime built = QDateTime::fromString(record.buildMarker.left(14), QStringLiteral("yyyyMMddHHmmss"));
+    if (!built.isValid()) {
+        return tr("Build: %1").arg(record.buildMarker);
+    }
+    return tr("Built %1").arg(QLocale().toString(built, QLocale::ShortFormat));
 }
 
 void QGCPluginManager::_activateIfEnabled(PluginLoadInfo& record)
