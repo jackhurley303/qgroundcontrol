@@ -100,8 +100,8 @@ endif()
 # exists under mavlink/<dialect>/) — install-rooted for a packaged plugin and
 # build-rooted for an in-tree one, so a plugin's bare `#include <mavlink.h>` /
 # `<mavlink_types.h>` resolves through this target in both modes with no
-# QGC_MAVLINK_INCLUDE_DIRS reach required (plugins/qdrive's out-of-tree migration,
-# QO1).
+# QGC_MAVLINK_INCLUDE_DIRS reach required (an out-of-tree plugin migration surfaced
+# this gap; see QO1).
 target_include_directories(QGCPluginAPI PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<BUILD_INTERFACE:${QGC_PLUGIN_API_INCLUDE_SHIM_DIR}>

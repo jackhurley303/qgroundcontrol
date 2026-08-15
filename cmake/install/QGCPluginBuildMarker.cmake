@@ -96,8 +96,8 @@ function(qgc_plugin_build_marker PLUGIN_NAME)
     # checked rather than assumed.
     #
     # KEYWORDS_MISSING_VALUES is deliberately NOT an error here: qgc_add_plugin() forwards
-    # QRC_FILES unconditionally, so a plugin with no .qrc of its own (plugins/qdrive lists
-    # its own inside SOURCES) legitimately passes the keyword with nothing after it. The
+    # QRC_FILES unconditionally, so a plugin with no .qrc of its own (some plugins list
+    # their own inside SOURCES instead) legitimately passes the keyword with nothing after it. The
     # required keywords are each checked for an empty value above instead.
     #
     # This catches a misspelling that precedes another keyword. One in trailing position
@@ -232,7 +232,7 @@ function(qgc_plugin_build_marker PLUGIN_NAME)
     #
     # .qrc files are collected from SOURCES as well as QRC_FILES on purpose: both
     # spellings work for building (AUTORCC keys off the extension, not the
-    # keyword), so a caller that passes its .qrc in SOURCES — plugins/qdrive does
+    # keyword), so a caller that passes its .qrc in SOURCES — some plugins do
     # — must not silently lose resource tracking. Correctness here cannot depend
     # on which keyword the call site happened to choose.
     #

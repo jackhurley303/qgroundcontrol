@@ -10,7 +10,7 @@ project(ExamplePlugin VERSION 1.0.0 LANGUAGES CXX)
 # by plugins/CMakeLists.txt's glob (PROJECT_IS_TOP_LEVEL false) uses the in-tree
 # qgc_add_plugin() dev-loop helper below; built standalone against an installed
 # QGCPluginSDK package (PROJECT_IS_TOP_LEVEL true, no QGC checkout present) uses
-# find_package(QGCPluginAPI) instead, mirroring plugins/qdrive/CMakeLists.txt. The
+# find_package(QGCPluginAPI) instead, mirroring how any out-of-tree plugin builds. The
 # invariant this branch exists to hold: the in-tree arm must be a strict substitute
 # for find_package(QGCPluginAPI) — same target, same headers, nothing the standalone
 # arm doesn't also get.

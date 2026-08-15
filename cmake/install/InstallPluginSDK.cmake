@@ -43,7 +43,7 @@ install(FILES ${QGC_PLUGIN_API_PUBLIC_HEADER_PATHS}
 # Pinned MAVLink dialect headers (out-of-tree-plugins.md U1): the generated tree
 # CPM builds for src/MAVLink/CMakeLists.txt's QGC_MAVLINK_INCLUDE_DIRS, republished
 # here so a plugin with no QGC source tree still gets the bare `#include <mavlink.h>` /
-# `<mavlink_types.h>` style plugins/qdrive/src/utilities/MAVLinkLib.h relies on. Whole
+# `<mavlink_types.h>` style include a plugin's own MAVLink-handling code relies on. Whole
 # tree, not just the pinned dialect subdir, since QGC's own QGC_MAVLINK_DIALECT="all"
 # already generates every dialect under one root. QGC_MAVLINK_INCLUDE_DIRS is a
 # CACHE INTERNAL list (mavlink_BINARY_DIR itself, a plain CPM variable, doesn't
