@@ -229,6 +229,11 @@ PLUGIN_SDK = PRSpec(
                     "the tier every plugin in this tree uses (`example` and the test\n"
                     "  fixture).",
                 ),
+                (
+                    "plugin (out-of-tree QDrive included) can adopt it by adding its own manifest.",
+                    "plugin, including one built entirely out-of-tree, can adopt it by adding its "
+                    "own manifest.",
+                ),
             ),
         ),
         (
