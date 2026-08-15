@@ -4,11 +4,11 @@
 `tools/derive_pr_branch.py` only surfaces a routing gap when someone actually attempts
 a derivation — by then several `git checkout`s have already run, and fixing the spec
 means committing before the retry can even start (it switches branches, which a dirty
-tree blocks). This script checks the same three failure classes without touching the
-working tree or switching branches at all, so it is safe to run anytime, including with
-an uncommitted edit to `derive_pr_branch.py` itself sitting in the tree.
+tree blocks). This script checks the same failure classes without touching the working
+tree or switching branches at all, so it is safe to run anytime, including with an
+uncommitted edit to `derive_pr_branch.py` itself sitting in the tree.
 
-Three checks, each independently actionable:
+Four checks, each independently actionable:
 
   1. **Routing coverage** — base-app paths changed since `--since` (default: the last
      commit that touched `derive_pr_branch.py`) that no spec's `include_paths` or
@@ -21,8 +21,15 @@ Three checks, each independently actionable:
   3. **doc_rewrites staleness** — each rewrite's exact `old` string checked against its
      target file's current mainline content. `doc_rewrites` has no independent
      staleness check in `derive()`; it only fails loudly mid-derivation.
+  4. **Seam consumers** — delegated straight to `derive_pr_branch.check_seam_consumers`,
+     which already greps `mainline_ref` and so needs no branch either. Guards the worst
+     failure mode: a branch that compiles, tests green, and does nothing.
 
-Exit 0 if all three are clean; exit 1 and print every finding otherwise. Advisory by
+Not covered here: `check_source_reverts` (staleness vs `upstream/master`). That one is
+inherently about the derived branch's base, is expected to be dirty mid-stream, and is
+already gated at submission by `--submission-check`.
+
+Exit 0 if all four are clean; exit 1 and print every finding otherwise. Advisory by
 design — like `check_source_reverts`, this is a pre-flight, not a submission gate.
 
 Usage:
@@ -43,7 +50,7 @@ ensure_tools_dir(__file__)
 from common.file_traversal import find_repo_root
 from common.git import run_git
 from common.logging import log_error, log_info, log_ok, log_step
-from derive_pr_branch import SPECS
+from derive_pr_branch import SPECS, PRSpec, check_seam_consumers
 
 
 def _default_since(repo_root: Path) -> str:
@@ -65,9 +72,18 @@ def _is_covered(path: str, covered: tuple[str, ...]) -> bool:
     return any(path == c or path.startswith(f"{c}/") for c in covered)
 
 
-# Deliberately never routed to any PRSpec — the derivation harness itself and this
-# script are fork-only tooling with nothing upstream to receive them.
-_ROUTING_EXEMPT = ("tools/derive_pr_branch.py", "tools/check_pr_routing.py")
+# Deliberately never routed to any PRSpec. The first three are fork-only tooling with
+# nothing upstream to receive them. ruff.toml is the one shared file here: it exists
+# upstream, but its entire fork delta is the E402 per-file-ignores for the two scripts
+# above, which are meaningless in a tree where those scripts don't exist.
+# ⚠ Revisit ruff.toml's entry if a genuinely upstream-bound lint change ever lands in it —
+# this exemption is scoped to the delta being fork-only, not to the file being fork-only.
+_ROUTING_EXEMPT = (
+    "tools/derive_pr_branch.py",
+    "tools/check_pr_routing.py",
+    "tools/tests/test_check_pr_routing.py",
+    "ruff.toml",
+)
 
 
 def check_routing_coverage(mainline_ref: str, since: str, repo_root: Path) -> bool:
@@ -102,6 +118,21 @@ def check_routing_coverage(mainline_ref: str, since: str, repo_root: Path) -> bo
     return True
 
 
+def rewrites_for(spec: PRSpec, path: str) -> tuple[tuple[str, str], ...]:
+    """This spec's doc_rewrites for one path, or () if it has none."""
+    for rel_path, rewrites in spec.doc_rewrites:
+        if rel_path == path:
+            return rewrites
+    return ()
+
+
+def apply_doc_rewrites(text: str, rewrites: tuple[tuple[str, str], ...]) -> str:
+    """Apply one path's rewrites, mirroring derive()'s str.replace loop exactly."""
+    for old, new in rewrites:
+        text = text.replace(old, new)
+    return text
+
+
 def check_forbidden_terms(mainline_ref: str, repo_root: Path) -> bool:
     """Mirrors derive()'s effective content: doc_rewrites applied, then scanned.
 
@@ -114,25 +145,21 @@ def check_forbidden_terms(mainline_ref: str, repo_root: Path) -> bool:
         scanned = spec.include_paths + spec.patch_paths
         if not scanned:
             continue
-        rewritten_paths = {rel_path for rel_path, _ in spec.doc_rewrites}
         for term in spec.forbidden_terms:
             grep = run_git("grep", "-liI", term, mainline_ref, "--", *scanned, cwd=repo_root)
             if grep.returncode != 0 or not grep.stdout.strip():
                 continue
             for line in grep.stdout.strip().splitlines():
                 path = line.split(":", 1)[1] if ":" in line else line
-                if path not in rewritten_paths:
+                rewrites = rewrites_for(spec, path)
+                if not rewrites:
                     ok = False
                     log_error(f"'{name}': forbidden term '{term}' found in: {path}")
                     continue
                 text = run_git("show", f"{mainline_ref}:{path}", cwd=repo_root).stdout
-                for old, new in next(r for p, r in spec.doc_rewrites if p == path):
-                    text = text.replace(old, new)
-                if term.lower() in text.lower():
+                if term.lower() in apply_doc_rewrites(text, rewrites).lower():
                     ok = False
-                    log_error(
-                        f"'{name}': forbidden term '{term}' survives doc_rewrites in: {path}"
-                    )
+                    log_error(f"'{name}': forbidden term '{term}' survives doc_rewrites in: {path}")
 
     if ok:
         log_ok("no forbidden terms survive in any spec's covered paths")
@@ -160,8 +187,28 @@ def check_doc_rewrites(mainline_ref: str, repo_root: Path) -> bool:
     return ok
 
 
+def check_seams(repo_root: Path) -> bool:
+    """Reuse derive_pr_branch's own seam check — it already greps `mainline_ref`.
+
+    `check_seam_consumers` never touches the derived branch, so it costs nothing to run
+    here and it guards the worst failure mode of the three: a branch that compiles, passes
+    every test, and does nothing because the code reading its seams stayed on mainline.
+    """
+    log_step("seam consumers (delegated to derive_pr_branch)")
+    ok = True
+    for name, spec in SPECS.items():
+        if not spec.seam_tokens:
+            continue
+        if not check_seam_consumers(spec, repo_root):
+            log_error(f"'{name}': seam consumers missing — see above")
+            ok = False
+    return ok
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument(
         "--since",
         default=None,
@@ -186,6 +233,7 @@ def main() -> int:
         check_routing_coverage(mainline_ref, since, repo_root),
         check_forbidden_terms(mainline_ref, repo_root),
         check_doc_rewrites(mainline_ref, repo_root),
+        check_seams(repo_root),
     ]
 
     if all(results):

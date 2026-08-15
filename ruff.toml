@@ -42,6 +42,8 @@ known-first-party = ["qgc"]
 "test/**/*.py" = ["B011"]  # Allow assert in tests
 # Bootstrap scripts manipulate sys.path before importing project modules.
 "tools/check_deps.py" = ["E402"]
+"tools/check_pr_routing.py" = ["E402"]
+"tools/derive_pr_branch.py" = ["E402"]
 "tools/clean.py" = ["E402"]
 "tools/configure.py" = ["E402"]
 "tools/coverage.py" = ["E402"]
