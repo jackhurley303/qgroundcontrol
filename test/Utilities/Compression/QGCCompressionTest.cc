@@ -324,6 +324,7 @@ void QGCCompressionTest::_testListArchiveNaturalSort()
     // Lexicographic: file1.txt, file10.txt, file2.txt, file20.txt
     // Natural:       file1.txt, file2.txt, file10.txt, file20.txt
     const QString zipPath = tempDir.path() + "/natural_sort_test.zip";
+    // Create test archive using miniz or system zip
     // We'll create a simple ZIP with QBuffer and test the sorting
     // For this test, we verify the sorting behavior using QCollator directly
     // since QGCCompression uses it internally

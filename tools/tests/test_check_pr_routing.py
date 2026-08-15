@@ -4,16 +4,20 @@
 from __future__ import annotations
 
 import dataclasses
+import subprocess
 
 import pytest
 from check_pr_routing import (
+    _CONVENTIONAL,
+    _DEFERRED_ROUTING,
+    _MAINLINE_ONLY,
     _ROUTING_EXEMPT,
     _is_covered,
     _mainline_covered_paths,
     apply_doc_rewrites,
     rewrites_for,
 )
-from derive_pr_branch import SPECS
+from derive_pr_branch import MAX_SUBJECT_LENGTH, SPECS, PRSpec, _commit_in_groups
 
 
 class TestIsCovered:
@@ -106,13 +110,272 @@ class TestRegressionRoutingGap:
         spec = SPECS["plugin-sdk"]
         assert _is_covered("tools/check_plugin_ui_contract.py", spec.include_paths)
 
+        # commit_groups must be stripped in step with include_paths — PRSpec asserts the two
+        # agree, which is the same discipline this test is describing: dropping a path means
+        # dropping it from the commit that tells its story too.
         stripped = dataclasses.replace(
             spec,
             include_paths=tuple(
                 p for p in spec.include_paths if "check_plugin_ui_contract" not in p
             ),
+            commit_groups=tuple(
+                (subject, tuple(p for p in paths if "check_plugin_ui_contract" not in p))
+                for subject, paths in spec.commit_groups
+            ),
         )
         assert not _is_covered("tools/check_plugin_ui_contract.py", stripped.include_paths)
+
+
+class TestExemptionLists:
+    def test_no_path_is_both_exempt_and_covered(self):
+        """A path in two places has two answers; the audit would report the wrong one."""
+        covered = _mainline_covered_paths()
+        for path in _MAINLINE_ONLY + tuple(_DEFERRED_ROUTING):
+            assert not _is_covered(path, covered), f"{path} is both exempt and routed"
+
+    def test_exemption_lists_are_disjoint(self):
+        assert not set(_ROUTING_EXEMPT) & set(_MAINLINE_ONLY)
+        assert not set(_ROUTING_EXEMPT) & set(_DEFERRED_ROUTING)
+        assert not set(_MAINLINE_ONLY) & set(_DEFERRED_ROUTING)
+
+    def test_every_deferred_path_records_a_reason(self):
+        """Deferred means 'decided, not yet specced' — without the why it is just a hole."""
+        for path, reason in _DEFERRED_ROUTING.items():
+            assert reason.strip(), f"{path} is deferred with no recorded reason"
+
+
+class TestConventionalPattern:
+    @pytest.mark.parametrize(
+        "subject",
+        [
+            "feat(PluginSDK): add a thing",
+            "fix: guard a null",
+            "chore(tools): stack PR specs",
+            "refactor(Comms)!: drop the old seam",
+        ],
+    )
+    def test_matches_conventional_subjects(self, subject):
+        assert _CONVENTIONAL.match(subject)
+
+    @pytest.mark.parametrize(
+        "subject",
+        [
+            "Add runtime plugin infrastructure",
+            "Bump qdrive: archive enable/disable correctness plan",
+            "feature: not a real type",
+            "feat missing the colon",
+        ],
+    )
+    def test_rejects_plain_subjects(self, subject):
+        assert not _CONVENTIONAL.match(subject)
+
+    def test_bump_prefix_is_not_mistaken_for_a_scope(self):
+        """'Bump qdrive: ...' is the fork's commonest plain subject and ends in a colon.
+
+        A looser pattern (anything before a colon) reads it as conventional and would let
+        every submodule bump silently claim to be upstream-bound.
+        """
+        assert not _CONVENTIONAL.match("Bump qdrive: QL1 teardown contract implemented")
+
+
+class TestSubjectsAreUpstreamReady:
+    """.github/CONTRIBUTING.md requires Conventional Commits on every commit in a PR.
+
+    The fork's own mainline commits are mostly plain by design, so nothing local would have
+    caught this — the old `Derive <branch> from <ref>` subject shipped on every derived
+    branch and satisfied no requirement upstream states.
+    """
+
+    def test_every_spec_emits_only_conventional_subjects(self):
+        for name, spec in SPECS.items():
+            subjects = (
+                [spec.commit_subject] if spec.commit_subject else [s for s, _ in spec.commit_groups]
+            )
+            assert subjects, f"{name} declares no commit message at all"
+            for subject in subjects:
+                assert _CONVENTIONAL.match(subject), f"{name}: {subject!r}"
+
+    def test_every_subject_fits_the_length_cap(self):
+        for name, spec in SPECS.items():
+            for subject in [spec.commit_subject, *(s for s, _ in spec.commit_groups)]:
+                if subject:
+                    assert len(subject) <= MAX_SUBJECT_LENGTH, f"{name}: {len(subject)}"
+
+    def test_a_plain_subject_is_rejected(self):
+        with pytest.raises(AssertionError, match="Conventional Commits"):
+            dataclasses.replace(
+                SPECS["gstreamer-rpath"], commit_subject="Stop shadowing Qt's FFmpeg"
+            )
+
+    def test_an_overlong_subject_is_rejected(self):
+        with pytest.raises(AssertionError, match="over the"):
+            dataclasses.replace(
+                SPECS["gstreamer-rpath"], commit_subject="fix(GStreamer): " + "x" * 80
+            )
+
+    def test_declaring_neither_subject_nor_groups_is_rejected(self):
+        with pytest.raises(AssertionError, match="exactly one"):
+            dataclasses.replace(SPECS["gstreamer-rpath"], commit_subject="")
+
+    def test_declaring_both_is_rejected(self):
+        with pytest.raises(AssertionError, match="exactly one"):
+            dataclasses.replace(SPECS["plugin-sdk"], commit_subject="feat: both")
+
+
+class TestCommitGroups:
+    def test_plugin_sdk_partitions_every_declared_path(self):
+        spec = SPECS["plugin-sdk"]
+        grouped = [p for _subject, paths in spec.commit_groups for p in paths]
+        assert sorted(grouped) == sorted(set(spec.include_paths) | set(spec.patch_paths))
+
+    def test_small_specs_stay_single_commit(self):
+        """One synthetic commit is right for a 1-3 file spec; groups would be ceremony."""
+        for name in ("gstreamer-rpath", "media-backend", "mocklink-bytessent"):
+            assert SPECS[name].commit_groups == ()
+
+    def test_omitting_a_path_from_every_group_is_rejected(self):
+        spec = SPECS["plugin-sdk"]
+        with pytest.raises(AssertionError, match="omit"):
+            dataclasses.replace(spec, commit_groups=spec.commit_groups[:-1])
+
+    def test_listing_a_path_twice_is_rejected(self):
+        spec = SPECS["plugin-sdk"]
+        first_subject, first_paths = spec.commit_groups[0]
+        with pytest.raises(AssertionError, match="more than once"):
+            dataclasses.replace(
+                spec,
+                commit_groups=(*spec.commit_groups, (f"{first_subject} (again)", first_paths)),
+            )
+
+    def test_grouping_an_undeclared_path_is_rejected(self):
+        spec = SPECS["plugin-sdk"]
+        with pytest.raises(AssertionError, match="absent from include_paths"):
+            dataclasses.replace(
+                spec,
+                commit_groups=(
+                    *spec.commit_groups,
+                    ("chore: stray", ("src/Nonexistent/Thing.cc",)),
+                ),
+            )
+
+
+class TestCommitInGroups:
+    """Exercises the real git behaviour of `_commit_in_groups` in a scratch repo.
+
+    `derive()` cannot be run against this repo while the spec edit is uncommitted (its
+    internal checkout refuses to clobber the dirty tooling file), so without this the
+    grouped-commit path would ship unexecuted.
+    """
+
+    # Subjects here must be Conventional Commits like any real spec's — PRSpec asserts it.
+    S = "chore: "
+
+    @staticmethod
+    def _git(repo, *args):
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+
+    @pytest.fixture
+    def repo(self, tmp_path):
+        self._git(tmp_path, "init", "-q", "-b", "main")
+        self._git(tmp_path, "config", "user.email", "t@example.com")
+        self._git(tmp_path, "config", "user.name", "T")
+        (tmp_path / "seed.txt").write_text("seed\n")
+        self._git(tmp_path, "add", "seed.txt")
+        self._git(tmp_path, "commit", "-qm", "seed")
+        return tmp_path
+
+    def _spec(self, groups, paths):
+        return PRSpec(
+            branch="upstream-pr-scratch",
+            source_ref="main",
+            mainline_ref="mainline",
+            include_paths=paths,
+            commit_groups=groups,
+        )
+
+    def test_each_group_becomes_its_own_commit_in_order(self, repo):
+        for name in ("a.txt", "b.txt", "c.txt"):
+            (repo / name).write_text(f"{name}\n")
+        self._git(repo, "add", "a.txt", "b.txt", "c.txt")
+
+        spec = self._spec(
+            ((f"{self.S}first group", ("a.txt", "b.txt")), (f"{self.S}second group", ("c.txt",))),
+            ("a.txt", "b.txt", "c.txt"),
+        )
+        _commit_in_groups(spec, repo)
+
+        log = subprocess.run(
+            ["git", "log", "--format=%s"], cwd=repo, capture_output=True, text=True, check=True
+        )
+        assert log.stdout.split("\n")[:3] == [
+            f"{self.S}second group",
+            f"{self.S}first group",
+            "seed",
+        ]
+
+        files = subprocess.run(
+            ["git", "show", "--name-only", "--format=", "HEAD~1"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert sorted(files.stdout.split()) == ["a.txt", "b.txt"]
+
+    def test_index_is_empty_afterwards(self, repo):
+        (repo / "a.txt").write_text("a\n")
+        self._git(repo, "add", "a.txt")
+        _commit_in_groups(self._spec(((f"{self.S}only group", ("a.txt",)),), ("a.txt",)), repo)
+
+        staged = subprocess.run(
+            ["git", "diff", "--cached", "--name-only"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert not staged.stdout.strip()
+
+    def test_empty_group_is_skipped_not_committed(self, repo):
+        """A path whose mainline content already matches the base stages nothing.
+
+        Committing it anyway would put an empty commit in front of a reviewer; `git commit`
+        would also fail outright rather than skip, so this is the difference between a
+        derivation that completes and one that aborts partway.
+        """
+        (repo / "a.txt").write_text("a\n")
+        self._git(repo, "add", "a.txt")
+
+        spec = self._spec(
+            ((f"{self.S}has content", ("a.txt",)), (f"{self.S}nothing staged", ("b.txt",))),
+            ("a.txt", "b.txt"),
+        )
+        _commit_in_groups(spec, repo)
+
+        log = subprocess.run(
+            ["git", "log", "--format=%s"], cwd=repo, capture_output=True, text=True, check=True
+        )
+        assert log.stdout.split("\n")[:2] == [f"{self.S}has content", "seed"]
+
+
+class TestRegressionInertRelease:
+    def test_macos_entitlement_ships_with_the_loader(self):
+        """The 2026-08-15 gap: PR 1 carried the plugin loader but not the entitlement.
+
+        Under the hardened runtime dyld refuses to load any library not signed by the app's
+        own Team ID, so without this pair the SDK ships and loads nothing on the one
+        configuration users install. seam_tokens cannot see it — there is no symbol here.
+        """
+        spec = SPECS["plugin-sdk"]
+        assert _is_covered("deploy/macos/qgroundcontrol-release.entitlements", spec.include_paths)
+        assert _is_covered("cmake/install/SignMacBundle.cmake", spec.include_paths)
+
+    def test_settings_page_ships_with_its_registration(self):
+        """PluginSettings.qml is unreachable without the JSON entry naming it."""
+        spec = SPECS["plugin-sdk"]
+        assert _is_covered("src/AppSettings/PluginSettings.qml", spec.include_paths)
+        assert _is_covered("src/AppSettings/pages/SettingsPages.json", spec.include_paths)
+        assert _is_covered("resources/InstrumentValueIcons/plugins.svg", spec.include_paths)
 
 
 if __name__ == "__main__":
