@@ -27,11 +27,22 @@ include("${CMAKE_CURRENT_LIST_DIR}/QGCPluginAPITargets.cmake")
 set_and_check(QGCPluginAPI_QML_IMPORT_PATH "@PACKAGE_QGC_PLUGIN_API_QML_DIR@")
 
 # Host identity the standalone arm of a dual-mode plugin's CMakeLists.txt needs to
-# derive its own POST_BUILD deploy dir (cmake/modules/PluginHelpers.cmake:94-106) —
+# derive its own POST_BUILD deploy dir (cmake/modules/PluginHelpers.cmake) —
 # one source of truth, so a rebrand of the host doesn't leave a plugin deploying to a
 # stale path.
 set(QGCPluginAPI_APP_NAME "@QGC_APP_NAME@")
 set(QGCPluginAPI_ORG_NAME "@QGC_ORG_NAME@")
 set(QGCPluginAPI_STABLE_BUILD "@QGC_STABLE_BUILD@")
+
+# The build-marker generator, shipped as the function rather than as its inputs
+# (plugin-enable-disable-correctness U1b) — a plugin's standalone arm calls
+#
+#   qgc_plugin_build_marker(MyPlugin OUT_SOURCE MARKER MANIFEST ... SOURCES ...)
+#
+# and adds ${MARKER} to its target, getting the identical marker the in-tree
+# dev-loop helper generates. Only the SDK header location differs per arm, and
+# this config file is the half that knows its own prefix.
+set_and_check(QGC_PLUGIN_API_HEADER_DIR "@PACKAGE_QGC_PLUGIN_API_INCLUDE_DIR@")
+include("${CMAKE_CURRENT_LIST_DIR}/QGCPluginBuildMarker.cmake")
 
 check_required_components(QGCPluginAPI)

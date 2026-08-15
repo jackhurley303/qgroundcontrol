@@ -25,10 +25,26 @@ if(PROJECT_IS_TOP_LEVEL)
     find_package(QGCPluginAPI 2 REQUIRED)
     find_package(Qt6 REQUIRED COMPONENTS Core)
 
+    # The build marker the host reads back from the mapped image to report which
+    # build of this plugin is actually running. qgc_plugin_build_marker() comes
+    # from the SDK package itself (find_package(QGCPluginAPI) above includes it),
+    # so this arm calls the same generator qgc_add_plugin() calls in-tree instead
+    # of carrying a second copy of it.
+    qgc_plugin_build_marker(ExamplePlugin
+        OUT_SOURCE EXAMPLE_PLUGIN_BUILD_MARKER
+        MANIFEST   qgcplugin.json.in
+        SOURCES
+            ExamplePlugin.h
+            ExamplePlugin.cc
+        QRC_FILES
+            ExamplePlugin.qrc
+    )
+
     add_library(ExamplePlugin MODULE
         ExamplePlugin.h
         ExamplePlugin.cc
         ExamplePlugin.qrc
+        ${EXAMPLE_PLUGIN_BUILD_MARKER}
     )
 
     # QGCPluginAPI_VERSION_MAJOR comes from find_package() above
@@ -52,7 +68,7 @@ if(PROJECT_IS_TOP_LEVEL)
     endif()
 
     # Standalone POST_BUILD deploy: mirrors qgc_add_plugin()'s dev-loop auto-deploy
-    # (cmake/modules/PluginHelpers.cmake:94-116) so a self-installed SDK author gets
+    # (cmake/modules/PluginHelpers.cmake) so a self-installed SDK author gets
     # the same "build it, relaunch QGC" loop the in-tree arm gets. QGCPluginAPI_APP_NAME/
     # _ORG_NAME/_STABLE_BUILD come from QGCPluginAPIConfig.cmake.in — the SDK's own
     # export of the host's identity, not a second hardcoded copy of it.

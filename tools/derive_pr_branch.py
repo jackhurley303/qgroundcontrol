@@ -104,6 +104,10 @@ PLUGIN_SDK = PRSpec(
         "cmake/modules/PluginHelpers.cmake",
         "cmake/install/InstallPluginSDK.cmake",
         "cmake/install/QGCPluginAPIConfig.cmake.in",
+        # The build-marker generator: included by PluginHelpers.cmake in-tree and
+        # installed beside the config file above, so a standalone plugin calls the
+        # same function rather than reimplementing it.
+        "cmake/install/QGCPluginBuildMarker.cmake",
         # Derives the packaged form of the QGroundControl.PluginUI module from
         # src/PluginSystem/PluginUI/qmldir; InstallPluginSDK.cmake invokes it.
         "tools/derive_plugin_ui_sdk.py",

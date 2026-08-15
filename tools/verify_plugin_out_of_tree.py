@@ -14,7 +14,9 @@ form an editor or a CI hook can read, and is never the only thing enforcing it.
 
 Every axis is claimed or explicitly declared N/A. A manifest with an unknown key, a
 missing key, or an axis that resolves to zero work is an error — never a silent skip,
-because a gate that degrades to a pass is worse than no gate.
+because a gate that degrades to a pass is worse than no gate. The build-marker check is
+the one exception to the manifest: it is a single SDK-wide invariant with nothing
+per-plugin to declare, so it always runs and cannot be opted out of.
 
 Isolation is from QGC source *and* from the developer's Qt install. `qmllint --bare`
 plus the tool-published allowlists below are what make the second half true: a dependency
@@ -591,6 +593,146 @@ def check_forbidden_symbols(
         )
 
 
+# --- The build-marker axis ----------------------------------------------------------------
+#
+# The host reports which build of a plugin is executing by resolving this symbol in the
+# MAPPED IMAGE (QGCPluginLoader::readBuildMarker). Everything it could read from the file
+# instead — manifest version, size, mtime, hash — names the build that was deployed, which
+# is precisely the case the marker exists to distinguish. The generator ships inside the
+# SDK (lib/cmake/QGCPluginAPI/QGCPluginBuildMarker.cmake), so a standalone plugin that
+# never calls qgc_plugin_build_marker() silently reports nothing — visible nowhere except
+# here, since the in-tree dev loop gets the marker from qgc_add_plugin() regardless.
+#
+# Not a manifest axis: unlike Qt components or QML roots, this is one SDK-wide invariant
+# with nothing per-plugin to declare.
+
+BUILD_MARKER_SYMBOL = "qgcPluginBuildMarker"
+
+_BUILD_MARKER_VALUE = re.compile(r'return\s+"([^"]*)"\s*;')
+
+
+def parse_build_marker_source(text: str) -> str:
+    """The marker value the generated translation unit returns."""
+    match = _BUILD_MARKER_VALUE.search(text)
+    if match is None:
+        raise GateError(
+            "the generated build-marker source returns no string literal — the generator "
+            "wrote something this gate cannot read, so the value in the binary is unknown"
+        )
+    value = match.group(1)
+    if not value.strip():
+        raise GateError(
+            "the generated build-marker source returns an empty string — an empty marker is "
+            "indistinguishable from a plugin that carries no marker at all"
+        )
+    return value
+
+
+def find_build_marker_source(build_dir: Path) -> Path:
+    """The one generated marker TU in the standalone build tree.
+
+    Absence is the failure this axis exists for: it means the plugin's standalone
+    CMakeLists.txt never called the SDK's generator, and the released plugin — the
+    out-of-tree one — reports no build at all while the in-tree dev loop looks fine.
+    """
+    found = sorted(build_dir.rglob("*_BuildMarker.cc"))
+    if not found:
+        # Two different mistakes land here and they point at opposite fixes. The generator
+        # script is written at configure time by the call itself, so its presence says the
+        # call was made and only the returned source was never added to a target — CMake
+        # then emits no build statement for the custom command at all, and the .cc never
+        # appears. Reporting "you never called it" in that case sends the author looking
+        # for a line they already wrote.
+        orphan_scripts = sorted(build_dir.rglob("*_GenerateBuildMarker.cmake"))
+        if orphan_scripts:
+            raise GateError(
+                "the standalone build generated a build-marker generator but no marker "
+                "source:\n  " + "\n  ".join(str(path) for path in orphan_scripts) + "\n"
+                "qgc_plugin_build_marker() was called, but the source it returns in "
+                "OUT_SOURCE was never added to the plugin target, so the command never runs."
+            )
+        raise GateError(
+            f"the standalone build generated no *_BuildMarker.cc under {build_dir} — the "
+            f"plugin's CMakeLists.txt never called qgc_plugin_build_marker(), so the host "
+            f"cannot tell which build of it is running"
+        )
+    if len(found) > 1:
+        raise GateError(
+            "the standalone build generated more than one build-marker source:\n  "
+            + "\n  ".join(str(path) for path in found)
+            + "\nWhich one ends up in the artifact is not something this gate can tell."
+        )
+    return found[0]
+
+
+def build_marker_script_for(source: Path) -> Path:
+    """The generator script beside a marker TU — a declared dependency of it."""
+    script = source.with_name(source.name.replace("_BuildMarker.cc", "_GenerateBuildMarker.cmake"))
+    if not script.is_file():
+        raise GateError(
+            f"no marker generator script at {script} — the regeneration check has nothing "
+            f"whose change should produce a new marker"
+        )
+    return script
+
+
+def check_marker_symbol_exported(
+    artifact: Path, nm_runner: Callable[[Path], tuple[int, str]]
+) -> None:
+    """The symbol must be *exported*, not merely present in the source.
+
+    Same instrument discipline as the forbidden-symbol axis, for the same reason: nm
+    failing to read a file, or listing nothing at all, must not be able to look like an
+    answer. Here the direction is inverted — a broken measurement would report the symbol
+    missing, and "missing" is exactly what this check treats as a failure — so the
+    instrument checks come first and say so distinctly.
+    """
+    if not artifact.is_file():
+        raise GateError(f"no standalone artifact at {artifact} to read the build marker from")
+    returncode, output = nm_runner(artifact)
+    if returncode != 0:
+        raise GateError(
+            f"nm could not read {artifact} (exit {returncode}) — its symbols were never "
+            f"inspected, which is not the same as finding no marker.\n{output}"
+        )
+    if not output.strip():
+        raise GateError(
+            f"nm listed no defined symbols at all in {artifact} — a linked plugin always has "
+            f"some, so this is broken instrumentation rather than a missing marker"
+        )
+    # Mach-O prefixes C symbols with an underscore; ELF does not.
+    if re.search(rf"\b_?{BUILD_MARKER_SYMBOL}\b", output) is None:
+        raise GateError(
+            f"the standalone artifact exports no {BUILD_MARKER_SYMBOL} — the host would read "
+            f"an empty build marker for a plugin built the way real plugins ship"
+        )
+
+
+def check_marker_embedded(artifact: Path, marker: str, label: str) -> None:
+    """The value the generator wrote must be inside the binary that shipped.
+
+    A marker regenerated but never linked is the whole in-place-upgrade failure in
+    miniature: the value on disk is new, the value executing is old.
+    """
+    if not artifact.is_file():
+        raise GateError(f"no standalone artifact at {artifact} to search for the build marker")
+    if marker.encode("utf-8") not in artifact.read_bytes():
+        raise GateError(
+            f"{label}: the artifact does not contain the marker {marker!r} the build just "
+            f"generated — the regenerated marker never reached the linked binary"
+        )
+
+
+def check_marker_not_embedded(artifact: Path, marker: str, label: str) -> None:
+    if not artifact.is_file():
+        raise GateError(f"no standalone artifact at {artifact} to search for the build marker")
+    if marker.encode("utf-8") in artifact.read_bytes():
+        raise GateError(
+            f"{label}: the artifact still contains the previous marker {marker!r} — it was "
+            f"not relinked, so its marker names a build other than the one on disk"
+        )
+
+
 # --- The QML axis --------------------------------------------------------------------------
 
 
@@ -990,6 +1132,8 @@ class GateContext:
     linted_file_count: int | None = None
     """None when the QML axis was declared N/A — not the same as having linted nothing."""
     tests_registered: int | None = None
+    build_marker: str | None = None
+    """The marker the standalone artifact ends the run carrying."""
     controls_run: int = 0
     """How many negative controls actually ran. The closing summary claims they all went
     red; that claim has to be counted, not assumed, since an axis declared N/A takes its
@@ -1101,6 +1245,52 @@ def run_forbidden_symbol_axis(context: GateContext, artifact: Path) -> None:
 
     check_forbidden_symbols(artifact, axis.patterns, nm)
     print("No forbidden undefined symbols.")
+
+
+def run_build_marker_axis(context: GateContext, artifact: Path) -> None:
+    step("Build marker: the standalone artifact reports which build is running")
+
+    # Defined symbols this time, not undefined ones. ELF: the dynamic table, since a
+    # shared object's static symtab is routinely stripped. Mach-O has no such split and
+    # macOS nm rejects -D.
+    nm_flags = ["-gU"] if sys.platform == "darwin" else ["-D", "--defined-only"]
+
+    def nm(path: Path) -> tuple[int, str]:
+        return context.runner.capture("nm", *nm_flags, str(path))
+
+    source = find_build_marker_source(context.build_dir)
+    first = parse_build_marker_source(source.read_text(encoding="utf-8"))
+    check_marker_symbol_exported(artifact, nm)
+    check_marker_embedded(artifact, first, "the standalone build")
+    print(f"{BUILD_MARKER_SYMBOL} exported, and this build's marker is in the artifact: {first}")
+
+    # ...and it must be *this* build's marker, not a value frozen at first configure. The
+    # generator script is one of the marker's own declared dependencies, so touching it is
+    # the cheapest input change that must produce a new marker: one recompile and a relink.
+    # What this proves is that the custom command is actually wired into the standalone
+    # build — the half U1b adds. That the dependency SET is complete is the in-tree arm's
+    # own proof (PluginLoaderGateTest), over the same shared generator.
+    script = build_marker_script_for(source)
+    os.utime(script, None)
+    context.runner.check(
+        "rebuild after touching the marker generator",
+        "cmake",
+        "--build",
+        str(context.build_dir),
+        "--parallel",
+        str(context.parallel),
+    )
+    second = parse_build_marker_source(source.read_text(encoding="utf-8"))
+    if second == first:
+        raise GateError(
+            f"the build marker is unchanged ({first}) after one of its declared dependencies "
+            f"changed — it names whichever build happened to run first, which makes it "
+            f"useless for the case it exists to detect"
+        )
+    check_marker_embedded(artifact, second, "after regenerating the marker")
+    check_marker_not_embedded(artifact, first, "after regenerating the marker")
+    context.build_marker = second
+    print(f"Marker changes with the build: {first} -> {second}")
 
 
 def find_plugin_qrc(scratch_plugin: Path, artifact_name: str) -> Path:
@@ -1486,6 +1676,7 @@ def run_gate(args: argparse.Namespace) -> int:
         artifact = configure_and_build(context)
         run_test_axis(context)
         run_forbidden_symbol_axis(context, artifact)
+        run_build_marker_axis(context, artifact)
         qml_result = run_qml_axis(context)
         run_missing_dependency_control(context)
         if qml_result is not None:
@@ -1500,6 +1691,7 @@ def run_gate(args: argparse.Namespace) -> int:
                 "artifact": str(artifact),
                 "sdk_prefix": str(sdk_prefix),
                 "tests_registered": context.tests_registered,
+                "build_marker": context.build_marker,
                 "qml_files_linted": context.linted_file_count,
                 "controls_run": context.controls_run,
                 "deployed_to": str(deployed) if deployed else None,

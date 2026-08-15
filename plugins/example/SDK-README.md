@@ -104,6 +104,15 @@ from the unpacked SDK root:
 python3 tools/verify_plugin_out_of_tree.py example --sdk "$(pwd)" --qt-root <your Qt prefix>
 ```
 
+Your `CMakeLists.txt` should also call `qgc_plugin_build_marker()` (see
+`example/CMakeLists.txt`) and add the source it returns to your plugin target. It bakes a
+per-build value into an exported symbol that QGC reads back **from the loaded image**, so
+the Plugins settings page can show which build of your plugin is actually running — the
+file on disk cannot answer that, because replacing a plugin while QGC is running leaves
+the old image mapped and executing. The function comes from the SDK itself
+(`find_package(QGCPluginAPI)` provides it); the verifier fails a plugin that doesn't call
+it.
+
 Every plugin the tool verifies needs a `plugin-verify.json` manifest beside its
 `CMakeLists.txt` (see `example/plugin-verify.json`) — an unknown key, a missing axis, or
 an axis that resolves to zero work is an error, never a silent pass. Add `--deploy` to

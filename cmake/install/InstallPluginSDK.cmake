@@ -79,11 +79,16 @@ install(EXPORT QGCPluginAPITargets
 )
 
 set(QGC_PLUGIN_API_QML_DIR "qml")
+# Where the headers land, as a PATH_VAR so the config file's set_and_check() resolves the
+# real location rather than a hardcoded "include/" — the build-marker generator reads this
+# to build its DEPENDS set, so a non-default CMAKE_INSTALL_INCLUDEDIR would otherwise fail
+# find_package(QGCPluginAPI) outright. Same install destination as the install(FILES) above.
+set(QGC_PLUGIN_API_INCLUDE_DIR "${CMAKE_INSTALL_INCLUDEDIR}/QGCPluginAPI")
 configure_package_config_file(
     "${CMAKE_SOURCE_DIR}/cmake/install/QGCPluginAPIConfig.cmake.in"
     "${CMAKE_BINARY_DIR}/QGCPluginAPIConfig.cmake"
     INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/QGCPluginAPI"
-    PATH_VARS QGC_PLUGIN_API_QML_DIR
+    PATH_VARS QGC_PLUGIN_API_QML_DIR QGC_PLUGIN_API_INCLUDE_DIR
 )
 # QGC_APP_NAME/QGC_ORG_NAME/QGC_STABLE_BUILD are plain @VAR@ substitutions (not
 # PATH_VARS — they aren't paths), resolved from this scope's existing cache variables
@@ -103,9 +108,16 @@ write_basic_package_version_file(
     COMPATIBILITY SameMajorVersion
 )
 
+# QGCPluginBuildMarker.cmake ships beside the config file that includes it, so a
+# standalone plugin gets the build-marker generator itself rather than a second
+# copy of its logic (plugin-enable-disable-correctness U1b). The in-tree helper
+# includes the very same file from cmake/install/ — one implementation, two
+# callers, which is what keeps the marker on out-of-tree plugins, the primary
+# plugin form.
 install(FILES
     "${CMAKE_BINARY_DIR}/QGCPluginAPIConfig.cmake"
     "${CMAKE_BINARY_DIR}/QGCPluginAPIConfigVersion.cmake"
+    "${CMAKE_SOURCE_DIR}/cmake/install/QGCPluginBuildMarker.cmake"
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/QGCPluginAPI"
     COMPONENT QGCPluginSDK
 )
