@@ -123,6 +123,15 @@ SettingsPage {
                             }
                         }
                     }
+
+                    QGCLabel {
+                        Layout.fillWidth:   true
+                        text:               qsTr("Build: %1").arg(modelData.buildMarker)
+                        wrapMode:           Text.WordWrap
+                        font.pointSize:     ScreenTools.smallFontPointSize
+                        color:              qgcPal.text
+                        visible:            modelData.buildMarker.length > 0
+                    }
                 }
 
                 QGCButton {

@@ -43,6 +43,9 @@ struct PluginLoadInfo {
     PluginContributions contributions;  ///< Declared contributions (valid unless state == Failed)
     PluginState state = PluginState::Failed;
     QString errorString;                ///< Reason for Incompatible/Failed states
+    QString buildMarker;                ///< Per-build discriminator read from the mapped image after
+                                         ///< activation (qgcPluginBuildMarker, via QLibrary::resolve);
+                                         ///< empty until activated, or if the binary predates this symbol
 };
 
 /// @brief Stateless inspect/activate mechanism for QGC plugin libraries

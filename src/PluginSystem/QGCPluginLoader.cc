@@ -19,6 +19,7 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonParseError>
+#include <QtCore/QLibrary>
 #include <QtCore/QPluginLoader>
 #include <QtCore/QStandardPaths>
 
@@ -119,6 +120,22 @@ bool deriveContributions(PluginLoadInfo& info)
         return false;
     }
     return true;
+}
+
+// Reads the per-build discriminator directly from the mapped image (never from
+// the file), via the extern "C" symbol qgc_add_plugin() regenerates whenever any
+// input to the plugin's dylib changes. QLibrary::resolve() opens the
+// already-loaded library by path (the OS
+// loader refcounts by path, so this reuses the same image QPluginLoader mapped)
+// and looks the symbol up in its export table — Qt's cross-platform dlsym/
+// GetProcAddress. A plugin binary built before this unit shipped simply has no
+// such symbol; that resolves to nullptr and buildMarker stays empty rather than
+// being treated as a failure.
+QString readBuildMarker(const QString& filePath)
+{
+    using BuildMarkerFn = const char* (*)();
+    auto* fn = reinterpret_cast<BuildMarkerFn>(QLibrary::resolve(filePath, "qgcPluginBuildMarker"));
+    return fn ? QString::fromUtf8(fn()) : QString();
 }
 
 void markDiscovered(PluginLoadInfo& info)
@@ -345,6 +362,7 @@ void QGCPluginLoader::activate(PluginLoadInfo& info)
 
     info.plugin = plugin;
     info.state = PluginState::Active;
+    info.buildMarker = readBuildMarker(info.filePath);
 }
 
 HostInfo QGCPluginLoader::hostInfo()

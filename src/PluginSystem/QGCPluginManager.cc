@@ -169,6 +169,7 @@ QVariantList QGCPluginManager::knownPlugins() const
         info["tier"]        = PluginManifest::tierToString(record.manifest.tier);
         info["state"]       = pluginStateName(record.state);
         info["statusText"]  = _statusText(record);
+        info["buildMarker"] = record.buildMarker;
         // Only a package installed under the user plugins directory can be removed
         // through the settings page; bundle-shipped and dev-loop bare dylibs cannot.
         info["removable"]   = !record.packageDir.isEmpty() && PluginTrustGate::isUserDirPlugin(record);
@@ -299,6 +300,9 @@ void QGCPluginManager::_activateRecord(PluginLoadInfo& record)
 
     QGCPlugin* plugin = record.plugin;
     const QString pluginId = record.manifest.id;
+
+    qCDebug(QGCPluginManagerLog) << "  - Activated" << pluginId << "build marker:"
+        << (record.buildMarker.isEmpty() ? QStringLiteral("<none>") : record.buildMarker);
 
     // Tier qml packages have no binary — nothing to init() or query for a replay
     // extension; their contributions came entirely from the manifest (D1).

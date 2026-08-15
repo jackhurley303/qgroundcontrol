@@ -37,12 +37,13 @@ qt_add_resources(${CMAKE_PROJECT_NAME} "PluginSystemTest_qml"
         PluginActivationHostProbe.qml
 )
 
-# Real SDK-tier dylib fixture backing PluginLoaderGateTest (see TestPlugin/CMakeLists.txt
-# for why it's a hand-rolled MODULE rather than a qgc_add_plugin() call).
+# Real SDK-tier dylib fixtures backing PluginLoaderGateTest, built through the
+# same qgc_add_plugin() every real plugin uses (see TestPlugin/CMakeLists.txt).
 add_subdirectory(TestPlugin)
-add_dependencies(${CMAKE_PROJECT_NAME} TestPluginFixture)
+add_dependencies(${CMAKE_PROJECT_NAME} TestPluginFixture TestPluginFixtureV2)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     QGC_TEST_PLUGIN_FIXTURE_PATH="$<TARGET_FILE:TestPluginFixture>"
+    QGC_TEST_PLUGIN_FIXTURE_V2_PATH="$<TARGET_FILE:TestPluginFixtureV2>"
 )
 
 add_qgc_test(HostServicesTest LABELS Unit)

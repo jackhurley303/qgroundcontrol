@@ -20,6 +20,14 @@ QString testPluginFixturePath()
     return QStringLiteral(QGC_TEST_PLUGIN_FIXTURE_PATH);
 }
 
+// Path to a second, independently-built dylib from the identical sources/manifest
+// (same plugin id and version) — TestPlugin/CMakeLists.txt's TestPluginFixtureV2
+// target, injected the same way as the primary fixture.
+QString testPluginFixtureV2Path()
+{
+    return QStringLiteral(QGC_TEST_PLUGIN_FIXTURE_V2_PATH);
+}
+
 QJsonObject qmlPackageManifestJson(const QJsonObject& contributes = QJsonObject())
 {
     QJsonObject json;
@@ -112,6 +120,75 @@ void PluginLoaderGateTest::_activateRealPlugin_test()
     QCOMPARE(info.plugin->replayExtension(), nullptr);
 
     delete info.plugin;
+}
+
+// U1's proof: buildMarker is read from the mapped image, not the file. Two
+// separate builds of identical sources/manifest (same plugin id and version)
+// must report two different markers, and re-activating the same file twice
+// must report the same marker both times (deterministic per build, not
+// per-call) — otherwise it would be indistinguishable from noise.
+void PluginLoaderGateTest::_buildMarkerDistinguishesSeparateBuilds_test()
+{
+    PluginLoadInfo first = QGCPluginLoader::inspect(testPluginFixturePath());
+    QCOMPARE(first.state, PluginState::Discovered);
+    QGCPluginLoader::activate(first);
+    QCOMPARE(first.state, PluginState::Active);
+    QVERIFY(!first.buildMarker.isEmpty());
+    delete first.plugin;
+
+    PluginLoadInfo firstAgain = QGCPluginLoader::inspect(testPluginFixturePath());
+    QGCPluginLoader::activate(firstAgain);
+    QCOMPARE(firstAgain.state, PluginState::Active);
+    QCOMPARE(firstAgain.buildMarker, first.buildMarker);
+    delete firstAgain.plugin;
+
+    PluginLoadInfo second = QGCPluginLoader::inspect(testPluginFixtureV2Path());
+    QCOMPARE(second.state, PluginState::Discovered);
+    QCOMPARE(second.manifest.id, first.manifest.id);
+    QGCPluginLoader::activate(second);
+    QCOMPARE(second.state, PluginState::Active);
+    QVERIFY(!second.buildMarker.isEmpty());
+    QVERIFY(second.buildMarker != first.buildMarker);
+    delete second.plugin;
+}
+
+// U1's risk item, measured: does an in-place upgrade (deactivate, overwrite the
+// binary at the same package path, re-inspect+reactivate — installPlugin's shape)
+// actually run the new image, or does the old one stay mapped and keep executing?
+// Answer recorded in the plan doc regardless of outcome (04 "Risks & spikes").
+void PluginLoaderGateTest::_inPlaceUpgradeChangesBuildMarker_test()
+{
+    const QString packageDir = _writePackage(QStringLiteral("org.test.upgrade"), sdkPackageManifestJson());
+    QVERIFY(!packageDir.isEmpty());
+    const QString binDir = createSubDir(QStringLiteral("org.test.upgrade/bin/macos-universal"));
+    QVERIFY(!binDir.isEmpty());
+    const QString dylibPath = binDir + QStringLiteral("/UpgradePackage.dylib");
+
+    QVERIFY(QFile::copy(testPluginFixturePath(), dylibPath));
+    PluginLoadInfo before = QGCPluginLoader::inspectPackage(packageDir);
+    QCOMPARE(before.state, PluginState::Discovered);
+    QGCPluginLoader::activate(before);
+    QCOMPARE(before.state, PluginState::Active);
+    QVERIFY(!before.buildMarker.isEmpty());
+    delete before.plugin;
+
+    // Overwrite the same path with a different build — installPlugin's shape: the old
+    // image is deactivated (deleted above) but stays mapped (PreventUnloadHint, S2/S3);
+    // only the file on disk changes before the fresh inspect+activate.
+    QVERIFY(QFile::remove(dylibPath));
+    QVERIFY(QFile::copy(testPluginFixtureV2Path(), dylibPath));
+    PluginLoadInfo after = QGCPluginLoader::inspectPackage(packageDir);
+    QCOMPARE(after.state, PluginState::Discovered);
+    QGCPluginLoader::activate(after);
+    QCOMPARE(after.state, PluginState::Active);
+    QVERIFY(!after.buildMarker.isEmpty());
+    delete after.plugin;
+
+    // The measured answer (see the plan doc's Risks & spikes section): QPluginLoader
+    // keys its instance cache by file path and reuses the already-mapped image, so a
+    // same-path in-place upgrade keeps executing the OLD build's code even though the
+    // manifest and file on disk are the new one's.
+    QCOMPARE(after.buildMarker, before.buildMarker);
 }
 
 void PluginLoaderGateTest::_inspectMissingFileFails_test()

@@ -13,6 +13,8 @@ private slots:
     void _inspectRealPluginBeforeActivation_test();
     void _activateRealPlugin_test();
     void _inspectMissingFileFails_test();
+    void _buildMarkerDistinguishesSeparateBuilds_test();
+    void _inPlaceUpgradeChangesBuildMarker_test();
 
     void _activateTemplateBuiltPluginAgainstCurrentHost_test();
 

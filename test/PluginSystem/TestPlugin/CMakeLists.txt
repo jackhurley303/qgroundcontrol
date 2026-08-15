@@ -20,3 +20,19 @@ qgc_add_plugin(TestPluginFixture
     QRC_FILES
         TestPluginFixture.qrc
 )
+
+# A second build of the identical plugin sources/manifest — same id and version,
+# distinct qgcPluginBuildMarker (generated fresh per qgc_add_plugin() call). Backs
+# PluginLoaderGateTest's proof that the marker reflects the mapped image, not the
+# file (plugin-enable-disable-correctness U1): two separate builds of "the same
+# plugin" must report two different markers.
+qgc_add_plugin(TestPluginFixtureV2
+    TIER SDK
+    NO_DEPLOY
+    MANIFEST qgcplugin.json.in
+    SOURCES
+        TestPluginFixture.h
+        TestPluginFixture.cc
+    QRC_FILES
+        TestPluginFixture.qrc
+)
