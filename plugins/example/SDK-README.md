@@ -45,6 +45,47 @@ The map and mission types are published for lint-time resolvability only and are
 explicitly exempt from that freeze — use them knowing they can change. Anything not in the
 `qmldir` is not part of the contract, even if it exists in a QGC build you happen to have.
 
+## Lifecycle: `init()` and `cleanup()` must be inverses
+
+The user can disable and re-enable your plugin from the Plugins settings page **without
+restarting QGroundControl**, so `init(host)`/`cleanup()` run once per activation each, in
+strict alternation, for as long as the app is up. The next `init()` receives the *same*
+`QGCHostServices` object as the first — so anything `cleanup()` leaves connected is not a
+one-off leak, it is a second copy of your wiring, and the cycle after that a third.
+
+The contract, in the form a test can assert it (the full text lives on
+`QGCPlugin::cleanup()` in `include/QGCPluginAPI/QGCPlugin.h`):
+
+> No `QObject` your plugin created between `init()` and `cleanup()` outlives `cleanup()`,
+> and the host services object's connection count returns to what it was before `init()`.
+
+Two details that decide whether you actually meet it:
+
+- **Created, not merely owned.** A parentless `QTimer` holding a lambda that captures
+  `this` runs your code exactly as a member would. The objects that get missed are the ones
+  outside your object tree, which is why `ExamplePlugin.cc` deliberately uses one as its
+  demonstration and destroys it explicitly.
+- **The host counts before it destroys you.** Teardown is `cleanup()` *then* `delete`, so a
+  connection you leave for your destructor to drop is still there when the count is taken.
+  Disconnect from every host object explicitly.
+
+Two things survive a cycle by construction and are not yours to undo: the **library image**,
+which is never unmapped, and your **QML type registrations**, which are permanent — a
+disabled plugin's types stay resolvable in the engine. The consequence is that your QML
+singletons must stay **C++-owned** (parented, with `create()` returning that instance) so
+`cleanup()` can destroy them; an engine-owned singleton sits outside any teardown you can
+write.
+
+The host withdraws your contributions before calling `cleanup()`, which retires the panels
+the standard views built from them. It cannot reach a panel the user has since **popped out**
+into its own window, so `cleanup()` must tolerate one still being alive and bound to you.
+
+`plugins/example/ExamplePlugin.cc` is the reference implementation, and QGC's own
+`PluginTeardownTest` drives this exact cycle against the built example — activate, `init()`,
+`cleanup()`, activate again — and fails if the connection count does not come back. Note what
+that does *not* check: an object you leak without a host connection is invisible to it. The
+count is the part the host can measure for you; the objects are yours to account for.
+
 ## Compatibility contract
 
 > A plugin built against SDK major N runs on any host with SDK major N and
