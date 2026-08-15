@@ -117,6 +117,11 @@ PLUGIN_SDK = PRSpec(
         "tools/verify_plugin_out_of_tree.py",
         "tools/plugin-verify.schema.json",
         "tools/tests/test_verify_plugin_out_of_tree.py",
+        # The QML contract watchdog (out-of-tree-plugins.md U5), invoked by the patched-in
+        # macos.yml step "Check QML contract (frozen-tier watchdog)". Without this the derived
+        # branch's CI would call a script that doesn't exist on it.
+        "tools/check_plugin_ui_contract.py",
+        "tools/tests/test_check_plugin_ui_contract.py",
         # The .qgcplugin packer. Ships inside the SDK package alongside the gate above, so
         # an author produces packages against the same rules PluginInstaller enforces.
         "tools/pack_plugin.py",
@@ -142,6 +147,14 @@ PLUGIN_SDK = PRSpec(
         "src/Vehicle/TrajectoryPoints.cc",
         "src/Vehicle/Vehicle.h",
         "src/Vehicle/Vehicle.cc",
+        # The tool-drawer exit-path fix (360b27945): plugin-agnostic — any custom
+        # toolbarSource that fails to load could strand the user with no exit. Folded into
+        # this spec rather than a sibling (Open questions, decided): the trap only bites
+        # plugin toolbars even though the file is core UI.
+        "src/MainWindow/MainWindow.qml",
+        "test/QmlUITests/CMakeLists.txt",
+        "test/QmlUITests/ToolDrawerEscapeUITest.cc",
+        "test/QmlUITests/ToolDrawerEscapeUITest.h",
         "src/FlyView/FlyViewPluginPanel.qml",
         "src/FlyView/FlyViewPluginButtonStrip.qml",
         "src/FlyView/FlightDisplayViewReplayVideo.qml",
@@ -211,8 +224,10 @@ PLUGIN_SDK = PRSpec(
                     "`plugins/example/CMakeLists.txt`.",
                 ),
                 (
-                    "gated by matching `hostBuildId` (rebuilds together with the host). `qdrive` is this tier.",
-                    "gated by matching `hostBuildId` (rebuilds together with the host).",
+                    "the tier every plugin in this tree uses (`example`, `qdrive`, and the test\n"
+                    "  fixture).",
+                    "the tier every plugin in this tree uses (`example` and the test\n"
+                    "  fixture).",
                 ),
             ),
         ),
