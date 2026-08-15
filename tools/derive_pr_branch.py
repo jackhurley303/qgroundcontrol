@@ -117,6 +117,10 @@ PLUGIN_SDK = PRSpec(
         "tools/verify_plugin_out_of_tree.py",
         "tools/plugin-verify.schema.json",
         "tools/tests/test_verify_plugin_out_of_tree.py",
+        # The .qgcplugin packer. Ships inside the SDK package alongside the gate above, so
+        # an author produces packages against the same rules PluginInstaller enforces.
+        "tools/pack_plugin.py",
+        "tools/tests/test_pack_plugin.py",
         "src/QGCApplication.h",
         "src/QGCApplication.cc",
         "src/Comms/MAVLinkProtocol.h",

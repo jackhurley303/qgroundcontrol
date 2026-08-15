@@ -14,8 +14,9 @@ QGC uses a dynamic plugin system managed by `QGCPluginManager`:
 - Loading is two-phase: **inspect** reads and validates the manifest without executing
   any plugin code; **activate** instantiates the plugin only if it's valid *and* enabled.
   A disabled or incompatible plugin's code never runs.
-- Plugins are built **in-tree** today (see [Tier roadmap](#tier-roadmap) below for where
-  this is headed).
+- Plugins build **in-tree** (this directory, via `qgc_add_plugin()`) or **out-of-tree**
+  against the published SDK — the two arms are indistinguishable at runtime, by design.
+  See [Tiers](#tiers) and [SDK Package](#sdk-package-out-of-tree-tier-b).
 
 See [src/PluginSystem/README.md](../src/PluginSystem/README.md) for the architecture in
 detail (manifest schema, loader states, manager internals).
@@ -59,10 +60,10 @@ CMake's `configure_file`, so `hostBuildId` can be stamped with the host's build 
 
 - **`id`** — reverse-DNS, stable identity. This is the key used for the plugin's
   enabled/disabled setting (`PluginSettings`), *not* its display name.
-- **`tier`** — `internal` (full access to QGC internals, gated to a matching
-  `hostBuildId`), `sdk` (links only the published `QGCPluginAPI` + Qt, no QGC
-  internals), or `qml` (no binary at all — see [Packages](#packages) below) — all three
-  work today (see [Tier roadmap](#tier-roadmap)).
+- **`tier`** — `sdk` (links only the published `QGCPluginAPI` + Qt, no QGC internals),
+  `qml` (no binary at all — see [Packages](#packages) below), or `internal` (full access
+  to QGC internals, gated to a matching `hostBuildId`). See [Tiers](#tiers) for which to
+  choose and what each one can actually be built with today.
 - **`apiVersion`** — must equal the host's supported major version
   (`QGCPluginApiVersion` in [QGCPluginInterface.h](../src/PluginAPI/QGCPluginInterface.h));
   required for `sdk`/`internal`, optional and unchecked for `qml` (no binary, no C++ ABI).
@@ -106,7 +107,7 @@ directory for the dev loop:
 
 ```cmake
 qgc_add_plugin(MyPlugin
-    TIER SDK                   # or INTERNAL for full QGC-internals access; QML is Stage 3
+    TIER SDK                   # the only value accepted — see Tiers above
     MANIFEST qgcplugin.json.in
     SOURCES
         MyPlugin.h
@@ -246,9 +247,17 @@ org.example.qgc.mypackage/
   from a binary's own embedded `Q_PLUGIN_METADATA` (even for tier `sdk`/`internal`,
   which happen to carry one too, built the same way as any other plugin).
 
-Package **installation** (`.qgcplugin` → `<plugins dir>/<id>/`, consent, removal) is a
-later stage — today, package directories are discovered exactly like bare dylibs: drop
-one in a search path above for the dev loop.
+Package **installation** works today: Application Settings → Plugins → "Install plugin…"
+validates a `.qgcplugin`'s manifest before extracting anything, unpacks it in-process to
+`<plugins dir>/<id>/` (so Gatekeeper never quarantines the extracted files), and offers
+Remove for it afterwards. Build one with
+[tools/pack_plugin.py](#building-a-qgcplugin). Tier `internal` is refused here — a
+package's binary could otherwise be swapped without the loader re-checking it against the
+manifest that granted it trust.
+
+For the dev loop you can skip packaging entirely: a package directory dropped into a
+search path is discovered exactly like a bare dylib. That is also the only way to iterate
+on a `qml`-tier plugin, which has no binary to deploy.
 
 ## Signing Your Plugin
 
@@ -278,27 +287,80 @@ necessarily the same team) to load:
 
 - Plugins are registered with `PluginSettings` **by manifest `id`**, not display name —
   renaming a plugin's `name` doesn't lose its enabled/disabled state.
-- Users toggle plugins in Application Settings → Plugins; the page shows each plugin's
-  name/version/vendor and a status line ("Active", "Disabled", "Incompatible: <reason>",
-  "Failed to load: <reason>", "Quarantined: <reason>").
+- Users toggle plugins in Application Settings → Plugins. Each row shows
+  name/version/vendor, the description, and a line reading
+  `<tier> · <source> · <status>` — where *source* is **Development build** (a bare binary
+  in the user plugins directory, i.e. your build's auto-deploy), **Installed** (a package
+  under that directory, removable) or **Bundled** (ships with the app, trusted, not
+  removable). Status is "Active", "Disabled", "Incompatible: <reason>", "Failed to load:
+  <reason>", "Quarantined: <reason>" or an approval prompt.
+- A **Built <date>** line follows for any active plugin with a binary, decoded from the
+  plugin's build-marker symbol; hovering it shows the full marker. "Build unknown" means
+  the plugin was built without `qgc_plugin_build_marker()` — it runs fine, but cannot tell
+  you which build is executing.
 - Toggling calls `QGCPluginManager::setPluginEnabled(id, bool)`, which activates or
   deactivates the plugin **immediately**, in memory — no restart.
-- **Default state**: interim rule until the trust model (manifest-driven, source-dir
-  based) lands — the Example plugin defaults off, every other plugin defaults on.
+- **Default state**: every discovered plugin defaults to enabled. What actually gates a
+  plugin is the trust model, not the default: a plugin in the **user** plugins directory
+  needs explicit approval on first sight and again whenever its bytes change (which is why
+  rebuilding one re-prompts), while a bundle-shipped plugin is trusted outright.
 - Plugin **code** changes (C++ or QML compiled into the binary) still require rebuilding
   the plugin; the enable/disable toggle only controls whether the already-built library
   is loaded.
 
-## Tier Roadmap
+## Tiers
 
-`tier` in the manifest — all three work today, `qml` (Tier A) is dev-loop only until the
-installer UX (`.qgcplugin` → "Install from file…") lands:
+`tier` in the manifest. The **loader** implements all three; the **build tooling** does
+not, and the difference matters when choosing one:
 
-| Tier | Status | Description |
-|---|---|---|
-| `internal` | **Working today** | Full access to QGC internals, gated by matching `hostBuildId` (rebuilds together with the host). `qdrive` is this tier. |
-| `sdk` | **Working today** | Links only a stable `QGCPluginAPI` shared library + Qt; loads into any host build within its declared version range. `example` is this tier — see [Example Plugin](#example-plugin) and `plugins/.architecture/04-macos-implementation-plan.md` §5 for the full SDK boundary story. |
-| `qml` | **Working (dev-loop)** | No compiled binary at all — pure manifest + QML, discovered from a [package](#packages) directory. Installing a `.qgcplugin` from the settings page is a later stage; today, drop a package directory into a search path to test one. |
+- **`sdk`** — links only the published `QGCPluginAPI` + Qt, no QGC internals. Gated on two
+  axes: `apiVersion` must exactly equal the host's, and the host version must fall inside
+  the declared `hostVersion` range — so it survives host rebuilds and point releases.
+  Ships as a bare dylib *or* a [package](#packages). **The only tier `qgc_add_plugin()`
+  builds**, and the tier every plugin in this tree uses (`example`, `qdrive`, and the test
+  fixture). Choose it for anything with logic — network I/O, storage, log parsing, vehicle
+  interaction. See [Example Plugin](#example-plugin) for the full SDK boundary story.
+- **`qml`** — no compiled binary at all: pure manifest + QML, discovered from a
+  [package](#packages) directory. `QGCPluginLoader::activate()` is a no-op for it, and
+  relative URLs in `contributes` resolve package-relative, so **no build system is
+  involved** — author the directory by hand and drop it in a search path. Gated on
+  `qmlApiVersion`, and only when declared. Cannot declare `replay` or `telemetryLogging`
+  (nothing exists to implement them), and a compiled file declaring this tier is rejected.
+  Choose it when the plugin is purely a view.
+- **`internal`** — full access to QGC internals, pinned to an exactly-matching
+  `hostBuildId`, so it rebuilds in lockstep with the host. **No supported build path
+  today**: `qgc_add_plugin()` hard-fails on any `TIER` but `SDK`, so this tier means
+  hand-rolled CMake, and nothing in the tree uses it. It also
+  [cannot be packaged](#packages). If you want it because you need a QGC internal, the
+  better answer is usually a new extension point in the base app, keeping the plugin on
+  `sdk`.
+
+## Building a `.qgcplugin`
+
+[tools/pack_plugin.py](../tools/pack_plugin.py) packs a package directory into the zip the
+settings page's "Install plugin…" consumes. It applies `PluginInstaller`'s rules at pack
+time — manifest validity, the tier layout rules, no bundled Qt/`QGCPluginAPI`, no symlinks,
+the 512 MB extraction ceiling — because every one of those rejections otherwise happens on
+a user's machine where the author never sees it:
+
+```bash
+# A package directory already laid out with bin/<platform>/
+python3 tools/pack_plugin.py path/to/org.example.myplugin
+
+# Or let it place a freshly built binary for you
+python3 tools/pack_plugin.py path/to/pkg --binary build/plugins/libMyPlugin.dylib
+
+python3 tools/pack_plugin.py path/to/pkg --dry-run   # list contents, write nothing
+```
+
+Output defaults to `<id>-<version>.qgcplugin`. The archive holds the package directory's
+*contents* at its root (not the directory itself) — nesting one level down is the classic
+`zip -r` mistake, and the installer sees no manifest at all. Entries are sorted and carry
+zip's epoch timestamp, so repacking unchanged content is byte-identical.
+
+The tool ships inside the SDK package at `<sdk>/tools/`, alongside
+[the out-of-tree gate](#sdk-package-out-of-tree-tier-b), so an out-of-tree author runs the
+same rules CI does.
 
 ## SDK Package (out-of-tree Tier B)
 

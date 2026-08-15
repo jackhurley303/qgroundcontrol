@@ -161,6 +161,15 @@ install(FILES "${CMAKE_SOURCE_DIR}/tools/plugin-verify.schema.json"
     COMPONENT QGCPluginSDK
 )
 
+# The .qgcplugin packer. Ships for the same reason the gate above does: the rules it
+# enforces are PluginInstaller's, and an author who cannot run them locally only discovers
+# a bad package when a user fails to install it. Stdlib-only and single-file, so it runs
+# from the unpacked zip with no QGC checkout.
+install(PROGRAMS "${CMAKE_SOURCE_DIR}/tools/pack_plugin.py"
+    DESTINATION "tools"
+    COMPONENT QGCPluginSDK
+)
+
 # CI reads this to name qgc-plugin-sdk-<platform>-<version>.zip without re-deriving
 # `git describe` in the workflow (and risking divergence from what this configure run
 # already computed via cmake/modules/Git.cmake).
