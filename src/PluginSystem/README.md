@@ -103,8 +103,8 @@ Key surface:
 - `loadedPlugins()` — only `Active` records, minimal shape (`name`), for existing QML
   consumers.
 - `knownPlugins()` — every record regardless of state, richer shape (`id`, `name`,
-  `version`, `vendor`, `description`, `tier`, `state`, `statusText`, `removable`) for the
-  Plugins settings page.
+  `version`, `vendor`, `description`, `tier`, `state`, `statusText`, `buildMarker`,
+  `removable`) for the Plugins settings page.
 - `setPluginEnabled(id, bool)` — persists the setting (keyed by manifest `id`, via
   `PluginSettings`) and activates/deactivates immediately to match. Idempotent.
 - `reloadPlugin(id)` — deactivate if active, re-inspect the stored path (`inspect()` for
@@ -304,15 +304,59 @@ copy of its state — a write through either URI is visible through the other, a
 
 2. Runtime
    ├── User toggles a plugin → QGCPluginManager::setPluginEnabled(id, bool)
-   │   ├── Enabling: re-inspect the stored path, activate if still valid
-   │   └── Disabling: cleanup() + delete the instance; contributions removed;
-   │       the library mapping itself stays until process restart
-   └── QGCPluginManager::reloadPlugin(id) — same deactivate/re-inspect/activate
-       flow, using the stored file path (no directory rescan)
+   │   ├── Enabling: _activateRecord(), exactly as at startup
+   │   └── Disabling: _deactivateRecord()
+   └── QGCPluginManager::reloadPlugin(id) — deactivate, re-inspect the stored file
+       path (no directory rescan), activate again if enabled
 
 3. Application Shutdown
-   └── QGCPluginManager::cleanup() — plugin->cleanup() + delete on every Active record
+   └── QGCPluginManager::cleanup() — _deactivateRecord() on every Active record,
+       then the records are dropped
 ```
+
+### Teardown is activation, inverted
+
+`_deactivateRecord()` is the **only** teardown in the manager: every path that stops a
+running plugin — disable, reload, install-over, remove, shutdown — goes through it, so a
+plugin's `cleanup()` always sees the same ordering. It runs `_activateRecord()` backwards:
+
+0. **The record gives up the instance** — `record.plugin` is nulled and the state set
+   before anything below emits, so a slot reading the record during those emissions never
+   finds a plugin on its way out. The instance stays alive in a local; steps 1 and 2 run
+   against a live object.
+1. **Drop the host's derived pointers into the plugin** (`_recalcReplayExtension()`,
+   `_recalcLoggingController()`). This cannot wait for the caller's epilogue:
+   `reloadPlugin()` and `installPlugin()` dlopen and activate a *new* build first, and the
+   contribution signals let QML read `replayExtension` in between — a pointer into the
+   plugin destroyed in step 3 would still be live across all of it.
+2. **Remove the contributions.** The QML side services those signals *synchronously*, so
+   that emission is what makes the views let go of the departing panels, and it has to
+   happen while the plugin is still alive. (Mirror of activation's constraint, where the
+   QML cache must be cleared *before* the same signals are emitted.)
+3. **`plugin->cleanup()`, then delete the instance.** The plugin object dies last.
+
+Activation's QML-cache clear has **no inverse here, deliberately**:
+`clearComponentCache()` is engine-wide, so a clear per disable would recompile every
+component in the app, and nothing needs it — a cached compilation unit instantiates
+nothing by itself, and step 2 already retired the panels.
+
+Like `_activateRecord()`, it leaves `_notifyRecordsChanged()` to its caller: the epilogue
+runs once per operation, not once per record touched.
+
+**What deactivation does not do is unload the library.** `QGCPluginLoader::activate()`
+calls `unload()` only on its failure paths, so a plugin that loaded stays mapped for the
+life of the process — and it must, because a plugin whose QML module has been imported
+cannot be unloaded at all: QML type registrations are permanent. A deactivated plugin's
+types therefore stay resolvable in the engine, and `cleanup()` — see the contract on
+[QGCPlugin::cleanup()](../PluginAPI/QGCPlugin.h) — is the only thing standing between a
+re-enable and duplicated wiring.
+
+That same mapping is why **replacing a plugin's binary in place cannot take effect until
+restart**: `QPluginLoader` keys its instance cache by file path and hands back the image
+already mapped, whatever is now on disk. The manager fingerprints each binary when it
+first maps it, flags `PluginLoadInfo::staleImage` when a later activation finds the file
+changed, and says so in the record's `statusText` — the install succeeded, but the build
+the user just installed is not the one executing.
 
 Android has no dynamic load/unload: plugins compile into the APK; the enabled toggle
 only controls which ones activate at startup.

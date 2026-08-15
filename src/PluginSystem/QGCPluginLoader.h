@@ -46,6 +46,9 @@ struct PluginLoadInfo {
     QString buildMarker;                ///< Per-build discriminator read from the mapped image after
                                          ///< activation (qgcPluginBuildMarker, via QLibrary::resolve);
                                          ///< empty until activated, or if the binary predates this symbol
+    bool staleImage = false;            ///< The binary on disk changed after this process mapped it, so
+                                         ///< the executing code is the older build (set by the manager
+                                         ///< at activation; an in-place upgrade is the way in)
 };
 
 /// @brief Stateless inspect/activate mechanism for QGC plugin libraries

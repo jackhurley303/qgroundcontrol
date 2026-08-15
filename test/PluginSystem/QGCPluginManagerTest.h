@@ -29,6 +29,12 @@ private slots:
     void _notifyEpilogueOwnsReplayExtension_test();
     void _lateActivationResolvesPluginQml_test();
 
+    void _teardownInvertsActivation_test();
+    void _shutdownMatchesDisableEndState_test();
+    void _teardownDropsDerivedPointers_test();
+    void _activeReloadEmitsEpilogueOnce_test();
+    void _inPlaceUpgradeMarksStaleImage_test();
+
     void _userDirPluginNeedsApprovalFirstSight_test();
     void _approvalActivatesAndPersists_test();
     void _changedContentReprompts_test();

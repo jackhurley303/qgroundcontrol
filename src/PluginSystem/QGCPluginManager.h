@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <QtCore/QHash>
 #include <QtCore/QLoggingCategory>
 #include <QtCore/QObject>
 #include <QtCore/QPointer>
@@ -63,7 +64,9 @@ public:
     /// headless runs).
     void setQmlEngine(QQmlEngine *engine);
 
-    /// Cleanup all loaded plugins
+    /// Tear down every active plugin and drop all records — application shutdown.
+    /// Runs the same per-record teardown a user-initiated disable does, so the two
+    /// paths leave the same observable state behind.
     void cleanup();
 
     /// Get the list of loaded plugins (for QML)
@@ -149,6 +152,11 @@ private:
     void _ensureHostServices();
     void _processInspected(const QList<PluginLoadInfo>& infos);
     void _activateRecord(PluginLoadInfo& record);
+    /// The one teardown: inverts _activateRecord, dropping the host's derived
+    /// pointers, then the contributions, then the plugin instance. Every path that
+    /// stops a running plugin — disable, reload, install-over, remove, shutdown —
+    /// goes through here. Like _activateRecord it leaves _notifyRecordsChanged()
+    /// to its caller.
     void _deactivateRecord(PluginLoadInfo& record);
     void _addContributions(const PluginLoadInfo& record);
     void _removeContributionsForPlugin(const QString& pluginId);
@@ -159,6 +167,11 @@ private:
     void _notifyRecordsChanged();
     void _activateIfEnabled(PluginLoadInfo& record);
     void _invalidateQmlCache(const PluginLoadInfo& record);
+    /// Records the binary as mapped in this process on its first activation, and
+    /// on any later one reports whether the file has changed since — the image
+    /// stays mapped for the process lifetime, so a changed file means the old
+    /// build is what is executing.
+    bool _mapBinaryAndDetectStaleImage(const QString& filePath);
     QString _statusText(const PluginLoadInfo& record) const;
 
     QVariantList _toolMenuItems;           // List of tool menu items (from plugins)
@@ -169,6 +182,7 @@ private:
     QGCReplayExtension* _replayExtension = nullptr; // First replay extension found across active plugins
     QPointer<QQmlEngine> _qmlEngine;      // Application QML engine, null until it exists (see setQmlEngine)
     bool _hasLoggingController = false;   // True if any active plugin claims telemetry-logging control
+    QHash<QString, QString> _mappedBinaries; // Plugin binary path -> file fingerprint when first mapped
 
     friend class QGCPluginManagerTest;
 };

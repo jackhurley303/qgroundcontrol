@@ -57,7 +57,32 @@ public:
     virtual void init(QGCHostServices* host);
 
     /// Cleanup the plugin
-    /// Called before the plugin is unloaded
+    /// Called when the plugin is deactivated — the user disabling it, a reload, or
+    /// application shutdown — and always paired with exactly one preceding init().
+    /// The two strictly alternate, and a later init() receives the same host
+    /// services object as the first, so a plugin may be activated again in the same
+    /// process.
+    ///
+    /// The contract: no QObject the plugin created between init() and cleanup()
+    /// outlives cleanup(), and the host services object's connection count returns
+    /// to what it was before init(). Created, not merely owned — an unparented
+    /// QTimer holding a plugin lambda runs plugin code just as a member would.
+    /// Disconnect everything connected to a host object, destroy everything
+    /// created, and drop every pointer into the host. What survives is what
+    /// duplicates on the next activation.
+    ///
+    /// Two things survive a cycle by construction and are not yours to undo: the
+    /// library image, which is never unmapped, and the plugin's QML type
+    /// registrations, which are permanent — a deactivated plugin's types stay
+    /// resolvable in the engine. Plugin QML singletons must therefore stay
+    /// C++-owned (parented, with create() returning that instance) so that
+    /// cleanup() can destroy them; an engine-owned singleton is outside any
+    /// teardown.
+    ///
+    /// The host withdraws your contributions before calling this, which retires the
+    /// panels the standard views built from them. It cannot reach a QML object the
+    /// user has since detached from those views, so cleanup() must tolerate one
+    /// still being alive and bound to you.
     virtual void cleanup();
 
     /// Returns the plugin's flight replay extension, or nullptr if this plugin

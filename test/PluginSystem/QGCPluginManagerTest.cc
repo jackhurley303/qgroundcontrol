@@ -1,9 +1,11 @@
 #include "QGCPluginManagerTest.h"
 
+#include <QtCore/QDateTime>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
+#include <QtCore/QPointer>
 #include <QtCore/QRegularExpression>
 #include <QtCore/QSettings>
 #include <QtCore/QStandardPaths>
@@ -116,6 +118,13 @@ PluginLoadInfo activeReplayProviderFixture(const QString& id, QObject* parent)
 QString testPluginFixturePath()
 {
     return QStringLiteral(QGC_TEST_PLUGIN_FIXTURE_PATH);
+}
+
+// A second fixture target built from identical sources, so it differs from the
+// first only in its build marker — the "other build" of an in-place upgrade.
+QString testPluginFixtureV2Path()
+{
+    return QStringLiteral(QGC_TEST_PLUGIN_FIXTURE_V2_PATH);
 }
 
 } // namespace
@@ -602,6 +611,246 @@ void QGCPluginManagerTest::_lateActivationResolvesPluginQml_test()
     QCOMPARE(hostObject->property("derived").toDouble(), 14.0);
 
     delete record.plugin;
+}
+
+// The slots below load the real fixture dylib, so they must stay *after*
+// _lateActivationResolvesPluginQml_test: that test's positive control asserts the
+// fixture's resources are not yet registered, and loading it earlier in the run
+// would make it pass for the wrong reason.
+
+void QGCPluginManagerTest::_teardownInvertsActivation_test()
+{
+    QQmlEngine engine;
+    engine.addImportPath(QStringLiteral("qrc:/qml"));
+
+    QGCPluginManager manager;
+    manager.setQmlEngine(&engine);
+
+    PluginLoadInfo record = QGCPluginLoader::inspect(testPluginFixturePath());
+    QCOMPARE(record.state, PluginState::Discovered);
+    manager._activateRecord(record);
+    QCOMPARE(record.state, PluginState::Active);
+    QCOMPARE(manager.flyViewPanelItems().size(), 1);
+
+    QPointer<QGCPlugin> plugin(record.plugin);
+    QVERIFY(!plugin.isNull());
+
+    // Read the ordering from inside the contribution signal, because that is where it
+    // matters: the QML side services this emission synchronously, so anything it does
+    // in response happens while the teardown is only part-way through. A teardown that
+    // destroys the plugin first would hand QML a departing panel backed by a dead
+    // object — which an end-state assertion made after the call cannot see.
+    bool signalled = false;
+    bool pluginAliveWhenContributionsLeft = false;
+    bool listEmptyWhenSignalled = false;
+    const QMetaObject::Connection connection =
+        QObject::connect(&manager, &QGCPluginManager::flyViewPanelItemsChanged, &manager, [&]() {
+            signalled = true;
+            pluginAliveWhenContributionsLeft = !plugin.isNull();
+            listEmptyWhenSignalled = manager.flyViewPanelItems().isEmpty();
+        });
+
+    manager._deactivateRecord(record);
+    QObject::disconnect(connection);
+
+    QVERIFY(signalled);
+    QVERIFY2(pluginAliveWhenContributionsLeft, "the plugin instance was destroyed before its contributions were withdrawn");
+    QVERIFY2(listEmptyWhenSignalled, "the contribution signal was emitted before the item was actually removed");
+
+    // Every activation step has an inverse that ran
+    QVERIFY2(plugin.isNull(), "teardown left the plugin instance alive");
+    QVERIFY(record.plugin == nullptr);
+    QCOMPARE(record.state, PluginState::Disabled);
+    QVERIFY(manager.toolMenuItems().isEmpty());
+    QVERIFY(manager.flyViewPanelItems().isEmpty());
+    QVERIFY(manager.planViewPanelItems().isEmpty());
+
+    // A second activation is clean: a fresh instance, exactly one of each
+    // contribution (not two), and QML that still resolves — the teardown left the
+    // engine's component cache alone, and activation's own clear covers the rest.
+    manager._activateRecord(record);
+    QCOMPARE(record.state, PluginState::Active);
+    QVERIFY(record.plugin != nullptr);
+    QCOMPARE(manager.flyViewPanelItems().size(), 1);
+    QQmlComponent panel(&engine, QUrl(manager.flyViewPanelItems().constFirst().toMap()[QStringLiteral("panelUrl")].toString()));
+    QVERIFY2(panel.isReady(), qPrintable(panel.errorString()));
+
+    manager._deactivateRecord(record);
+}
+
+void QGCPluginManagerTest::_shutdownMatchesDisableEndState_test()
+{
+    PluginLoadInfo probe = QGCPluginLoader::inspect(testPluginFixturePath());
+    QCOMPARE(probe.state, PluginState::Discovered);
+    const QString id = probe.manifest.id;
+    QVERIFY(!id.isEmpty());
+    pluginSettings()->registerPlugin(id, probe.manifest.name, true);
+
+    // The user-initiated path: setPluginEnabled(id, false) on an active plugin.
+    QGCPluginManager disabling;
+    PluginLoadInfo disableRecord = QGCPluginLoader::inspect(testPluginFixturePath());
+    disabling._activateRecord(disableRecord);
+    QCOMPARE(disableRecord.state, PluginState::Active);
+    disabling._recordStore.records() = {disableRecord};
+    QPointer<QGCPlugin> disabledPlugin(disableRecord.plugin);
+    disabling.setPluginEnabled(id, false);
+
+    // The application-shutdown path, on an identical starting state — plus a second
+    // active record, so the per-record loop is exercised rather than a single one.
+    QGCPluginManager shuttingDown;
+    PluginLoadInfo shutdownRecord = QGCPluginLoader::inspect(testPluginFixturePath());
+    shuttingDown._activateRecord(shutdownRecord);
+    QCOMPARE(shutdownRecord.state, PluginState::Active);
+    shuttingDown._recordStore.records() = {
+        shutdownRecord,
+        activeReplayProviderFixture(QStringLiteral("org.test.shutdownreplay"), &shuttingDown),
+    };
+    QPointer<QGCPlugin> shutdownPlugin(shutdownRecord.plugin);
+    QPointer<QGCPlugin> secondPlugin(shuttingDown._recordStore.records()[1].plugin);
+    shuttingDown._notifyRecordsChanged();
+    QVERIFY(shuttingDown.replayExtension() != nullptr);
+
+    // Shutdown has to obey the same ordering a disable does, and an end-state check
+    // after cleanup() returns cannot see it: read it from inside the emission.
+    bool shutdownSignalled = false;
+    bool pluginAliveWhenContributionsLeft = false;
+    const QMetaObject::Connection shutdownConnection =
+        QObject::connect(&shuttingDown, &QGCPluginManager::flyViewPanelItemsChanged, &shuttingDown, [&]() {
+            // First emission only. _removeContributionsForPlugin() emits all three
+            // signals unconditionally, so the *second* record's teardown re-enters
+            // this handler — by which point the first plugin is legitimately gone,
+            // and a last-write-wins reading would report that as the failure.
+            if (shutdownSignalled) {
+                return;
+            }
+            shutdownSignalled = true;
+            pluginAliveWhenContributionsLeft = !shutdownPlugin.isNull();
+        });
+    shuttingDown.cleanup();
+    QObject::disconnect(shutdownConnection);
+
+    QVERIFY(shutdownSignalled);
+    QVERIFY2(pluginAliveWhenContributionsLeft, "shutdown destroyed the plugin before withdrawing its contributions");
+    QVERIFY2(disabledPlugin.isNull(), "disable left the plugin instance alive");
+    QVERIFY2(shutdownPlugin.isNull(), "shutdown left the plugin instance alive");
+    QVERIFY2(secondPlugin.isNull(), "shutdown tore down only the first active record");
+    QVERIFY2(shuttingDown.replayExtension() == nullptr, "shutdown left a pointer into a destroyed plugin");
+    QCOMPARE(disabling.toolMenuItems(), shuttingDown.toolMenuItems());
+    QCOMPARE(disabling.flyViewPanelItems(), shuttingDown.flyViewPanelItems());
+    QCOMPARE(disabling.planViewPanelItems(), shuttingDown.planViewPanelItems());
+    QVERIFY(disabling.flyViewPanelItems().isEmpty());
+    QCOMPARE(disabling.replayExtension(), shuttingDown.replayExtension());
+    QCOMPARE(disabling.hasLoggingController(), shuttingDown.hasLoggingController());
+
+    // The one deliberate difference: shutdown drops the records, a disable keeps its
+    // record so the plugin stays listed (and re-enablable) on the settings page.
+    QCOMPARE(disabling._recordStore.records().size(), 1);
+    QCOMPARE(disabling._recordStore.records().first().state, PluginState::Disabled);
+    QVERIFY(disabling._recordStore.records().first().plugin == nullptr);
+    QVERIFY(shuttingDown._recordStore.records().isEmpty());
+}
+
+void QGCPluginManagerTest::_teardownDropsDerivedPointers_test()
+{
+    // The host's derived state points *into* the plugin, so teardown has to drop it
+    // itself rather than leave it to the caller's epilogue. reloadPlugin() and
+    // installPlugin() dlopen and activate a whole new build between the two, and the
+    // contribution signals let QML read replayExtension in that window — so a stale
+    // pointer here is a read of a destroyed object, not merely an out-of-date list.
+    const QString id = QStringLiteral("org.test.derivedpointers");
+
+    QGCPluginManager manager;
+    manager._recordStore.records() = {activeReplayProviderFixture(id, &manager)};
+    manager._recordStore.records().first().contributions.controlsTelemetryLogging = true;
+    manager._notifyRecordsChanged();
+    QVERIFY(manager.replayExtension() != nullptr);
+    QVERIFY(manager.hasLoggingController());
+
+    // No _notifyRecordsChanged() afterwards: this is the state teardown itself must
+    // leave behind, measured before any caller epilogue can paper over it.
+    manager._deactivateRecord(manager._recordStore.records().first());
+
+    QVERIFY2(manager.replayExtension() == nullptr, "teardown left _replayExtension pointing into the destroyed plugin");
+    QVERIFY2(!manager.hasLoggingController(), "teardown left the telemetry-logging claim of a torn-down plugin standing");
+}
+
+void QGCPluginManagerTest::_activeReloadEmitsEpilogueOnce_test()
+{
+    PluginLoadInfo record = QGCPluginLoader::inspect(testPluginFixturePath());
+    QCOMPARE(record.state, PluginState::Discovered);
+    const QString id = record.manifest.id;
+    pluginSettings()->registerPlugin(id, record.manifest.name, true);
+    // Explicit, not the registration default: the enabled Fact persists in QSettings,
+    // and an earlier slot (or an earlier run of this binary) disables this same id.
+    pluginSettings()->pluginEnabledFact(id)->setRawValue(true);
+
+    QGCPluginManager manager;
+    manager._activateRecord(record);
+    QCOMPARE(record.state, PluginState::Active);
+    manager._recordStore.records() = {record};
+
+    MultiSignalSpy spy;
+    QVERIFY(spy.init(&manager, {"loadedPluginsChanged"}));
+
+    // Teardown leaves the epilogue to its caller, exactly as activation does, so a
+    // reload of a *running* plugin runs it once — not once for the deactivation and
+    // again at the end.
+    manager.reloadPlugin(id);
+    QVERIFY_SIGNAL_COUNT(spy, "loadedPluginsChanged", 1);
+    QCOMPARE(manager._recordStore.records().size(), 1);
+    QCOMPARE(manager._recordStore.records().first().state, PluginState::Active);
+    QCOMPARE(manager.flyViewPanelItems().size(), 1);
+}
+
+void QGCPluginManagerTest::_inPlaceUpgradeMarksStaleImage_test()
+{
+    const QString dylibPath = tempPath(QStringLiteral("libinplace.dylib"));
+    QVERIFY(QFile::copy(testPluginFixturePath(), dylibPath));
+
+    QGCPluginManager manager;
+    PluginLoadInfo record = QGCPluginLoader::inspect(dylibPath);
+    QCOMPARE(record.state, PluginState::Discovered);
+    manager._activateRecord(record);
+    QCOMPARE(record.state, PluginState::Active);
+    QVERIFY2(!record.staleImage, "the first activation of a path cannot be stale");
+    const QString firstMarker = record.buildMarker;
+    QVERIFY(!firstMarker.isEmpty());
+
+    // Negative control: an ordinary disable/re-enable also re-uses the mapped image,
+    // and must not be reported — the file did not change, so the build running is the
+    // build on disk.
+    manager._deactivateRecord(record);
+    manager._activateRecord(record);
+    QCOMPARE(record.state, PluginState::Active);
+    QVERIFY2(!record.staleImage, "an unchanged binary must not be reported as stale");
+    QCOMPARE(manager._statusText(record), QStringLiteral("Active"));
+    manager._deactivateRecord(record);
+
+    // The in-place upgrade: same path, a different build's bytes. Setting the
+    // modification time explicitly keeps filesystem timestamp resolution out of it.
+    QVERIFY(QFile::remove(dylibPath));
+    QVERIFY(QFile::copy(testPluginFixtureV2Path(), dylibPath));
+    QFile upgradedFile(dylibPath);
+    QVERIFY(upgradedFile.open(QIODevice::ReadWrite));
+    QVERIFY(upgradedFile.setFileTime(QDateTime::currentDateTime().addSecs(-3600), QFileDevice::FileModificationTime));
+    upgradedFile.close();
+
+    PluginLoadInfo upgraded = QGCPluginLoader::inspect(dylibPath);
+    QCOMPARE(upgraded.state, PluginState::Discovered);
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("keeps executing"));
+    manager._activateRecord(upgraded);
+    verifyExpectedLogMessage();
+    QCOMPARE(upgraded.state, PluginState::Active);
+    QVERIFY2(upgraded.staleImage, "a binary replaced under a mapped image must be reported as stale");
+    QVERIFY2(manager._statusText(upgraded).contains(QStringLiteral("restart")),
+             qPrintable(manager._statusText(upgraded)));
+
+    // Why the warning is warranted, measured rather than assumed: the marker read back
+    // from the mapped image is still the first build's (see also
+    // PluginLoaderGateTest::_inPlaceUpgradeChangesBuildMarker_test).
+    QCOMPARE(upgraded.buildMarker, firstMarker);
+
+    manager._deactivateRecord(upgraded);
 }
 
 void QGCPluginManagerTest::_userDirPluginNeedsApprovalFirstSight_test()

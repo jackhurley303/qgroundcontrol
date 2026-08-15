@@ -24,6 +24,8 @@
 
 #include <QtCore/QApplicationStatic>
 #include <QtCore/QDir>
+#include <QtCore/QFileInfo>
+#include <QtCore/QTimeZone>
 #include <QtQml/QQmlEngine>
 #include <QtQml/qqml.h>
 
@@ -90,21 +92,19 @@ void QGCPluginManager::setQmlEngine(QQmlEngine *engine)
 
 void QGCPluginManager::cleanup()
 {
-    // Clean up plugins
-    for (const PluginLoadInfo& record : _recordStore.records()) {
-        if (record.plugin) {
-            record.plugin->cleanup();
-            delete record.plugin;
+    // Shutdown is a deactivation of every running plugin, not a second kind of
+    // teardown: one shape means a plugin's cleanup() sees the same ordering here
+    // as it does when the user flips the toggle.
+    // `|| record.plugin` keeps the guarantee the hand-rolled loop had: clear() drops
+    // the records without looking at their instances, so a plugin that somehow holds
+    // one while not Active would leak, never having been given its cleanup().
+    for (PluginLoadInfo& record : _recordStore.records()) {
+        if ((record.state == PluginState::Active) || record.plugin) {
+            _deactivateRecord(record);
         }
     }
     _recordStore.clear();
-    _toolMenuItems.clear();
-    _flyViewPanelItems.clear();
-    _planViewPanelItems.clear();
-    emit flyViewPanelItemsChanged();
-    emit planViewPanelItemsChanged();
     _notifyRecordsChanged();
-    emit toolMenuItemsChanged();
 }
 
 void QGCPluginManager::_recalcLoggingController()
@@ -182,7 +182,10 @@ QString QGCPluginManager::_statusText(const PluginLoadInfo& record) const
 {
     switch (record.state) {
     case PluginState::Active:
-        return tr("Active");
+        // The plugin runs either way, so this is a status line and not an error:
+        // what the user needs to know is that the build they just installed is not
+        // the one executing.
+        return record.staleImage ? tr("Active (restart to run the updated build)") : tr("Active");
     case PluginState::Disabled:
         return tr("Disabled");
     case PluginState::Incompatible:
@@ -307,6 +310,13 @@ void QGCPluginManager::_activateRecord(PluginLoadInfo& record)
     // Tier qml packages have no binary — nothing to init() or query for a replay
     // extension; their contributions came entirely from the manifest (D1).
     if (plugin) {
+        record.staleImage = _mapBinaryAndDetectStaleImage(record.filePath);
+        if (record.staleImage) {
+            qCWarning(QGCPluginManagerLog) << "Plugin" << pluginId
+                << "was replaced on disk after this process mapped it; the previously loaded build"
+                << "keeps executing until QGroundControl restarts -" << record.filePath;
+        }
+
         _ensureHostServices();
         plugin->init(_hostServices);
 
@@ -330,6 +340,27 @@ void QGCPluginManager::_activateRecord(PluginLoadInfo& record)
     _addContributions(record);
 }
 
+bool QGCPluginManager::_mapBinaryAndDetectStaleImage(const QString& filePath)
+{
+    // Size and modification time, not a content hash: this runs on every activation,
+    // and an install (or a rebuild over a deployed plugin) always rewrites both.
+    const QFileInfo info(filePath);
+    const QString fingerprint = QStringLiteral("%1/%2")
+        .arg(info.size())
+        .arg(info.lastModified(QTimeZone::UTC).toMSecsSinceEpoch());
+
+    const auto mapped = _mappedBinaries.constFind(filePath);
+    if (mapped == _mappedBinaries.constEnd()) {
+        _mappedBinaries.insert(filePath, fingerprint);
+        return false;
+    }
+
+    // Deliberately not refreshed on a mismatch: the mapped image still corresponds to
+    // the fingerprint taken when it was mapped, and QPluginLoader keys its instance
+    // cache by path, so every later activation of this path reuses that same image.
+    return (*mapped != fingerprint);
+}
+
 void QGCPluginManager::_invalidateQmlCache(const PluginLoadInfo& record)
 {
     // A plugin's QML arrives with its library: the resources are registered by the
@@ -343,6 +374,11 @@ void QGCPluginManager::_invalidateQmlCache(const PluginLoadInfo& record)
     // Ordering is load-bearing: _addContributions() below emits the contribution
     // signals, and the QML side fetches the new urls synchronously inside those
     // emissions. Clearing afterwards is too late for the first render.
+    //
+    // Deactivation deliberately has no matching clear: the cache is engine-wide, so
+    // dropping it would recompile every component in the app, and nothing needs it —
+    // a cached compilation unit instantiates nothing by itself, and the views let go
+    // of the departing panels when their contributions are removed.
     if (!_qmlEngine || !record.contributions.contributesQml()) {
         return;
     }
@@ -376,17 +412,38 @@ void QGCPluginManager::_addContributions(const PluginLoadInfo& record)
 
 void QGCPluginManager::_deactivateRecord(PluginLoadInfo& record)
 {
-    if (record.plugin) {
-        record.plugin->cleanup();
-        delete record.plugin;
-        record.plugin = nullptr;
-    }
+    // _activateRecord() run backwards. The order is the point, not tidiness: the
+    // plugin object must die last, once nothing the host handed to QML can still
+    // call into it.
 
-    // The library mapping stays; a full drop happens on restart
+    // The record gives up the instance before anything below emits. Everything from
+    // here on is serviced synchronously by QML, and a slot that reads this record
+    // (or a recalc that walks the store) must not find a plugin that is on its way
+    // out. The instance itself stays alive in `plugin` — steps 1 and 2 still run
+    // against a live object.
+    QGCPlugin* const plugin = record.plugin;
+    record.plugin = nullptr;
     record.state = PluginState::Disabled;
 
+    // 1. Drop the host's derived pointers into the plugin before the object behind
+    //    them goes away. This cannot wait for the caller's _notifyRecordsChanged():
+    //    reloadPlugin() and installPlugin() dlopen and activate a new build first,
+    //    and _addContributions()'s signals let QML read replayExtension in between.
+    _recalcReplayExtension();
+    _recalcLoggingController();
+
+    // 2. Inverse of _addContributions(). The QML side services these signals
+    //    synchronously, so this emission is what makes the views let go of the
+    //    departing panels, and it must happen while the plugin is still alive.
     _removeContributionsForPlugin(record.manifest.id);
-    _notifyRecordsChanged();
+
+    // 3. Inverse of activate()/init(). The library mapping itself stays — see
+    //    QGCPluginLoader::activate() — so cleanup() is the only thing standing
+    //    between a re-enable and duplicated wiring.
+    if (plugin) {
+        plugin->cleanup();
+        delete plugin;
+    }
 }
 
 void QGCPluginManager::_removeContributionsForPlugin(const QString& pluginId)
@@ -452,6 +509,7 @@ void QGCPluginManager::setPluginEnabled(const QString& pluginId, bool enabled)
         if (record->state == PluginState::Active) {
             qCDebug(QGCPluginManagerLog) << "Disabling plugin:" << pluginId;
             _deactivateRecord(*record);
+            _notifyRecordsChanged();
         } else if (record->state == PluginState::Discovered) {
             record->state = PluginState::Disabled;
         }
