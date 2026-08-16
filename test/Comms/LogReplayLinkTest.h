@@ -32,6 +32,8 @@ private slots:
     void _testSeekToStartAndPastEnd();
     void _testRestartFromEndResolvesInitialValues();
     void _testSeekOntoRepeatedTimestamp();
+    void _testTruncatedLogFails_data();
+    void _testTruncatedLogFails();
 
 private:
     QString _writeLogFile(const QByteArray& contents);

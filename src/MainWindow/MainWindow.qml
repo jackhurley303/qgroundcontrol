@@ -20,6 +20,14 @@ ApplicationWindow {
     // The special casing for android prevents white bars from showing up on the edges of the screen with newer android versions
     flags:      Qt.Window | (ScreenTools.isAndroid ? Qt.ExpandedClientAreaHint | Qt.NoTitleBarBackgroundHint : 0)
 
+    // Qt 6.9+ auto-sets ApplicationWindow padding to the display safe-area insets on mobile,
+    // which insets our full-bleed content and leaves a blank strip along the screen edge.
+    // QGC draws edge-to-edge and manages its own insets, so zero the padding.
+    topPadding:    0
+    bottomPadding: 0
+    leftPadding:   0
+    rightPadding:  0
+
     Component.onCompleted: {
         // Start the sequence of first run prompt(s)
         firstRunPromptManager.nextPrompt()
@@ -129,12 +137,21 @@ ApplicationWindow {
     function showPlanView() {
         flyView.visible = false
         planView.visible = true
+        geoView.visible = false
         toolDrawer.visible = false
     }
 
     function showFlyView() {
         flyView.visible = true
         planView.visible = false
+        geoView.visible = false
+        toolDrawer.visible = false
+    }
+
+    function showGeoView() {
+        flyView.visible = false
+        planView.visible = false
+        geoView.visible = true
         toolDrawer.visible = false
     }
 
@@ -143,7 +160,7 @@ ApplicationWindow {
     }
 
     function showTool(toolTitle, toolSource, toolIcon, toolbarSource) {
-        toolDrawer.backIcon     = flyView.visible ? "/qmlimages/PaperPlane.svg" : "/qmlimages/Plan.svg"
+        toolDrawer.backIcon     = flyView.visible ? "/qmlimages/PaperPlane.svg" : (geoView.visible ? "/InstrumentValueIcons/globe.svg" : "/qmlimages/Plan.svg")
         toolDrawer.toolTitle    = toolTitle
         toolDrawer.toolSource   = toolSource
         toolDrawer.toolIcon     = toolIcon
@@ -333,6 +350,13 @@ ApplicationWindow {
     PlanView {
         id:             planView
         objectName:     "mainView_plan"
+        anchors.fill:   parent
+        visible:        false
+    }
+
+    FlyViewGeo {
+        id:             geoView
+        objectName:     "mainView_geo"
         anchors.fill:   parent
         visible:        false
     }

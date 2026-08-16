@@ -786,7 +786,18 @@ void QGCApplication::shutdown()
         VideoManager::instance()->cleanup();
     }
 
+    // Runtime plugins first: they contribute QML that lives in _qmlAppEngine, so they must
+    // release it while the engine is still alive. Destroying the engine first would tear
+    // those objects out from under plugins that still hold them.
     QGCPluginManager::instance()->cleanup();  // Cleanup runtime plugins
+
+    // Engines from createQmlApplicationEngine must die through the destroy hook so the plugin
+    // can release per-engine state; parent-based teardown in ~QGCApplication would bypass it.
+    if (_qmlAppEngine) {
+        QGCCorePlugin::instance()->destroyQmlApplicationEngine(_qmlAppEngine);
+        _qmlAppEngine = nullptr;
+    }
+
     QGCCorePlugin::instance()->cleanup();
 
     if (_runningUnitTests || _simpleBootTest) {

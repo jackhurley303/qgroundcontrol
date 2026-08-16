@@ -1,7 +1,7 @@
 # İndirme ve Kurulum
 
 :::tip
-These are **daily build** download links with the latest features. If you are looking for the last stable release, see the [stable docs](https://docs.qgroundcontrol.com/Stable_V5.0/en/qgc-user-guide/getting_started/download_and_install.html).
+These are **daily build** download links with the latest features. If you are looking for the last stable release, see the [stable docs](https://docs.qgroundcontrol.com/Stable_V5.1/en/qgc-user-guide/getting_started/download_and_install.html).
 :::
 
 :::tip
@@ -23,7 +23,7 @@ Supported versions: Windows 10 (1809 or later), Windows 11:
 1. Download the installer:
    - [x86_64](https://d176tv9ibo4jno.cloudfront.net/builds/master/QGroundControl-installer-AMD64.exe)
    - [Arm64](https://d176tv9ibo4jno.cloudfront.net/builds/master/QGroundControl-installer-ARM64.exe)
-2. exe'ye çift tıklayın.
+2. Double-click the executable to launch the installer.
 
 :::info
 Windows kurulum programı 3 kısayol oluşturur: **QGroundControl**, **GPU Compatibility Mode**, **GPU Safe Mode**.
@@ -40,19 +40,23 @@ Supported versions: macOS 13 (Ventura) or later:
 <!-- usually based on Qt macOS dependency -->
 
 1. Download [QGroundControl.dmg](https://d176tv9ibo4jno.cloudfront.net/builds/master/QGroundControl.dmg).
-2. .dmg dosyasına çift tıklayın, ardından çıkan ekranda _QGroundControl_'ü _Application_ dosyasına sürükleyin.
+2. Double-click the .dmg file to mount it. In the window that opens, drag the _QGroundControl_ icon onto the _Applications_ folder shortcut shown next to it.
 
 :::info
-QGroundControl continues to not be signed. You will not to allow permission for it to install based on your macOS version.
+The download is a universal binary that runs natively on both Apple Silicon and Intel Macs.
+Official builds are signed and notarized, so no Gatekeeper security overrides are needed to run the app.
 :::
 
 ## Ubuntu Linux {#ubuntu}
 
-Supported versions: Ubuntu 22.04, 24.04:
+Supported versions: Ubuntu 24.04 LTS, 26.04 LTS:
+
+:::info
+The AppImage downloads below run on Ubuntu 24.04 LTS and 26.04 LTS. If you need a version of _QGroundControl_ that runs on Ubuntu 22.04, it is possible, but you have to [build it yourself](../../qgc-dev-guide/getting_started/index.md).
+:::
 
 Ubuntu, bir seri bağlantı noktasının (veya USB serisinin) robotikle ilgili kullanımına müdahale eden bir seri modem yöneticisi ile birlikte gelir.
 _ QGroundControl _ 'ü kurmadan önce modem yöneticisini kaldırmalı ve seri bağlantı noktasına erişim için kendinize izin vermelisiniz.
-Ayrıca video akışını desteklemek için _ GStreamer _ 'ı da yüklemeniz gerekmektedir.
 
 **Before installing _QGroundControl_ for the first time:**
 
@@ -81,10 +85,7 @@ sudo apt remove --purge modemmanager
 1. On the command prompt, enter:
 
 ```sh
-sudo apt install gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl -y
-sudo apt install python3-gi python3-gst-1.0 -y
-sudo apt install libfuse2 -y
-sudo apt install libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev -y
+sudo apt install -y libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor0
 ```
 
 **To install _QGroundControl_:**

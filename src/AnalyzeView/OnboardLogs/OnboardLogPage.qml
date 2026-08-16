@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import Qt.labs.qmlmodels
 
 import QGroundControl
 import QGroundControl.Controls
@@ -71,7 +70,9 @@ AnalyzePage {
                                     return ""
                                 }
 
-                                if (object.time.getUTCFullYear() < 2010) {
+                                // getUTCFullYear() is NaN for an invalid date
+                                const year = object.time.getUTCFullYear()
+                                if (Number.isNaN(year) || year < 2010) {
                                     return qsTr("Date Unknown")
                                 }
 

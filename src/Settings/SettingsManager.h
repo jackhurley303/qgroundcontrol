@@ -15,6 +15,7 @@ class FirmwareUpgradeSettings;
 class FlightMapSettings;
 class FlightModeSettings;
 class FlyViewSettings;
+class GeoViewSettings;
 class GimbalControllerSettings;
 class MapsSettings;
 class OfflineMapsSettings;
@@ -40,9 +41,7 @@ class SettingsManager : public QObject
     QML_ELEMENT
     QML_UNCREATABLE("")
     Q_MOC_INCLUDE("ADSBVehicleManagerSettings.h")
-#ifndef QGC_NO_ARDUPILOT_DIALECT
     Q_MOC_INCLUDE("APMMavlinkStreamRateSettings.h")
-#endif
     Q_MOC_INCLUDE("AppSettings.h")
     Q_MOC_INCLUDE("AutoConnectSettings.h")
     Q_MOC_INCLUDE("BatteryIndicatorSettings.h")
@@ -51,6 +50,7 @@ class SettingsManager : public QObject
     Q_MOC_INCLUDE("FlightMapSettings.h")
     Q_MOC_INCLUDE("FlightModeSettings.h")
     Q_MOC_INCLUDE("FlyViewSettings.h")
+    Q_MOC_INCLUDE("GeoViewSettings.h")
     Q_MOC_INCLUDE("GimbalControllerSettings.h")
     Q_MOC_INCLUDE("MapsSettings.h")
     Q_MOC_INCLUDE("OfflineMapsSettings.h")
@@ -67,9 +67,7 @@ class SettingsManager : public QObject
     Q_MOC_INCLUDE("LogViewerSettings.h")
     Q_MOC_INCLUDE("Viewer3DSettings.h")
     Q_PROPERTY(QObject *adsbVehicleManagerSettings      READ adsbVehicleManagerSettings     CONSTANT)
-#ifndef QGC_NO_ARDUPILOT_DIALECT
     Q_PROPERTY(QObject *apmMavlinkStreamRateSettings    READ apmMavlinkStreamRateSettings   CONSTANT)
-#endif
     Q_PROPERTY(QObject *appSettings                     READ appSettings                    CONSTANT)
     Q_PROPERTY(QObject *autoConnectSettings             READ autoConnectSettings            CONSTANT)
     Q_PROPERTY(QObject *batteryIndicatorSettings        READ batteryIndicatorSettings       CONSTANT)
@@ -78,6 +76,7 @@ class SettingsManager : public QObject
     Q_PROPERTY(QObject *flightMapSettings               READ flightMapSettings              CONSTANT)
     Q_PROPERTY(QObject *flightModeSettings              READ flightModeSettings             CONSTANT)
     Q_PROPERTY(QObject *flyViewSettings                 READ flyViewSettings                CONSTANT)
+    Q_PROPERTY(QObject *geoViewSettings                 READ geoViewSettings                CONSTANT)
     Q_PROPERTY(QObject *gimbalControllerSettings        READ gimbalControllerSettings       CONSTANT)
     Q_PROPERTY(QObject *mapsSettings                    READ mapsSettings                   CONSTANT)
     Q_PROPERTY(QObject *offlineMapsSettings             READ offlineMapsSettings            CONSTANT)
@@ -108,9 +107,7 @@ public:
     static void adjustSettingMetaData(const QString &settingsGroup, FactMetaData &metaData, bool &userVisible);
 
     ADSBVehicleManagerSettings *adsbVehicleManagerSettings() const;
-#ifndef QGC_NO_ARDUPILOT_DIALECT
     APMMavlinkStreamRateSettings *apmMavlinkStreamRateSettings() const;
-#endif
     AppSettings *appSettings() const;
     AutoConnectSettings *autoConnectSettings() const;
     BatteryIndicatorSettings *batteryIndicatorSettings() const;
@@ -119,6 +116,7 @@ public:
     FlightMapSettings *flightMapSettings() const;
     FlightModeSettings *flightModeSettings() const;
     FlyViewSettings *flyViewSettings() const;
+    GeoViewSettings *geoViewSettings() const;
     GimbalControllerSettings *gimbalControllerSettings() const;
     MapsSettings *mapsSettings() const;
     OfflineMapsSettings *offlineMapsSettings() const;
@@ -139,9 +137,7 @@ private:
     void _loadSettingsFiles();
 
     ADSBVehicleManagerSettings *_adsbVehicleManagerSettings = nullptr;
-#ifndef QGC_NO_ARDUPILOT_DIALECT
     APMMavlinkStreamRateSettings *_apmMavlinkStreamRateSettings = nullptr;
-#endif
     AppSettings *_appSettings = nullptr;
     AutoConnectSettings *_autoConnectSettings = nullptr;
     BatteryIndicatorSettings *_batteryIndicatorSettings = nullptr;
@@ -150,6 +146,7 @@ private:
     FlightMapSettings *_flightMapSettings = nullptr;
     FlightModeSettings *_flightModeSettings = nullptr;
     FlyViewSettings *_flyViewSettings = nullptr;
+    GeoViewSettings *_geoViewSettings = nullptr;
     GimbalControllerSettings *_gimbalControllerSettings = nullptr;
     MapsSettings *_mapsSettings = nullptr;
     OfflineMapsSettings *_offlineMapsSettings = nullptr;

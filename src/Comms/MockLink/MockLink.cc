@@ -15,6 +15,10 @@
 #include "AppMessages.h"
 #include "QGCMath.h"
 
+#ifdef QGC_GST_STREAMING
+#include "MockVideoStreamServer.h"
+#endif
+
 #include <QtCore/QFile>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
@@ -96,6 +100,7 @@ MockLink::MockLink(SharedLinkConfigurationPtr &config, QObject *parent)
                                     : nullptr)
     , _mockLinkPX4Calibration(new MockLinkPX4Calibration(this))
     , _mockLinkFTP(new MockLinkFTP(_vehicleSystemId, _vehicleComponentId, this))
+    , _requestedVideoStreamType(_mockConfig->videoStreamTypeEnum())
 {
     qCDebug(MockLinkLog) << this;
 
@@ -176,6 +181,9 @@ bool MockLink::_connect()
         }
         mavlink_status_t *const incomingStatus = mavlink_get_channel_status(_incomingMavlinkChannel);
         incomingStatus->flags &= ~MAVLINK_STATUS_FLAG_OUT_MAVLINK1;
+
+        _startVideoStreamServer();
+
         emit connected();
     }
 
@@ -203,12 +211,93 @@ void MockLink::disconnect()
         mavlink_reset_channel_status(_outgoingMavlinkChannel);
     }
 
+    // Must run before the disconnected emit below: that signal can release the last
+    // shared_ptr to this MockLink, so touching members afterwards is use-after-free.
+    _stopVideoStreamServer();
+
     if (_connected) {
         _connected = false;
         if (!_disconnectedEmitted.exchange(true)) {
             emit disconnected();
         }
     }
+}
+
+void MockLink::_startVideoStreamServer()
+{
+#ifdef QGC_GST_STREAMING
+    // Only serve a stream when a camera advertising a video stream is present and a type was requested.
+    if (_videoStreamServer || !_mockLinkCamera || !_mockConfig->cameraHasVideoStream()
+            || _requestedVideoStreamType == MockConfiguration::VideoStreamNone) {
+        return;
+    }
+
+    MockVideoStreamServer::StreamType serverType = MockVideoStreamServer::StreamType::RtpUdpH264;
+    quint16 port = 5600;
+    switch (_requestedVideoStreamType) {
+    case MockConfiguration::VideoStreamRtpUdpH264:
+        serverType = MockVideoStreamServer::StreamType::RtpUdpH264;
+        port = 5600;
+        break;
+    case MockConfiguration::VideoStreamRtpUdpH265:
+        serverType = MockVideoStreamServer::StreamType::RtpUdpH265;
+        port = 5601;
+        break;
+    case MockConfiguration::VideoStreamRtspH264:
+        serverType = MockVideoStreamServer::StreamType::RtspH264;
+        port = 8554;
+        break;
+    case MockConfiguration::VideoStreamMpegTsUdp:
+        serverType = MockVideoStreamServer::StreamType::MpegTsUdp;
+        port = 5600;
+        break;
+    case MockConfiguration::VideoStreamMpegTsTcp:
+        serverType = MockVideoStreamServer::StreamType::MpegTsTcp;
+        port = 5600;
+        break;
+    case MockConfiguration::VideoStreamNone:
+        return;
+    }
+
+    auto *server = new MockVideoStreamServer();
+    if (!server->start(serverType, QStringLiteral("127.0.0.1"), port)) {
+        qCWarning(MockLinkLog) << "Failed to start mock video stream server for type" << _requestedVideoStreamType;
+        delete server;
+        return;
+    }
+
+    _videoStreamServer = server;
+    {
+        QMutexLocker locker(&_videoStreamMutex);
+        _servedVideoStreamType = _requestedVideoStreamType;
+        _videoStreamUri = server->servedUri();
+    }
+    qCDebug(MockLinkLog) << "Mock video stream server serving" << server->servedUri();
+#endif
+}
+
+void MockLink::_stopVideoStreamServer()
+{
+#ifdef QGC_GST_STREAMING
+    // Clear the served-stream snapshot first so observers (servedVideoStream) stop
+    // advertising the URI before the server actually goes away.
+    {
+        QMutexLocker locker(&_videoStreamMutex);
+        _servedVideoStreamType = MockConfiguration::VideoStreamNone;
+        _videoStreamUri.clear();
+    }
+    if (_videoStreamServer) {
+        delete _videoStreamServer;
+        _videoStreamServer = nullptr;
+    }
+#endif
+}
+
+void MockLink::servedVideoStream(MockConfiguration::VideoStreamType &type, QString &uri) const
+{
+    QMutexLocker locker(&_videoStreamMutex);
+    type = _servedVideoStreamType;
+    uri = _videoStreamUri;
 }
 
 void MockLink::run1HzTasks()
@@ -398,6 +487,8 @@ void MockLink::_loadParams()
         } else {
             paramFile.setFileName(":/FirmwarePlugin/APM/Copter.OfflineEditing.params");
         }
+    } else if (_firmwareType == MAV_AUTOPILOT_GENERIC) {
+        paramFile.setFileName(":/MockLink/GenericMockLink.params");
     } else {
         paramFile.setFileName(":/MockLink/PX4MockLink.params");
     }
@@ -1567,10 +1658,25 @@ void MockLink::_handleParamSet(const mavlink_message_t &msg)
         return;
     }
 
-    Q_ASSERT(_mapParamName2Value.contains(componentId));
-    Q_ASSERT(_mapParamName2MavParamType.contains(componentId));
-    Q_ASSERT(_mapParamName2Value[componentId].contains(paramId));
-    Q_ASSERT(request.param_type == _mapParamName2MavParamType[componentId][paramId]);
+    // Real firmware rejects a PARAM_SET it doesn't recognize rather than crashing.
+    // QGC can legitimately send these: loading a QGC-format param file sends params
+    // not currently known to the vehicle (e.g. params unlocked by another param).
+    if (!_mapParamName2Value.contains(componentId) || !_mapParamName2MavParamType.contains(componentId)) {
+        qCDebug(MockLinkLog) << "_handleParamSet unknown component, rejecting with PARAM_ERROR - componentId:" << componentId << "param:" << paramId;
+        _sendParamError(componentId, paramId, -1, MAV_PARAM_ERROR_COMPONENT_NOT_FOUND);
+        return;
+    }
+    if (!_mapParamName2Value[componentId].contains(paramId)) {
+        qCDebug(MockLinkLog) << "_handleParamSet unknown param, rejecting with PARAM_ERROR - componentId:" << componentId << "param:" << paramId;
+        _sendParamError(componentId, paramId, -1, MAV_PARAM_ERROR_DOES_NOT_EXIST);
+        return;
+    }
+    if (request.param_type != _mapParamName2MavParamType[componentId][paramId]) {
+        qCDebug(MockLinkLog) << "_handleParamSet type mismatch, rejecting with PARAM_ERROR - param:" << paramId
+                             << "requested type:" << request.param_type << "actual type:" << _mapParamName2MavParamType[componentId][paramId];
+        _sendParamError(componentId, paramId, -1, MAV_PARAM_ERROR_TYPE_MISMATCH);
+        return;
+    }
 
     // Apply failure behaviors before committing change.
     if (_paramSetFailureMode == FailParamSetFirstAttemptNoAck && _paramSetFailureFirstAttemptPending) {
@@ -1648,7 +1754,12 @@ void MockLink::_handleParamRequestRead(const mavlink_message_t &msg)
         return;
     }
 
-    Q_ASSERT(_mapParamName2Value.contains(componentId));
+    if (!_mapParamName2Value.contains(componentId)) {
+        qCDebug(MockLinkLog) << "_handleParamRequestRead unknown component, rejecting with PARAM_ERROR - componentId:" << componentId << "param:" << paramName;
+        const QByteArray paramIdBytes = paramName.toLocal8Bit();
+        _sendParamError(componentId, paramIdBytes.constData(), request.param_index, MAV_PARAM_ERROR_COMPONENT_NOT_FOUND);
+        return;
+    }
 
     char paramId[MAVLINK_MSG_PARAM_REQUEST_READ_FIELD_PARAM_ID_LEN + 1]{};
     paramId[0] = 0;
@@ -1667,8 +1778,13 @@ void MockLink::_handleParamRequestRead(const mavlink_message_t &msg)
         strcpy(paramId, key.toLocal8Bit().constData());
     }
 
-    Q_ASSERT(_mapParamName2Value[componentId].contains(paramId));
-    Q_ASSERT(_mapParamName2MavParamType[componentId].contains(paramId));
+    if (!_mapParamName2Value[componentId].contains(paramId) || !_mapParamName2MavParamType[componentId].contains(paramId)) {
+        // Real firmware rejects a read of a parameter it doesn't know about (e.g. QGC
+        // refreshing a param after a failed PARAM_SET for a param not on the vehicle)
+        qCDebug(MockLinkLog) << "_handleParamRequestRead unknown param, rejecting with PARAM_ERROR - componentId:" << componentId << "param:" << paramId;
+        _sendParamError(componentId, paramId, request.param_index, MAV_PARAM_ERROR_DOES_NOT_EXIST);
+        return;
+    }
 
     if ((_failureMode == MockConfiguration::FailMissingParamOnAllRequests) && (strcmp(paramId, _failParam) == 0)) {
         qCDebug(MockLinkLog) << "Ignoring request read for " << _failParam;
@@ -2017,21 +2133,17 @@ void MockLink::_respondWithAutopilotVersion()
     };
     FlightVersion flightVersion;
 
-#ifndef QGC_NO_ARDUPILOT_DIALECT
     if (_firmwareType == MAV_AUTOPILOT_ARDUPILOTMEGA) {
         flightVersion.parts.major = 4;
         flightVersion.parts.minor = 7;
         flightVersion.parts.patch = 0;
         flightVersion.parts.type = FIRMWARE_VERSION_TYPE_OFFICIAL;
     } else if (_firmwareType == MAV_AUTOPILOT_PX4) {
-#endif
         flightVersion.parts.major = 1;
         flightVersion.parts.minor = 17;
         flightVersion.parts.patch = 0;
         flightVersion.parts.type = FIRMWARE_VERSION_TYPE_OFFICIAL;
-#ifndef QGC_NO_ARDUPILOT_DIALECT
     }
-#endif
 
     const uint8_t customVersion[8]{};
     const uint64_t capabilities = MAV_PROTOCOL_CAPABILITY_MAVLINK2 | MAV_PROTOCOL_CAPABILITY_MISSION_FENCE | MAV_PROTOCOL_CAPABILITY_MISSION_RALLY | MAV_PROTOCOL_CAPABILITY_MISSION_INT
@@ -2379,7 +2491,7 @@ MockLink *MockLink::_startMockLink(MockConfiguration *mockConfig)
     return nullptr;
 }
 
-MockLink *MockLink::_startMockLinkWorker(const QString &configName, MAV_AUTOPILOT firmwareType, MAV_TYPE vehicleType, MockConfiguration::Options options, MockConfiguration::FailureMode_t failureMode)
+MockLink *MockLink::_startMockLinkWorker(const QString &configName, MAV_AUTOPILOT firmwareType, MAV_TYPE vehicleType, MockConfiguration::Options options, MockConfiguration::FailureMode_t failureMode, MockConfiguration::VideoStreamType videoStreamType)
 {
     MockConfiguration *const mockConfig = new MockConfiguration(configName);
 
@@ -2393,14 +2505,15 @@ MockLink *MockLink::_startMockLinkWorker(const QString &configName, MAV_AUTOPILO
     mockConfig->setStayMavlinkV1(options.testFlag(MockConfiguration::OptionStayMavlinkV1));
     mockConfig->setApmStartFreshParams(options.testFlag(MockConfiguration::OptionAPMStartFreshParams));
     mockConfig->setFtpCapability(options.testFlag(MockConfiguration::OptionFtpCapability));
+    mockConfig->setVideoStreamType(videoStreamType);
     mockConfig->setFailureMode(failureMode);
 
     return _startMockLink(mockConfig);
 }
 
-MockLink *MockLink::startPX4MockLink(MockConfiguration::Options options, MockConfiguration::FailureMode_t failureMode)
+MockLink *MockLink::startPX4MockLink(MockConfiguration::Options options, MockConfiguration::FailureMode_t failureMode, MockConfiguration::VideoStreamType videoStreamType)
 {
-    return _startMockLinkWorker(QStringLiteral("PX4 MultiRotor MockLink"), MAV_AUTOPILOT_PX4, MAV_TYPE_QUADROTOR, options, failureMode);
+    return _startMockLinkWorker(QStringLiteral("PX4 MultiRotor MockLink"), MAV_AUTOPILOT_PX4, MAV_TYPE_QUADROTOR, options, failureMode, videoStreamType);
 }
 
 MockLink *MockLink::startPX4MockLinkWithMission(MockConfiguration::Options options, MockConfiguration::FailureMode_t failureMode)
@@ -2408,9 +2521,9 @@ MockLink *MockLink::startPX4MockLinkWithMission(MockConfiguration::Options optio
     return _startMockLinkWorker(QStringLiteral("PX4 MultiRotor MockLink"), MAV_AUTOPILOT_PX4, MAV_TYPE_QUADROTOR, options | MockConfiguration::OptionPreloadMission, failureMode);
 }
 
-MockLink *MockLink::startGenericMockLink(MockConfiguration::Options options, MockConfiguration::FailureMode_t failureMode)
+MockLink *MockLink::startGenericMockLink(MockConfiguration::Options options, MockConfiguration::FailureMode_t failureMode, MockConfiguration::VideoStreamType videoStreamType)
 {
-    return _startMockLinkWorker(QStringLiteral("Generic MockLink"), MAV_AUTOPILOT_GENERIC, MAV_TYPE_QUADROTOR, options, failureMode);
+    return _startMockLinkWorker(QStringLiteral("Generic MockLink"), MAV_AUTOPILOT_GENERIC, MAV_TYPE_QUADROTOR, options, failureMode, videoStreamType);
 }
 
 MockLink *MockLink::startNoInitialConnectMockLink(MockConfiguration::Options options, MockConfiguration::FailureMode_t failureMode)
@@ -2418,24 +2531,24 @@ MockLink *MockLink::startNoInitialConnectMockLink(MockConfiguration::Options opt
     return _startMockLinkWorker(QStringLiteral("No Initial Connect MockLink"), MAV_AUTOPILOT_PX4, MAV_TYPE_GENERIC, options, failureMode);
 }
 
-MockLink *MockLink::startAPMArduCopterMockLink(MockConfiguration::Options options, MockConfiguration::FailureMode_t failureMode)
+MockLink *MockLink::startAPMArduCopterMockLink(MockConfiguration::Options options, MockConfiguration::FailureMode_t failureMode, MockConfiguration::VideoStreamType videoStreamType)
 {
-    return _startMockLinkWorker(QStringLiteral("ArduCopter MockLink"),MAV_AUTOPILOT_ARDUPILOTMEGA, MAV_TYPE_QUADROTOR, options, failureMode);
+    return _startMockLinkWorker(QStringLiteral("ArduCopter MockLink"),MAV_AUTOPILOT_ARDUPILOTMEGA, MAV_TYPE_QUADROTOR, options, failureMode, videoStreamType);
 }
 
-MockLink *MockLink::startAPMArduPlaneMockLink(MockConfiguration::Options options, MockConfiguration::FailureMode_t failureMode)
+MockLink *MockLink::startAPMArduPlaneMockLink(MockConfiguration::Options options, MockConfiguration::FailureMode_t failureMode, MockConfiguration::VideoStreamType videoStreamType)
 {
-    return _startMockLinkWorker(QStringLiteral("ArduPlane MockLink"), MAV_AUTOPILOT_ARDUPILOTMEGA, MAV_TYPE_FIXED_WING, options, failureMode);
+    return _startMockLinkWorker(QStringLiteral("ArduPlane MockLink"), MAV_AUTOPILOT_ARDUPILOTMEGA, MAV_TYPE_FIXED_WING, options, failureMode, videoStreamType);
 }
 
-MockLink *MockLink::startAPMArduSubMockLink(MockConfiguration::Options options, MockConfiguration::FailureMode_t failureMode)
+MockLink *MockLink::startAPMArduSubMockLink(MockConfiguration::Options options, MockConfiguration::FailureMode_t failureMode, MockConfiguration::VideoStreamType videoStreamType)
 {
-    return _startMockLinkWorker(QStringLiteral("ArduSub MockLink"), MAV_AUTOPILOT_ARDUPILOTMEGA, MAV_TYPE_SUBMARINE, options, failureMode);
+    return _startMockLinkWorker(QStringLiteral("ArduSub MockLink"), MAV_AUTOPILOT_ARDUPILOTMEGA, MAV_TYPE_SUBMARINE, options, failureMode, videoStreamType);
 }
 
-MockLink *MockLink::startAPMArduRoverMockLink(MockConfiguration::Options options, MockConfiguration::FailureMode_t failureMode)
+MockLink *MockLink::startAPMArduRoverMockLink(MockConfiguration::Options options, MockConfiguration::FailureMode_t failureMode, MockConfiguration::VideoStreamType videoStreamType)
 {
-    return _startMockLinkWorker(QStringLiteral("ArduRover MockLink"), MAV_AUTOPILOT_ARDUPILOTMEGA, MAV_TYPE_GROUND_ROVER, options, failureMode);
+    return _startMockLinkWorker(QStringLiteral("ArduRover MockLink"), MAV_AUTOPILOT_ARDUPILOTMEGA, MAV_TYPE_GROUND_ROVER, options, failureMode, videoStreamType);
 }
 
 void MockLink::_sendRCChannels()
@@ -2544,6 +2657,29 @@ void MockLink::_handleLogRequestList(const mavlink_message_t &msg)
         return;
     }
 
+    // When simulated FTP log files are set, LOG_ENTRY responses describe the same logs so
+    // both transports report a consistent log list (matching PX4 behavior).
+    const QList<MockLinkFTP::LogFile> logFiles = _mockLinkFTP->logFiles();
+    if (!_logsErased && !logFiles.isEmpty()) {
+        const uint16_t numLogs = static_cast<uint16_t>(logFiles.count());
+        for (uint16_t id = 0; id < numLogs; id++) {
+            mavlink_message_t responseMsg{};
+            (void) mavlink_msg_log_entry_pack_chan(
+                _vehicleSystemId,
+                _vehicleComponentId,
+                _outgoingMavlinkChannel,
+                &responseMsg,
+                id,                                             // log id
+                numLogs,                                        // num_logs
+                numLogs - 1,                                    // last_log_num
+                logFiles[id].mtime,                             // time_utc
+                static_cast<uint32_t>(logFiles[id].size)        // size
+            );
+            respondWithMavlinkMessage(responseMsg);
+        }
+        return;
+    }
+
     const uint16_t numLogs = _logsErased ? 0 : 1;
     const uint16_t logId   = _logsErased ? 0 : _logDownloadLogId;
     const uint32_t logSize = _logsErased ? 0 : _logDownloadFileSize;
@@ -2593,34 +2729,62 @@ QString MockLink::_createRandomFile(uint32_t byteCount)
     return tempFile.fileName();
 }
 
+QString MockLink::_createLogContentsFile(const QString &logName)
+{
+    QTemporaryFile tempFile;
+    tempFile.setAutoRemove(false);
+    if (!tempFile.open()) {
+        qCWarning(MockLinkLog) << "_createLogContentsFile open failed" << tempFile.errorString();
+        return QString();
+    }
+    (void) tempFile.write(_mockLinkFTP->logFileContents(logName));
+    tempFile.close();
+    return tempFile.fileName();
+}
+
 void MockLink::_handleLogRequestData(const mavlink_message_t &msg)
 {
     mavlink_log_request_data_t request{};
     mavlink_msg_log_request_data_decode(&msg, &request);
 
+    // Serialize with _logDownloadWorker which reads this state every 2ms on the worker thread
+    QMutexLocker locker(&_logDownloadMutex);
+
+    const QList<MockLinkFTP::LogFile> logFiles = _logsErased ? QList<MockLinkFTP::LogFile>() : _mockLinkFTP->logFiles();
+    if (!logFiles.isEmpty()) {
+        // Serve the simulated FTP log files so LOG_ENTRY/LOG_REQUEST_DATA stay consistent with the FTP transport
+        if (request.id >= logFiles.count()) {
+            qCWarning(MockLinkLog) << "_handleLogRequestData id out of range:" << request.id;
+            return;
+        }
+        if (_logDownloadFilename.isEmpty() || (_logDownloadId != request.id)) {
+            _logDownloadFilename = _createLogContentsFile(logFiles[request.id].name);
+            _logDownloadId = request.id;
+            _logDownloadSize = static_cast<uint32_t>(logFiles[request.id].size);
+        }
+    } else {
 #ifdef QGC_UNITTEST_BUILD
-    if (_logDownloadFilename.isEmpty()) {
-        _logDownloadFilename = _createRandomFile(_logDownloadFileSize);
-    }
+        if (_logDownloadFilename.isEmpty()) {
+            _logDownloadFilename = _createRandomFile(_logDownloadFileSize);
+        }
 #endif
-
-    if (request.id != 0) {
-        qCWarning(MockLinkLog) << "_handleLogRequestData id must be 0";
-        return;
+        if (request.id != _logDownloadLogId) {
+            qCWarning(MockLinkLog) << "_handleLogRequestData id must be" << _logDownloadLogId;
+            return;
+        }
+        _logDownloadId = _logDownloadLogId;
+        _logDownloadSize = _logDownloadFileSize;
     }
 
-    if (request.ofs > (_logDownloadFileSize - 1)) {
-        qCWarning(MockLinkLog) << "_handleLogRequestData offset past end of file request.ofs:size" << request.ofs << _logDownloadFileSize;
+    if (request.ofs > (_logDownloadSize - 1)) {
+        qCWarning(MockLinkLog) << "_handleLogRequestData offset past end of file request.ofs:size" << request.ofs << _logDownloadSize;
         return;
     }
 
     // This will trigger _logDownloadWorker to send data
-    // Thread-safe access: Main thread writes, worker thread reads every 2ms. Serialize to avoid
-    // worker reading inconsistent offset/count or using stale values while downloading.
-    QMutexLocker locker(&_logDownloadMutex);
     _logDownloadCurrentOffset = request.ofs;
-    if (request.ofs + request.count > _logDownloadFileSize) {
-        request.count = _logDownloadFileSize - request.ofs;
+    if (request.ofs + request.count > _logDownloadSize) {
+        request.count = _logDownloadSize - request.ofs;
     }
     _logDownloadBytesRemaining = request.count;
 }
@@ -2637,14 +2801,23 @@ void MockLink::_logDownloadWorker()
     QFile file(_logDownloadFilename);
     if (!file.open(QIODevice::ReadOnly)) {
         qCWarning(MockLinkLog) << "_logDownloadWorker open failed" << file.errorString();
+        _logDownloadBytesRemaining = 0; // Abort transfer on I/O failure
         return;
     }
 
     uint8_t buffer[MAVLINK_MSG_LOG_DATA_FIELD_DATA_LEN]{};
 
     const qint64 bytesToRead = qMin(_logDownloadBytesRemaining, (uint32_t)MAVLINK_MSG_LOG_DATA_FIELD_DATA_LEN);
-    Q_ASSERT(file.seek(_logDownloadCurrentOffset));
-    Q_ASSERT(file.read(reinterpret_cast<char*>(buffer), bytesToRead) == bytesToRead);
+    if (!file.seek(_logDownloadCurrentOffset)) {
+        qCWarning(MockLinkLog) << "_logDownloadWorker seek failed - offset:" << _logDownloadCurrentOffset << file.errorString();
+        _logDownloadBytesRemaining = 0; // Abort transfer on I/O failure
+        return;
+    }
+    if (file.read(reinterpret_cast<char*>(buffer), bytesToRead) != bytesToRead) {
+        qCWarning(MockLinkLog) << "_logDownloadWorker read failed - bytesToRead:" << bytesToRead << file.errorString();
+        _logDownloadBytesRemaining = 0; // Abort transfer on I/O failure
+        return;
+    }
 
     qCDebug(MockLinkLog) << "_logDownloadWorker" << _logDownloadCurrentOffset << _logDownloadBytesRemaining;
 
@@ -2654,7 +2827,7 @@ void MockLink::_logDownloadWorker()
         _vehicleComponentId,
         _outgoingMavlinkChannel,
         &responseMsg,
-        _logDownloadLogId,
+        _logDownloadId,
         _logDownloadCurrentOffset,
         bytesToRead,
         &buffer[0]

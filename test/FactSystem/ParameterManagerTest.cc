@@ -141,7 +141,8 @@ void ParameterManagerTest::_paramWriteNoAckRetry()
     // BAT1_V_CHARGED requires a vehicle reboot, so writing it pops the reboot
     // app message (debounce is reset per-test by the framework)
     expectAppMessage(QRegularExpression("Reboot vehicle for changes to take effect"));
-    _setParamWithFailureMode(MockLink::FailParamSetFirstAttemptNoAck, true /* expectSuccess */);
+    _setParamWithFailureMode(MockLink::FailParamSetFirstAttemptNoAck, true /* expectSuccess */,
+                             QStringLiteral("BAT1_V_CHARGED"), MAV_AUTOPILOT_PX4);
     verifyExpectedLogMessage();
 }
 
@@ -151,9 +152,22 @@ void ParameterManagerTest::_paramWriteNoAckPermanent()
     // setRawValue), then the write-failed message (fires after retries exhaust)
     expectAppMessage(QRegularExpression("Reboot vehicle for changes to take effect"));
     expectAppMessage(QRegularExpression("Parameter write failed"));
-    _setParamWithFailureMode(MockLink::FailParamSetNoAck, false /* expectSuccess */);
+    _setParamWithFailureMode(MockLink::FailParamSetNoAck, false /* expectSuccess */,
+                             QStringLiteral("BAT1_V_CHARGED"), MAV_AUTOPILOT_PX4);
     verifyExpectedLogMessage();
     verifyExpectedLogMessage();
+}
+
+void ParameterManagerTest::_paramWriteUInt8()
+{
+    _setParamWithFailureMode(MockLink::FailParamSetNone, true /* expectSuccess */,
+                             QStringLiteral("TEST_UINT8"), MAV_AUTOPILOT_GENERIC);
+}
+
+void ParameterManagerTest::_paramWriteUInt16()
+{
+    _setParamWithFailureMode(MockLink::FailParamSetNone, true /* expectSuccess */,
+                             QStringLiteral("TEST_UINT16"), MAV_AUTOPILOT_GENERIC);
 }
 
 void ParameterManagerTest::_paramReadFirstAttemptNoResponseRetry()
@@ -212,7 +226,8 @@ void ParameterManagerTest::_paramWriteParamError()
     // setRawValue), then the write-failed message (fires on the PARAM_ERROR ack)
     expectAppMessage(QRegularExpression("Reboot vehicle for changes to take effect"));
     expectAppMessage(QRegularExpression("Parameter write failed"));
-    _setParamWithFailureMode(MockLink::FailParamSetParamError, false /* expectSuccess */);
+    _setParamWithFailureMode(MockLink::FailParamSetParamError, false /* expectSuccess */,
+                             QStringLiteral("BAT1_V_CHARGED"), MAV_AUTOPILOT_PX4);
     verifyExpectedLogMessage();
     verifyExpectedLogMessage();
 }
@@ -243,11 +258,17 @@ void ParameterManagerTest::_paramReadParamError()
     _disconnectMockLink();
 }
 
-void ParameterManagerTest::_setParamWithFailureMode(MockLink::ParamSetFailureMode_t failureMode, bool expectSuccess)
+void ParameterManagerTest::_setParamWithFailureMode(MockLink::ParamSetFailureMode_t failureMode, bool expectSuccess,
+                                                     const QString &paramName, MAV_AUTOPILOT autopilot)
 {
     QVERIFY2(!_mockLink, "MockLink already connected");
+    if (autopilot == MAV_AUTOPILOT_GENERIC) {
+        // Generic mock link has no metadata source; this warning is expected for generic autopilot
+        ignoreLogMessage("ComponentInformation.RequestMetaDataTypeStateMachine", QtWarningMsg,
+                         QRegularExpression("failed to load metadata"));
+    }
     // Bring up a clean mock vehicle for each run
-    _connectMockLink();
+    _connectMockLink(autopilot);
     QVERIFY(_mockLink);
     QVERIFY(_vehicle);
     _mockLink->setParamSetFailureMode(failureMode);
@@ -256,8 +277,7 @@ void ParameterManagerTest::_setParamWithFailureMode(MockLink::ParamSetFailureMod
     ParameterManager* const paramManager = _vehicle->parameterManager();
     QVERIFY(paramManager);
     QVERIFY(!_vehicle->parameterManager()->pendingWrites());
-    // Use a parameter that exists in the mock PX4 set and has floating point range
-    Fact* const fact = paramManager->getParameter(MAV_COMP_ID_AUTOPILOT1, QStringLiteral("BAT1_V_CHARGED"));
+    Fact* const fact = paramManager->getParameter(MAV_COMP_ID_AUTOPILOT1, paramName);
     QVERIFY(fact);
     QSignalSpy rawValueChangedSpy(fact, &Fact::rawValueChanged);
     const QVariant originalValue = fact->rawValue();
@@ -267,7 +287,7 @@ void ParameterManagerTest::_setParamWithFailureMode(MockLink::ParamSetFailureMod
                                                                        : -std::numeric_limits<double>::infinity();
     const double maxValue = (metaData && metaData->rawMax().isValid()) ? metaData->rawMax().toDouble()
                                                                        : std::numeric_limits<double>::infinity();
-    const double step = 0.1;
+    const double step = fact->type() == FactMetaData::valueTypeFloat ? 0.1 : 1.0;
     auto adjustedValue = [&](double candidate) -> double {
         if (candidate > maxValue) {
             candidate = originalDouble - step;
