@@ -5,11 +5,9 @@ from __future__ import annotations
 
 import dataclasses
 import subprocess
-from pathlib import Path
 
 import pytest
 from check_pr_routing import (
-    _CONVENTIONAL,
     _DEFERRED_ROUTING,
     _MAINLINE_ONLY,
     _ROUTING_EXEMPT,
@@ -18,7 +16,13 @@ from check_pr_routing import (
     apply_doc_rewrites,
     rewrites_for,
 )
-from derive_pr_branch import MAX_SUBJECT_LENGTH, SPECS, PRSpec, _commit_in_groups
+from derive_pr_branch import (
+    CONVENTIONAL_SUBJECT,
+    MAX_SUBJECT_LENGTH,
+    SPECS,
+    PRSpec,
+    _commit_in_groups,
+)
 
 
 class TestIsCovered:
@@ -156,7 +160,7 @@ class TestConventionalPattern:
         ],
     )
     def test_matches_conventional_subjects(self, subject):
-        assert _CONVENTIONAL.match(subject)
+        assert CONVENTIONAL_SUBJECT.match(subject)
 
     @pytest.mark.parametrize(
         "subject",
@@ -168,45 +172,33 @@ class TestConventionalPattern:
         ],
     )
     def test_rejects_plain_subjects(self, subject):
-        assert not _CONVENTIONAL.match(subject)
+        assert not CONVENTIONAL_SUBJECT.match(subject)
 
     def test_bump_prefix_is_not_mistaken_for_a_scope(self):
-        """'Bump qdrive: ...' is the fork's commonest plain subject and ends in a colon.
+        """'Bump qdrive: ...' is the fork's commonest mainline subject and ends in a colon.
 
-        A looser pattern (anything before a colon) reads it as conventional and would let
-        every submodule bump silently claim to be upstream-bound.
+        A looser pattern (anything before a colon) reads it as conventional, so a spec
+        could declare one and ship it to a PR branch that CONTRIBUTING then rejects.
         """
-        assert not _CONVENTIONAL.match("Bump qdrive: QL1 teardown contract implemented")
+        assert not CONVENTIONAL_SUBJECT.match("Bump qdrive: QL1 teardown contract implemented")
 
 
-class TestPrefixCheckScope:
-    """The prefix rule governs the fork's commits only.
-
-    Regression guard for the 2026-08-15 sync: the first run after merging 103 upstream
-    commits reported 73 violations, all noise — upstream writes Conventional Commits and
-    no PRSpec covers its paths, so every one of its commits read as a false positive, and
-    the merge commit itself was flagged for lacking a prefix.
-    """
-
-    def test_upstream_commits_are_out_of_scope(self, tmp_path):
-        """Anything reachable from upstream_ref is upstream's work, not ours."""
-        import check_pr_routing as module
-
-        assert "upstreams_own" in Path(module.__file__).read_text()
-        assert "--no-merges" in Path(module.__file__).read_text()
-
+class TestUpstreamRefAgreement:
     def test_every_spec_agrees_on_upstream_ref(self):
-        """check_commit_prefixes picks one upstream_ref; disagreement would make the
-        exclusion depend on dict ordering."""
+        """`check_style` picks one upstream_ref off the spec set; disagreement would make
+        which one it gets depend on dict ordering."""
         assert len({spec.upstream_ref for spec in SPECS.values()}) == 1
 
 
 class TestSubjectsAreUpstreamReady:
     """.github/CONTRIBUTING.md requires Conventional Commits on every commit in a PR.
 
-    The fork's own mainline commits are mostly plain by design, so nothing local would have
-    caught this — the old `Derive <branch> from <ref>` subject shipped on every derived
-    branch and satisfied no requirement upstream states.
+    Everything the fork submits is derived from a spec, so these asserts are the whole of
+    its compliance: they stand between a spec and a PR that breaches CONTRIBUTING on
+    arrival. Mainline subjects are unconstrained because those commits are not in a PR —
+    only their content is, re-committed under the spec's subject. The old `Derive <branch>
+    from <ref>` subject shipped on every derived branch and satisfied no requirement
+    upstream states.
     """
 
     def test_every_spec_emits_only_conventional_subjects(self):
@@ -216,7 +208,7 @@ class TestSubjectsAreUpstreamReady:
             )
             assert subjects, f"{name} declares no commit message at all"
             for subject in subjects:
-                assert _CONVENTIONAL.match(subject), f"{name}: {subject!r}"
+                assert CONVENTIONAL_SUBJECT.match(subject), f"{name}: {subject!r}"
 
     def test_every_subject_fits_the_length_cap(self):
         for name, spec in SPECS.items():

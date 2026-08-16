@@ -31,9 +31,10 @@ from common.logging import log_error, log_info, log_ok, log_step
 from common.proc import run_captured
 
 # .github/CONTRIBUTING.md requires Conventional Commits on every commit in a PR, and
-# .github/workflows/pr-checks.yml lints the PR *title* to the same grammar. A derived branch
-# is what upstream actually reads, so its subjects must satisfy this — the fork's own plain
-# subjects stop at mainline. Shared with check_pr_routing.py so there is one owner.
+# .github/workflows/pr-checks.yml lints the PR *title* to the same grammar. That binds
+# whatever the fork submits, and every PR is derived here — so declaring the subjects in the
+# spec is what discharges the requirement, rather than anyone remembering it at commit time.
+# Commits that stay on mainline are not in a PR and are deliberately unconstrained.
 CONVENTIONAL_SUBJECT = re.compile(
     r"^(feat|fix|perf|revert|docs|style|chore|refactor|test|build|ci)(\([^)]*\))?!?: .+"
 )
