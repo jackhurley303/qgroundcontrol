@@ -255,12 +255,24 @@ def check_commit_prefixes(mainline_ref: str, rev_range: str, repo_root: Path) ->
     are errors, and the second is the worse one: a conventional prefix on unrouted code
     falsely asserts that its PRSpec was updated in the same commit, which looks like
     compliance and so is much harder to spot than a missing prefix.
+
+    Only the fork's *own* commits are in scope. Two exclusions make that true, and both
+    were found the first time this ran after an upstream merge, when it produced 73
+    findings and every one was noise:
+
+      - `--no-merges`, because a merge commit's subject describes the merge, not a change
+        the routing rule was ever about. The sync commit itself was flagged.
+      - commits reachable from `upstream_ref`, because upstream writes Conventional
+        Commits throughout and none of it is covered by a PRSpec — after a merge those
+        land in any recent range and every single one reads as a violation.
     """
     log_step(f"commit prefixes over {rev_range}")
-    log = run_git("log", "--reverse", "--format=%H%x1f%s", rev_range, cwd=repo_root)
+    log = run_git("log", "--reverse", "--no-merges", "--format=%H%x1f%s", rev_range, cwd=repo_root)
     if log.returncode != 0:
         log_error(log.stderr.strip())
         return False
+
+    upstream_ref = next(iter({spec.upstream_ref for spec in SPECS.values()}))
 
     covered = _mainline_covered_paths()
     problems: list[str] = []
@@ -273,6 +285,9 @@ def check_commit_prefixes(mainline_ref: str, rev_range: str, repo_root: Path) ->
         )
         if grandfathered.returncode == 0:
             continue
+        upstreams_own = run_git("merge-base", "--is-ancestor", sha, upstream_ref, cwd=repo_root)
+        if upstreams_own.returncode == 0:
+            continue  # upstream authored it; the fork's routing rule does not apply
         show = run_git("show", "--name-only", "--format=", sha, cwd=repo_root)
         if show.returncode != 0:
             continue

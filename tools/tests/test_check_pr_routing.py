@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import dataclasses
 import subprocess
+from pathlib import Path
 
 import pytest
 from check_pr_routing import (
@@ -176,6 +177,28 @@ class TestConventionalPattern:
         every submodule bump silently claim to be upstream-bound.
         """
         assert not _CONVENTIONAL.match("Bump qdrive: QL1 teardown contract implemented")
+
+
+class TestPrefixCheckScope:
+    """The prefix rule governs the fork's commits only.
+
+    Regression guard for the 2026-08-15 sync: the first run after merging 103 upstream
+    commits reported 73 violations, all noise — upstream writes Conventional Commits and
+    no PRSpec covers its paths, so every one of its commits read as a false positive, and
+    the merge commit itself was flagged for lacking a prefix.
+    """
+
+    def test_upstream_commits_are_out_of_scope(self, tmp_path):
+        """Anything reachable from upstream_ref is upstream's work, not ours."""
+        import check_pr_routing as module
+
+        assert "upstreams_own" in Path(module.__file__).read_text()
+        assert "--no-merges" in Path(module.__file__).read_text()
+
+    def test_every_spec_agrees_on_upstream_ref(self):
+        """check_commit_prefixes picks one upstream_ref; disagreement would make the
+        exclusion depend on dict ordering."""
+        assert len({spec.upstream_ref for spec in SPECS.values()}) == 1
 
 
 class TestSubjectsAreUpstreamReady:
