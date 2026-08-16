@@ -65,11 +65,19 @@ void InitialConnectStateMachine::_createStates()
         _handleAutopilotVersionFailure();
     });
 
-    // State 1: Request standard modes (skipped for log replay / high latency)
+    // State 1: Request standard modes (skipped for log replay only)
+    //
+    // Deliberately not _shouldSkipForLinkType(): that predicate also covers high latency, which
+    // is right for plan traffic but wrong here. A high-latency link still has a live vehicle whose
+    // modes must be enumerated, and InitialConnectTest's matrix asserts AVAILABLE_MODES is
+    // requested on every link type. A replay link has no vehicle to ask.
     _stateStandardModes = new SkippableAsyncState(
         QStringLiteral("RequestStandardModes"),
         this,
-        [this]() { return _shouldSkipForLinkType(); },
+        [this]() {
+            SharedLinkInterfacePtr sharedLink = vehicle()->vehicleLinkManager()->primaryLink().lock();
+            return !sharedLink || sharedLink->isLogReplay();
+        },
         [this](SkippableAsyncState* state) { _requestStandardModes(state); },
         []() { qCDebug(InitialConnectStateMachineLog) << "Skipping standard modes request"; },
         _timeoutStandardModes
