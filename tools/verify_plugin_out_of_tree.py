@@ -179,13 +179,27 @@ class TriageEntry:
 
 
 @dataclass(frozen=True)
+class QmlModule:
+    """A QML module the plugin ships real .qml source files through, rather than the flat
+    qrc prefix — its own directory, closed over its own generated qmldir instead of the
+    flat qrc (S1'/U0: the gate was blind to these files entirely)."""
+
+    uri: str
+    source_dir: str
+    """Directory, relative to the plugin root, holding this module's own .qml files."""
+
+
+@dataclass(frozen=True)
 class QmlAxis:
     enabled: bool
     reason: str | None = None
     source_roots: tuple[str, ...] = ()
     """Directories, relative to the plugin root, whose every .qml file must be shipped."""
     own_module: str | None = None
-    """The plugin's own QML module URI, or null when it registers none."""
+    """The plugin's own type-registration QML module URI (no .qml files of its own), or
+    null when it registers none."""
+    modules: tuple[QmlModule, ...] = ()
+    """QML modules that ship real .qml source files. Empty for a plugin with none."""
     accepted_triage: tuple[TriageEntry, ...] = ()
 
 
@@ -272,14 +286,44 @@ def _enabled(obj: object, where: str) -> bool:
     return _bool(obj, "enabled", where)
 
 
+def _parse_qml_modules(raw: object) -> tuple[QmlModule, ...]:
+    if not isinstance(raw, list):
+        raise ManifestError("qml.modules: expected an array")
+    modules: list[QmlModule] = []
+    seen_uris: set[str] = set()
+    seen_dirs: set[str] = set()
+    for index, item in enumerate(raw):
+        where = f"qml.modules[{index}]"
+        entry = _require_keys(item, ("uri", "source_dir"), where)
+        uri = _str(entry, "uri", where)
+        source_dir = _str(entry, "source_dir", where)
+        if uri in seen_uris:
+            raise ManifestError(f"qml.modules: {uri!r} is declared more than once")
+        if source_dir in seen_dirs:
+            raise ManifestError(f"qml.modules: {source_dir!r} is declared more than once")
+        seen_uris.add(uri)
+        seen_dirs.add(source_dir)
+        modules.append(QmlModule(uri=uri, source_dir=source_dir))
+    return tuple(modules)
+
+
 def _parse_qml_axis(raw: object) -> QmlAxis:
     if not _enabled(raw, "qml"):
         off = _require_keys(raw, ("enabled", "reason"), "qml")
         return QmlAxis(enabled=False, reason=_str(off, "reason", "qml"))
-    obj = _require_keys(raw, ("enabled", "source_roots", "own_module", "accepted_triage"), "qml")
+    obj = _require_keys(
+        raw, ("enabled", "source_roots", "own_module", "modules", "accepted_triage"), "qml"
+    )
     own_module = obj["own_module"]
     if own_module is not None and (not isinstance(own_module, str) or not own_module.strip()):
         raise ManifestError("qml.own_module: expected a module URI string, or null")
+    modules = _parse_qml_modules(obj["modules"])
+    if own_module is not None and own_module in {module.uri for module in modules}:
+        raise ManifestError(
+            f"qml.own_module and qml.modules both declare {own_module!r} — a module is "
+            f"either type-registration-only (own_module) or ships its own .qml files "
+            f"(modules), never both"
+        )
     triage_raw = obj["accepted_triage"]
     if not isinstance(triage_raw, list):
         raise ManifestError("qml.accepted_triage: expected an array")
@@ -297,6 +341,7 @@ def _parse_qml_axis(raw: object) -> QmlAxis:
         enabled=True,
         source_roots=_str_list(obj, "source_roots", "qml"),
         own_module=own_module,
+        modules=modules,
         accepted_triage=tuple(triage),
     )
 
@@ -866,6 +911,68 @@ def check_qrc_closure(shipped: Iterable[str], sources: Sequence[str], plugin_roo
         )
 
 
+def exclude_module_sources(sources: Sequence[str], modules: Sequence[QmlModule]) -> list[str]:
+    """Drop files that belong to a declared QML module from a source list before the flat
+    qrc is closed over it — such a file ships through its own module, never the flat prefix,
+    so the flat closure must not demand it."""
+    module_dirs = [Path(module.source_dir) for module in modules]
+    kept: list[str] = []
+    for source in sources:
+        path = Path(source)
+        if any(path == directory or directory in path.parents for directory in module_dirs):
+            continue
+        kept.append(source)
+    return kept
+
+
+def parse_qmldir_module_files(text: str) -> set[str]:
+    """The .qml files a generated qmldir actually declares as part of the module — every
+    qt_add_qml_module()-authored `<Type> <version> <file>` / `singleton ...` line, keyed by
+    the last whitespace-separated token. Directive lines (module/typeinfo/prefer/depends/
+    import/classname/plugin/...) never end in .qml, so this needs no allowlist of line shapes.
+    """
+    files: set[str] = set()
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        token = line.rsplit(maxsplit=1)[-1]
+        if token.endswith(".qml"):
+            files.add(token)
+    return files
+
+
+def check_module_closure(
+    uri: str, source_dir: str, sources: Sequence[str], qmldir_text: str
+) -> None:
+    """Close a QML module's own generated qmldir over the .qml files that actually sit in
+    its source directory — the module-scoped mirror of check_qrc_closure.
+
+    Before this, a file living under a module's source directory was invisible everywhere:
+    excluded from the flat qrc closure (it ships through the module, not the flat prefix)
+    and never checked against the module's own QML_FILES either — S1's measured blindness.
+    A file present on disk but absent from what the module actually generates is not shipped
+    through it and resolves nowhere.
+    """
+    base = Path(source_dir)
+    on_disk = {Path(source).relative_to(base).as_posix() for source in sources}
+    declared = parse_qmldir_module_files(qmldir_text)
+    undeclared = sorted(on_disk - declared)
+    if undeclared:
+        raise GateError(
+            f"{uri}: .qml file(s) under {source_dir} that its own generated qmldir does not "
+            f"list as part of the module — present on disk but shipped nowhere:\n  "
+            + "\n  ".join(undeclared)
+            + "\nAdd them to the module's QML_FILES or delete them."
+        )
+    missing = sorted(declared - on_disk)
+    if missing:
+        raise GateError(
+            f"{uri}: the generated qmldir lists .qml file(s) that do not exist under "
+            f"{source_dir}:\n  " + "\n  ".join(missing)
+        )
+
+
 def inject_import(qml_text: str, import_statement: str) -> str:
     """Insert an import into the import block, for negative control 3.
 
@@ -1308,7 +1415,8 @@ def stage_flat_qml(context: GateContext) -> tuple[Path, dict[str, str]]:
     qrc = find_plugin_qrc(context.scratch_plugin, context.manifest.artifact_name)
     flat_map = flatten_qml_entries(parse_qrc(qrc.read_text(encoding="utf-8")))
     sources = find_qml_sources(context.scratch_plugin, context.manifest.qml.source_roots)
-    check_qrc_closure(flat_map.values(), sources, context.scratch_plugin)
+    flat_sources = exclude_module_sources(sources, context.manifest.qml.modules)
+    check_qrc_closure(flat_map.values(), flat_sources, context.scratch_plugin)
 
     flat_dir = context.work_dir / "flat-qml"
     flat_dir.mkdir(parents=True, exist_ok=True)
@@ -1329,23 +1437,71 @@ def build_qml_import_paths(context: GateContext) -> list[Path]:
         raise GateError(f"{context.sdk_prefix} publishes no QML module under qml/QGroundControl")
     paths.append(published)
 
-    own_module = context.manifest.qml.own_module
-    if own_module is not None:
-        relative = Path(*own_module.split("."))
-        generated = context.build_dir / "qml" / relative
-        if not generated.is_dir():
-            raise GateError(
-                f"qml.own_module declares {own_module}, but the standalone build generated no "
-                f"module metadata at {generated} — the plugin's own QML would not resolve"
-            )
-        # Stage only the declared module, never the directory holding it: in-tree that
+    declared: list[tuple[str, str]] = []
+    if context.manifest.qml.own_module is not None:
+        declared.append((context.manifest.qml.own_module, "qml.own_module"))
+    for module in context.manifest.qml.modules:
+        declared.append((module.uri, f"qml.modules ({module.uri})"))
+
+    if declared:
+        # Stage only the declared modules, never the directory holding them: in-tree that
         # directory is the host build's whole qml/ tree, and putting it on the import path
         # would silently restore every base module the gate exists to keep off it.
         stage = context.work_dir / "own-module"
-        (stage / relative).parent.mkdir(parents=True, exist_ok=True)
-        os.symlink(generated, stage / relative)
+        staged: list[Path] = []
+        # Shallowest URI first: a nested module (QGroundControl.QDrive.Foundation) generates
+        # its metadata *inside* its parent's directory (QGroundControl.QDrive), so staging
+        # the parent already exposes it. Symlinking both would try to create a symlink at a
+        # path that already exists as a real directory reached through the parent's symlink.
+        for uri, where in sorted(declared, key=lambda pair: pair[0].count(".")):
+            relative = Path(*uri.split("."))
+            generated = context.build_dir / "qml" / relative
+            if not generated.is_dir():
+                raise GateError(
+                    f"{where} declares {uri}, but the standalone build generated no module "
+                    f"metadata at {generated} — the plugin's own QML would not resolve"
+                )
+            if any(relative == parent or parent in relative.parents for parent in staged):
+                continue
+            (stage / relative).parent.mkdir(parents=True, exist_ok=True)
+            os.symlink(generated, stage / relative)
+            staged.append(relative)
         paths.append(stage)
     return paths
+
+
+def stage_qml_modules(context: GateContext) -> list[Path]:
+    """Every .qml the plugin ships through a real QML module, in source form.
+
+    Unlike the flat prefix, a module file resolves its siblings and the module import path
+    by its own directory, so it needs no flattening to lint the shape that ships — it is
+    linted from exactly where it lives. Closes each module over its own generated qmldir
+    first (check_module_closure), which is what actually closes the S1' blind spot: without
+    it, a file excluded from the flat closure (because it lives in a module) but never
+    checked against anything else would be shipped nowhere and linted by nothing.
+    """
+    modules = context.manifest.qml.modules
+    files: list[Path] = []
+    for module in modules:
+        sources = find_qml_sources(context.scratch_plugin, [module.source_dir])
+        # A sibling module's source_dir can legitimately nest inside this one's (a module
+        # directory is walked in full by find_qml_sources, so it would otherwise pick up a
+        # nested module's own files too, and this module's generated qmldir — which knows
+        # nothing about the nested module — would then see them as undeclared).
+        others = [other for other in modules if other is not module]
+        sources = exclude_module_sources(sources, others)
+        relative = Path(*module.uri.split("."))
+        qmldir = context.build_dir / "qml" / relative / "qmldir"
+        if not qmldir.is_file():
+            raise GateError(
+                f"qml.modules declares {module.uri}, but the standalone build generated no "
+                f"qmldir at {qmldir} — the plugin's own QML module would not resolve"
+            )
+        check_module_closure(
+            module.uri, module.source_dir, sources, qmldir.read_text(encoding="utf-8")
+        )
+        files.extend(context.scratch_plugin / source for source in sources)
+    return files
 
 
 def run_qmllint(context: GateContext, files: Sequence[Path]) -> tuple[int, str]:
@@ -1416,7 +1572,8 @@ def run_qml_axis(context: GateContext) -> tuple[Path, dict[str, str]] | None:
     step("Linting QML against the published module and the guaranteed Qt subset only")
     flat_dir, flat_map = stage_flat_qml(context)
     context.qml_import_paths = build_qml_import_paths(context)
-    files = [flat_dir / alias for alias in sorted(flat_map)]
+    module_files = stage_qml_modules(context)
+    files = [flat_dir / alias for alias in sorted(flat_map)] + module_files
     context.linted_file_count = len(files)
 
     result = lint_qml_set(context, files, flat_map)

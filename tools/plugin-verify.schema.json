@@ -35,19 +35,40 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["enabled", "source_roots", "own_module", "accepted_triage"],
+          "required": ["enabled", "source_roots", "own_module", "modules", "accepted_triage"],
           "properties": {
             "enabled": { "const": true },
             "source_roots": {
               "type": "array",
               "minItems": 1,
               "items": { "type": "string", "minLength": 1 },
-              "description": "Directories, relative to the plugin root, whose every .qml file must be shipped by the .qrc. The plugin's own build tree is skipped."
+              "description": "Directories, relative to the plugin root, whose every .qml file must be shipped by the .qrc. The plugin's own build tree is skipped. A file under a declared modules[].source_dir is excluded from this closure — it ships through its own module instead."
             },
             "own_module": {
               "type": ["string", "null"],
               "minLength": 1,
-              "description": "The plugin's own QML module URI (qt_add_qml_module), staged onto the lint import path from the standalone build tree; null when the plugin registers no module. Explicitly null rather than absent, so the decision is recorded."
+              "description": "The plugin's own type-registration QML module URI (qt_add_qml_module over C++ QML_ELEMENT sources, no .qml files of its own), staged onto the lint import path from the standalone build tree; null when the plugin registers no such module. Explicitly null rather than absent, so the decision is recorded. A module that ships its own .qml source files belongs in modules instead, never here."
+            },
+            "modules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["uri", "source_dir"],
+                "properties": {
+                  "uri": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "A QML module's own URI (qt_add_qml_module), for a module whose backing directory ships real .qml source files."
+                  },
+                  "source_dir": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Directory, relative to the plugin root, holding this module's own .qml files. Excluded from the flat-qrc closure and instead closed over the module's own generated qmldir."
+                  }
+                }
+              },
+              "description": "QML modules that ship real .qml source files, each staged onto the lint import path and linted from its own directory rather than the flat qrc prefix. Empty for a plugin with no such module."
             },
             "accepted_triage": {
               "type": "array",

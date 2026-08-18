@@ -21,6 +21,7 @@ from verify_plugin_out_of_tree import (
     GUARANTEED_QT_COMPONENTS,
     GateError,
     ManifestError,
+    QmlModule,
     Runner,
     TriageEntry,
     assert_control_failed,
@@ -29,8 +30,10 @@ from verify_plugin_out_of_tree import (
     check_marker_embedded,
     check_marker_not_embedded,
     check_marker_symbol_exported,
+    check_module_closure,
     check_qrc_closure,
     check_qt_components,
+    exclude_module_sources,
     expected_test_count,
     find_build_marker_source,
     find_cmake_lists,
@@ -42,6 +45,7 @@ from verify_plugin_out_of_tree import (
     parse_build_marker_source,
     parse_ctest_total,
     parse_manifest,
+    parse_qmldir_module_files,
     parse_qrc,
     parse_qt_components,
     qmllint_error_lines,
@@ -59,6 +63,7 @@ VALID_MANIFEST = {
         "enabled": True,
         "source_roots": ["qml"],
         "own_module": None,
+        "modules": [],
         "accepted_triage": [],
     },
     "tests": {"enabled": False, "reason": "no suite"},
@@ -83,6 +88,9 @@ def test_parses_a_fully_declared_manifest():
                 "enabled": True,
                 "source_roots": ["qml"],
                 "own_module": "QGroundControl.Something",
+                "modules": [
+                    {"uri": "QGroundControl.Something.Foundation", "source_dir": "qml/foundation"}
+                ],
                 "accepted_triage": [{"pattern": "QGeoCoordinate", "reason": "qmllint blind spot"}],
             },
         )
@@ -92,6 +100,9 @@ def test_parses_a_fully_declared_manifest():
     assert manifest.tests.enabled and manifest.tests.cmake_lists == "test/CMakeLists.txt"
     assert manifest.forbidden_symbols.patterns == ("mavlink",)
     assert manifest.qml.own_module == "QGroundControl.Something"
+    assert manifest.qml.modules == (
+        QmlModule(uri="QGroundControl.Something.Foundation", source_dir="qml/foundation"),
+    )
     assert manifest.qml.accepted_triage == (
         TriageEntry(pattern="QGeoCoordinate", reason="qmllint blind spot"),
     )
@@ -174,6 +185,7 @@ def test_empty_source_roots_are_an_error():
                     "enabled": True,
                     "source_roots": [],
                     "own_module": None,
+                    "modules": [],
                     "accepted_triage": [],
                 }
             )
@@ -188,6 +200,7 @@ def test_a_malformed_triage_regex_is_an_error():
                     "enabled": True,
                     "source_roots": ["qml"],
                     "own_module": None,
+                    "modules": [],
                     "accepted_triage": [{"pattern": "([", "reason": "typo"}],
                 }
             )
@@ -197,7 +210,84 @@ def test_a_malformed_triage_regex_is_an_error():
 def test_own_module_must_be_declared_even_when_absent():
     with pytest.raises(ManifestError, match="missing required key"):
         parse_manifest(
-            _manifest(qml={"enabled": True, "source_roots": ["qml"], "accepted_triage": []})
+            _manifest(
+                qml={
+                    "enabled": True,
+                    "source_roots": ["qml"],
+                    "modules": [],
+                    "accepted_triage": [],
+                }
+            )
+        )
+
+
+def test_modules_must_be_declared_even_when_empty():
+    with pytest.raises(ManifestError, match="missing required key"):
+        parse_manifest(
+            _manifest(
+                qml={
+                    "enabled": True,
+                    "source_roots": ["qml"],
+                    "own_module": None,
+                    "accepted_triage": [],
+                }
+            )
+        )
+
+
+def test_a_module_and_own_module_may_not_name_the_same_uri():
+    # A module is either type-registration-only (own_module) or ships its own .qml files
+    # (modules), never both — declaring the same URI in both is a manifest that doesn't say
+    # which shape the module actually is.
+    with pytest.raises(ManifestError, match=r"both declare 'QGroundControl\.Something'"):
+        parse_manifest(
+            _manifest(
+                qml={
+                    "enabled": True,
+                    "source_roots": ["qml"],
+                    "own_module": "QGroundControl.Something",
+                    "modules": [
+                        {"uri": "QGroundControl.Something", "source_dir": "qml/foundation"}
+                    ],
+                    "accepted_triage": [],
+                }
+            )
+        )
+
+
+def test_a_duplicate_module_uri_is_an_error():
+    with pytest.raises(ManifestError, match="declared more than once"):
+        parse_manifest(
+            _manifest(
+                qml={
+                    "enabled": True,
+                    "source_roots": ["qml"],
+                    "own_module": None,
+                    "modules": [
+                        {"uri": "QGroundControl.X.Foundation", "source_dir": "qml/foundation"},
+                        {"uri": "QGroundControl.X.Foundation", "source_dir": "qml/other"},
+                    ],
+                    "accepted_triage": [],
+                }
+            )
+        )
+
+
+def test_a_duplicate_module_source_dir_is_an_error():
+    with pytest.raises(ManifestError, match="declared more than once"):
+        parse_manifest(
+            _manifest(
+                qml={
+                    "enabled": True,
+                    "source_roots": ["qml"],
+                    "own_module": None,
+                    "modules": [
+                        {"uri": "QGroundControl.X.Foundation", "source_dir": "qml/foundation"},
+                        {"uri": "QGroundControl.X.Components", "source_dir": "qml/foundation"},
+                    ],
+                    "accepted_triage": [],
+                }
+            )
         )
 
 
@@ -672,6 +762,111 @@ def test_source_scan_skips_the_gates_own_build_tree_but_only_at_the_root(tmp_pat
 def test_source_roots_must_exist(tmp_path: Path):
     with pytest.raises(GateError, match="not a directory"):
         find_qml_sources(tmp_path, ["qml"])
+
+
+# --- The QML axis: plugin-owned modules (S1'/U0) ----------------------------------------------------
+
+
+def test_exclude_module_sources_drops_files_under_a_declared_module():
+    # A module file ships through its own module, never the flat prefix — the flat qrc
+    # closure must not demand it.
+    sources = [
+        "qml/pages/SignInPage.qml",
+        "qml/foundation/QDriveTheme.qml",
+        "qml/foundation/QDLabel.qml",
+    ]
+    modules = [QmlModule(uri="QGroundControl.QDrive.Foundation", source_dir="qml/foundation")]
+
+    assert exclude_module_sources(sources, modules) == ["qml/pages/SignInPage.qml"]
+
+
+def test_exclude_module_sources_is_a_no_op_with_no_declared_modules():
+    sources = ["qml/pages/SignInPage.qml", "qml/foundation/QDriveTheme.qml"]
+
+    assert exclude_module_sources(sources, []) == sources
+
+
+def test_exclude_module_sources_only_matches_the_directory_not_a_name_prefix():
+    # "qml/foundational" is not "qml/foundation" — a naive string prefix match would drop it
+    # by mistake.
+    sources = ["qml/foundational/Other.qml"]
+    modules = [QmlModule(uri="QGroundControl.QDrive.Foundation", source_dir="qml/foundation")]
+
+    assert exclude_module_sources(sources, modules) == sources
+
+
+def test_a_nested_sibling_modules_files_are_excluded_from_its_parents_own_set():
+    # find_qml_sources walks a module's source_dir in full, so a sibling module nested
+    # inside it (e.g. a Widgets sub-module under Foundation) would otherwise be swept into
+    # the parent's own file set too — and the parent's real generated qmldir knows nothing
+    # about the nested module's files, so check_module_closure would wrongly call them
+    # undeclared. stage_qml_modules excludes every *other* declared module's files this way
+    # before closing a given module over its own set.
+    child = QmlModule(
+        uri="QGroundControl.QDrive.Foundation.Widgets", source_dir="qml/foundation/widgets"
+    )
+    sources = ["qml/foundation/QDriveTheme.qml", "qml/foundation/widgets/ExtraWidget.qml"]
+
+    assert exclude_module_sources(sources, [child]) == ["qml/foundation/QDriveTheme.qml"]
+
+
+GENERATED_MODULE_QMLDIR = """\
+module QGroundControl.QDrive.Foundation
+typeinfo QDriveFoundationModule.qmltypes
+prefer :/qml/QGroundControl/QDrive/Foundation/
+singleton QDriveTheme 1.0 QDriveTheme.qml
+QDLabel 1.0 QDLabel.qml
+QDButton 1.0 QDButton.qml
+depends QtQuick
+"""
+
+
+def test_parses_the_files_a_generated_qmldir_declares():
+    assert parse_qmldir_module_files(GENERATED_MODULE_QMLDIR) == {
+        "QDriveTheme.qml",
+        "QDLabel.qml",
+        "QDButton.qml",
+    }
+
+
+def test_module_closure_passes_when_disk_matches_the_generated_qmldir():
+    sources = [
+        "qml/foundation/QDriveTheme.qml",
+        "qml/foundation/QDLabel.qml",
+        "qml/foundation/QDButton.qml",
+    ]
+
+    check_module_closure(
+        "QGroundControl.QDrive.Foundation", "qml/foundation", sources, GENERATED_MODULE_QMLDIR
+    )
+
+
+def test_a_module_file_the_module_does_not_declare_is_an_error():
+    # This is the S1' blindness itself: a .qml file sitting in the module's own directory
+    # that was never added to its QML_FILES. Before U0 such a file was excluded from the
+    # flat qrc closure (it lives under the module dir) and checked against nothing else —
+    # shipped nowhere, linted by nothing, and the gate went green regardless. This proves
+    # that hole is provably closed rather than assumed fixed.
+    sources = [
+        "qml/foundation/QDriveTheme.qml",
+        "qml/foundation/QDLabel.qml",
+        "qml/foundation/QDButton.qml",
+        "qml/foundation/Stray.qml",
+    ]
+
+    with pytest.raises(GateError, match=r"Stray\.qml"):
+        check_module_closure(
+            "QGroundControl.QDrive.Foundation", "qml/foundation", sources, GENERATED_MODULE_QMLDIR
+        )
+
+
+def test_a_qmldir_entry_with_no_file_on_disk_is_an_error():
+    sources = ["qml/foundation/QDriveTheme.qml", "qml/foundation/QDLabel.qml"]
+
+    with pytest.raises(GateError, match=r"QDButton\.qml"):
+        check_module_closure(
+            "QGroundControl.QDrive.Foundation", "qml/foundation", sources, GENERATED_MODULE_QMLDIR
+        )
 
 
 # --- The QML axis: triage and injection -----------------------------------------------------------
