@@ -1449,8 +1449,8 @@ def build_qml_import_paths(context: GateContext) -> list[Path]:
         # would silently restore every base module the gate exists to keep off it.
         stage = context.work_dir / "own-module"
         staged: list[Path] = []
-        # Shallowest URI first: a nested module (QGroundControl.QDrive.Foundation) generates
-        # its metadata *inside* its parent's directory (QGroundControl.QDrive), so staging
+        # Shallowest URI first: a nested module (QGroundControl.Acme.Foundation) generates
+        # its metadata *inside* its parent's directory (QGroundControl.Acme), so staging
         # the parent already exposes it. Symlinking both would try to create a symlink at a
         # path that already exists as a real directory reached through the parent's symlink.
         for uri, where in sorted(declared, key=lambda pair: pair[0].count(".")):

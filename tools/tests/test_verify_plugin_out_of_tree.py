@@ -772,16 +772,16 @@ def test_exclude_module_sources_drops_files_under_a_declared_module():
     # closure must not demand it.
     sources = [
         "qml/pages/SignInPage.qml",
-        "qml/foundation/QDriveTheme.qml",
-        "qml/foundation/QDLabel.qml",
+        "qml/foundation/AcmeTheme.qml",
+        "qml/foundation/AcmeLabel.qml",
     ]
-    modules = [QmlModule(uri="QGroundControl.QDrive.Foundation", source_dir="qml/foundation")]
+    modules = [QmlModule(uri="QGroundControl.Acme.Foundation", source_dir="qml/foundation")]
 
     assert exclude_module_sources(sources, modules) == ["qml/pages/SignInPage.qml"]
 
 
 def test_exclude_module_sources_is_a_no_op_with_no_declared_modules():
-    sources = ["qml/pages/SignInPage.qml", "qml/foundation/QDriveTheme.qml"]
+    sources = ["qml/pages/SignInPage.qml", "qml/foundation/AcmeTheme.qml"]
 
     assert exclude_module_sources(sources, []) == sources
 
@@ -790,7 +790,7 @@ def test_exclude_module_sources_only_matches_the_directory_not_a_name_prefix():
     # "qml/foundational" is not "qml/foundation" — a naive string prefix match would drop it
     # by mistake.
     sources = ["qml/foundational/Other.qml"]
-    modules = [QmlModule(uri="QGroundControl.QDrive.Foundation", source_dir="qml/foundation")]
+    modules = [QmlModule(uri="QGroundControl.Acme.Foundation", source_dir="qml/foundation")]
 
     assert exclude_module_sources(sources, modules) == sources
 
@@ -803,41 +803,41 @@ def test_a_nested_sibling_modules_files_are_excluded_from_its_parents_own_set():
     # undeclared. stage_qml_modules excludes every *other* declared module's files this way
     # before closing a given module over its own set.
     child = QmlModule(
-        uri="QGroundControl.QDrive.Foundation.Widgets", source_dir="qml/foundation/widgets"
+        uri="QGroundControl.Acme.Foundation.Widgets", source_dir="qml/foundation/widgets"
     )
-    sources = ["qml/foundation/QDriveTheme.qml", "qml/foundation/widgets/ExtraWidget.qml"]
+    sources = ["qml/foundation/AcmeTheme.qml", "qml/foundation/widgets/ExtraWidget.qml"]
 
-    assert exclude_module_sources(sources, [child]) == ["qml/foundation/QDriveTheme.qml"]
+    assert exclude_module_sources(sources, [child]) == ["qml/foundation/AcmeTheme.qml"]
 
 
 GENERATED_MODULE_QMLDIR = """\
-module QGroundControl.QDrive.Foundation
-typeinfo QDriveFoundationModule.qmltypes
-prefer :/qml/QGroundControl/QDrive/Foundation/
-singleton QDriveTheme 1.0 QDriveTheme.qml
-QDLabel 1.0 QDLabel.qml
-QDButton 1.0 QDButton.qml
+module QGroundControl.Acme.Foundation
+typeinfo AcmeFoundationModule.qmltypes
+prefer :/qml/QGroundControl/Acme/Foundation/
+singleton AcmeTheme 1.0 AcmeTheme.qml
+AcmeLabel 1.0 AcmeLabel.qml
+AcmeButton 1.0 AcmeButton.qml
 depends QtQuick
 """
 
 
 def test_parses_the_files_a_generated_qmldir_declares():
     assert parse_qmldir_module_files(GENERATED_MODULE_QMLDIR) == {
-        "QDriveTheme.qml",
-        "QDLabel.qml",
-        "QDButton.qml",
+        "AcmeTheme.qml",
+        "AcmeLabel.qml",
+        "AcmeButton.qml",
     }
 
 
 def test_module_closure_passes_when_disk_matches_the_generated_qmldir():
     sources = [
-        "qml/foundation/QDriveTheme.qml",
-        "qml/foundation/QDLabel.qml",
-        "qml/foundation/QDButton.qml",
+        "qml/foundation/AcmeTheme.qml",
+        "qml/foundation/AcmeLabel.qml",
+        "qml/foundation/AcmeButton.qml",
     ]
 
     check_module_closure(
-        "QGroundControl.QDrive.Foundation", "qml/foundation", sources, GENERATED_MODULE_QMLDIR
+        "QGroundControl.Acme.Foundation", "qml/foundation", sources, GENERATED_MODULE_QMLDIR
     )
 
 
@@ -848,24 +848,24 @@ def test_a_module_file_the_module_does_not_declare_is_an_error():
     # shipped nowhere, linted by nothing, and the gate went green regardless. This proves
     # that hole is provably closed rather than assumed fixed.
     sources = [
-        "qml/foundation/QDriveTheme.qml",
-        "qml/foundation/QDLabel.qml",
-        "qml/foundation/QDButton.qml",
+        "qml/foundation/AcmeTheme.qml",
+        "qml/foundation/AcmeLabel.qml",
+        "qml/foundation/AcmeButton.qml",
         "qml/foundation/Stray.qml",
     ]
 
     with pytest.raises(GateError, match=r"Stray\.qml"):
         check_module_closure(
-            "QGroundControl.QDrive.Foundation", "qml/foundation", sources, GENERATED_MODULE_QMLDIR
+            "QGroundControl.Acme.Foundation", "qml/foundation", sources, GENERATED_MODULE_QMLDIR
         )
 
 
 def test_a_qmldir_entry_with_no_file_on_disk_is_an_error():
-    sources = ["qml/foundation/QDriveTheme.qml", "qml/foundation/QDLabel.qml"]
+    sources = ["qml/foundation/AcmeTheme.qml", "qml/foundation/AcmeLabel.qml"]
 
-    with pytest.raises(GateError, match=r"QDButton\.qml"):
+    with pytest.raises(GateError, match=r"AcmeButton\.qml"):
         check_module_closure(
-            "QGroundControl.QDrive.Foundation", "qml/foundation", sources, GENERATED_MODULE_QMLDIR
+            "QGroundControl.Acme.Foundation", "qml/foundation", sources, GENERATED_MODULE_QMLDIR
         )
 
 
