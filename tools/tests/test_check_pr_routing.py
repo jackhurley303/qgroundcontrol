@@ -14,6 +14,7 @@ from check_pr_routing import (
     _is_covered,
     _mainline_covered_paths,
     apply_doc_rewrites,
+    check_worktree,
     rewrites_for,
 )
 from derive_pr_branch import (
@@ -395,3 +396,43 @@ class TestRegressionInertRelease:
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))
+
+
+class TestCheckWorktree:
+    """The worktree mode exists because every other check reads a ref, so a breach is
+    invisible until it is committed. These assert it fails on the two things that
+    actually reached mainline that way, and passes when neither is present."""
+
+    def test_forbidden_term_in_a_routed_file_fails(self, tmp_path, monkeypatch):
+        target = tmp_path / "tools" / "verify_plugin_out_of_tree.py"
+        target.parent.mkdir(parents=True)
+        target.write_text("# mentions QDrive in a comment\n")
+
+        assert check_worktree(["tools/verify_plugin_out_of_tree.py"], tmp_path) is False
+
+    def test_clean_routed_file_passes(self, tmp_path):
+        target = tmp_path / "tools" / "verify_plugin_out_of_tree.py"
+        target.parent.mkdir(parents=True)
+        target.write_text("# no plugin name here\n")
+
+        assert check_worktree(["tools/verify_plugin_out_of_tree.py"], tmp_path) is True
+
+    def test_unrouted_base_app_path_fails(self, tmp_path):
+        target = tmp_path / "src" / "NotRoutedAnywhere.h"
+        target.parent.mkdir(parents=True)
+        target.write_text("int probe(void);\n")
+
+        assert check_worktree(["src/NotRoutedAnywhere.h"], tmp_path) is False
+
+    def test_plugin_paths_and_exempt_tooling_are_skipped(self, tmp_path):
+        for rel in ("plugins/qdrive/src/Thing.cc", "tools/derive_pr_branch.py"):
+            f = tmp_path / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("qdrive qdrive qdrive\n")
+
+        assert check_worktree(
+            ["plugins/qdrive/src/Thing.cc", "tools/derive_pr_branch.py"], tmp_path
+        ) is True
+
+    def test_a_missing_file_is_not_a_failure(self, tmp_path):
+        assert check_worktree(["src/DeletedSinceEdit.h"], tmp_path) is True

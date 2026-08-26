@@ -336,6 +336,54 @@ def check_seams(repo_root: Path) -> bool:
     return ok
 
 
+def check_worktree(paths: list[str], repo_root: Path) -> bool:
+    """Audit uncommitted work, before it can reach mainline.
+
+    Every check above reads a ref, so a breach is only visible once it is committed —
+    which is exactly how a plugin name reached mainline inside the SDK verifier. This
+    runs the two checks that make sense on an edit still in progress (is the path routed
+    at all, does it carry a forbidden term) against the files on disk, so the answer
+    arrives while the edit is cheap to fix.
+    """
+    log_step("worktree routing + forbidden terms")
+    if not paths:
+        status = run_git("status", "--porcelain", "--", ".", cwd=repo_root)
+        if status.returncode != 0:
+            log_error(status.stderr.strip())
+            return False
+        paths = [ln[3:].strip() for ln in status.stdout.splitlines() if ln[3:].strip()]
+
+    covered = _mainline_covered_paths()
+    ok = True
+    checked = 0
+    for path in paths:
+        if not path or path.startswith("plugins/qdrive"):
+            continue
+        if path in _ROUTING_EXEMPT or path in _MAINLINE_ONLY or path in _DEFERRED_ROUTING:
+            continue
+        if not (repo_root / path).is_file():
+            continue  # deleted, or a directory — nothing on disk to read
+        checked += 1
+        if not _is_covered(path, covered):
+            log_error(f"{path} is covered by no PRSpec — route it, or record an exemption")
+            ok = False
+            continue
+        text = (repo_root / path).read_text(encoding="utf-8", errors="replace")
+        for name, spec in SPECS.items():
+            if not _is_covered(path, spec.include_paths + spec.patch_paths):
+                continue
+            rewrites = rewrites_for(spec, path)
+            body = apply_doc_rewrites(text, rewrites) if rewrites else text
+            for term in spec.forbidden_terms:
+                if term.lower() in body.lower():
+                    log_error(f"'{name}': forbidden term '{term}' in worktree file: {path}")
+                    ok = False
+
+    if ok:
+        log_ok(f"{checked} worktree path(s) routed, no forbidden terms")
+    return ok
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -350,9 +398,23 @@ def main() -> int:
         default=None,
         help="Mainline ref to check (default: the mainline_ref shared by every PRSpec)",
     )
+    parser.add_argument(
+        "--worktree",
+        action="store_true",
+        help="Check uncommitted files on disk instead of mainline (routing + forbidden terms only)",
+    )
+    parser.add_argument(
+        "--paths",
+        nargs="*",
+        default=None,
+        help="With --worktree: limit the check to these paths (default: everything git reports dirty)",
+    )
     args = parser.parse_args()
 
     repo_root = find_repo_root(Path(__file__).parent)
+    if args.worktree:
+        return 0 if check_worktree(args.paths or [], repo_root) else 1
+
     mainline_refs = {spec.mainline_ref for spec in SPECS.values()}
     if len(mainline_refs) != 1:
         raise SystemExit(f"PRSpecs disagree on mainline_ref: {mainline_refs}")
