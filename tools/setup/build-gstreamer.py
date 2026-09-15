@@ -31,7 +31,6 @@ import argparse
 import os
 import platform
 import shutil
-import site
 import subprocess
 import sys
 import tempfile
@@ -50,16 +49,11 @@ ensure_tools_dir(__file__)
 from common.build_config import get_build_config_value
 from common.gh_actions import write_github_output
 from common.logging import log_error, log_info, log_ok, log_warn
-from common.tool_version import uv_lock_version
+from qgc_tools.python_env import executable, sync_groups
 
 # ============================================================================
 # Shared Utilities
 # ============================================================================
-
-# Fallbacks for contexts without tools/uv.lock; the lock's pins are the source of
-# truth otherwise, so the pip fallback here can't drift from the dev/CI venv.
-MESON_VERSION = uv_lock_version("meson") or "1.11.1"
-NINJA_VERSION = uv_lock_version("ninja") or "1.13.0"
 
 
 def run_cmd(
@@ -240,28 +234,15 @@ class MesonBuilder:
 
     def ensure_meson(self) -> None:
         """Ensure meson and ninja are available."""
-        meson_path = shutil.which("meson")
-        ninja_path = shutil.which("ninja")
-        if meson_path and ninja_path:
-            log_info(f"Using existing meson: {meson_path}")
-            return
-
-        packages: list[str] = []
-        if not meson_path:
-            packages.append(f"meson=={MESON_VERSION}")
-        if not ninja_path:
-            packages.append(f"ninja=={NINJA_VERSION}")
-
-        log_info(f"Installing pinned build tools: {', '.join(packages)}")
-        from common import pip_install
-
-        pip_install(packages)
-
-        user_scripts = Path(site.getuserbase()) / ("Scripts" if os.name == "nt" else "bin")
-        os.environ["PATH"] = f"{user_scripts}{os.pathsep}{os.environ['PATH']}"
-
-        if not shutil.which("meson") or not shutil.which("ninja"):
-            raise RuntimeError("Failed to install meson and ninja into user scripts directory")
+        environment = sync_groups("build")
+        os.environ["PATH"] = (
+            f"{executable('meson', environment).parent}{os.pathsep}{os.environ['PATH']}"
+        )
+        if (
+            not executable("meson", environment).is_file()
+            or not executable("ninja", environment).is_file()
+        ):
+            raise RuntimeError("Locked build environment is missing meson or ninja")
 
     def clone_source(self) -> None:
         """Clone GStreamer source if needed."""
@@ -696,7 +677,12 @@ def main() -> int:
     args = parse_args()
 
     # Resolve defaults
-    version = args.version or get_build_config_value("gstreamer.version.default", "1.24.13")
+    version = args.version or get_build_config_value(
+        "gstreamer.version.default", start=Path(__file__).resolve()
+    )
+    if not version:
+        log_error("GStreamer version is required; pass --version or provide build-config.json")
+        return 1
     arch = args.arch or get_default_arch(args.platform)
     prefix = Path(args.prefix) if args.prefix else None
     work_dir = Path(args.work_dir)

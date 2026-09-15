@@ -15,6 +15,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         HorizontalFactValueGrid.h
         InstrumentValueData.cc
         InstrumentValueData.h
+        MapPositionTracker.cc
+        MapPositionTracker.h
         MavlinkAction.cc
         MavlinkAction.h
         MavlinkActionManager.cc
@@ -94,6 +96,7 @@ qt_add_qml_module(QGroundControlControlsModule
         APMSubMotorDisplay.qml
         AutotuneUI.qml
         AxisMonitor.qml
+        CameraTriggerIcon.qml
         ClickableColor.qml
         ConfigButton.qml
         ConfigSection.qml
@@ -174,6 +177,7 @@ qt_add_qml_module(QGroundControlControlsModule
         SettingsButton.qml
         SettingsGroupLayout.qml
         SetupPage.qml
+        SidebarDivider.qml
         SliderSwitch.qml
         SubMenuButton.qml
         TimedProgressTracker.qml

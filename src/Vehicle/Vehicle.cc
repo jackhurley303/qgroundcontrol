@@ -462,6 +462,12 @@ void Vehicle::_deleteGimbalController()
     if (_gimbalController) {
         // Disconnect all signals to prevent any callbacks during or after deletion
         _gimbalController->disconnect();
+        // The gimbal controller registers itself as the callback context for its GIMBAL_MANAGER_INFORMATION
+        // requestMessage calls. Cancel any still-outstanding request so the coordinator never calls back
+        // into the freed controller.
+        if (_reqMsgCoord) {
+            _reqMsgCoord->cancelRequests(_gimbalController);
+        }
         delete _gimbalController;
         _gimbalController = nullptr;
     }
@@ -1986,7 +1992,7 @@ Vehicle::guidedModeChangeEquivalentAirspeedMetersSecond(double airspeed)
 void Vehicle::guidedModeOrbit(const QGeoCoordinate& centerCoord, double radius, double amslAltitude)
 {
     if (!_vehicleSupports->orbitMode()) {
-        QGC::showAppMessage(QStringLiteral("Orbit mode not supported by Vehicle."));
+        QGC::showAppMessage(tr("Orbit mode not supported by Vehicle."));
         return;
     }
     if (capabilityBits() & MAV_PROTOCOL_CAPABILITY_COMMAND_INT) {
@@ -2015,38 +2021,38 @@ void Vehicle::guidedModeOrbit(const QGeoCoordinate& centerCoord, double radius, 
     }
 }
 
-void Vehicle::guidedModeROI(const QGeoCoordinate& centerCoord)
+bool Vehicle::guidedModeROI(const QGeoCoordinate& centerCoord, double relativeAltitudeMeters)
 {
     if (!centerCoord.isValid()) {
-        return;
+        return false;
     }
     if (!_vehicleSupports->roiMode()) {
-        QGC::showAppMessage(QStringLiteral("ROI mode not supported by Vehicle."));
-        return;
+        QGC::showAppMessage(tr("ROI mode not supported by Vehicle."));
+        return false;
     }
 
-    if (px4Firmware()) {
-        // PX4 ignores the coordinate frame in COMMAND_INT and treats the altitude as AMSL,
-        // so a terrain query is required before we can send the ROI command.
-        _terrainQueryCoordinator->roiWithTerrain(centerCoord);
-    } else {
-        // ArduPilot handles MAV_FRAME_GLOBAL_RELATIVE_ALT correctly, so altitude 0 relative to
-        // home is a reasonable default for a map click with no altitude info.
-        // Sanity check Ardupilot. Max altitude processed is 83000
-        if ((centerCoord.altitude() >= 83000) || (centerCoord.altitude() <= -83000)) {
-            return;
-        }
-        _terrainQueryCoordinator->sendROICommand(centerCoord, MAV_FRAME_GLOBAL_RELATIVE_ALT, static_cast<float>(centerCoord.altitude()));
+    if (!qIsFinite(relativeAltitudeMeters)) {
+        relativeAltitudeMeters = 0;
+    }
+
+    if (!_firmwarePlugin->guidedModeROI(this, centerCoord, relativeAltitudeMeters)) {
+        return false;
+    }
+
+    if (_roiRelativeAltitudeMeters != relativeAltitudeMeters) {
+        _roiRelativeAltitudeMeters = relativeAltitudeMeters;
+        emit roiRelativeAltitudeMetersChanged();
     }
 
     // This is picked by qml to display coordinate over map
     emit roiCoordChanged(centerCoord);
+    return true;
 }
 
 void Vehicle::stopGuidedModeROI()
 {
     if (!_vehicleSupports->roiMode()) {
-        QGC::showAppMessage(QStringLiteral("ROI mode not supported by Vehicle."));
+        QGC::showAppMessage(tr("ROI mode not supported by Vehicle."));
         return;
     }
     if (capabilityBits() & MAV_PROTOCOL_CAPABILITY_COMMAND_INT) {
@@ -2090,7 +2096,7 @@ void Vehicle::guidedModeChangeHeading(const QGeoCoordinate &headingCoord)
 void Vehicle::pauseVehicle()
 {
     if (!_vehicleSupports->pauseVehicle()) {
-        QGC::showAppMessage(QStringLiteral("Pause not supported by vehicle."));
+        QGC::showAppMessage(tr("Pause not supported by vehicle."));
         return;
     }
     _firmwarePlugin->pauseVehicle(this);
@@ -2476,22 +2482,6 @@ void Vehicle::stopCalibration(bool showError)
                    0,                                 // accel cal
                    0,                                 // airspeed cal
                    0);                                // unused
-}
-
-void Vehicle::startUAVCANBusConfig(void)
-{
-    sendMavCommand(defaultComponentId(),        // target component
-                   MAV_CMD_PREFLIGHT_UAVCAN,    // command id
-                   true,                        // showError
-                   1);                          // start config
-}
-
-void Vehicle::stopUAVCANBusConfig(void)
-{
-    sendMavCommand(defaultComponentId(),        // target component
-                   MAV_CMD_PREFLIGHT_UAVCAN,    // command id
-                   true,                        // showError
-                   0);                          // stop config
 }
 
 void Vehicle::setSoloFirmware(bool soloFirmware)

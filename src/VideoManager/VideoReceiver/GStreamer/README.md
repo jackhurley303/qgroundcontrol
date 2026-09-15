@@ -2,6 +2,11 @@
 
 QGroundControl uses GStreamer for UDP RTP and RTSP video streaming in the Main Flight Display.
 
+This guide covers the GStreamer receiver architecture, platform setup, and diagnostics. See
+[CODING_STYLE.md](../../../../CODING_STYLE.md) for repository-wide source conventions,
+[test/README.md](../../../../test/README.md) for the test framework, and
+[tools/README.md](../../../../tools/README.md) for general build and tooling commands.
+
 ## Source Code Architecture
 
 The pipeline is split into focused components (all in this directory):
@@ -131,6 +136,8 @@ dot -Tpng /tmp/qgc-pipeline-dots/0.00.00.*-pipeline-started.dot -o pipeline.png
 ```
 
 When the env var is **unset**, QGC still writes a rotating snapshot (≤10 files) to `<CacheLocation>/qgc-pipeline-dot/<tag>-<ts>.dot` on `ERROR` and on watchdog timeout, so field-bug-report bundles include the topology automatically. The `GstVideoReceiver::dumpPipelineGraph(tag)` slot (callable from QML) writes a snapshot on demand for use from a debug menu.
+
+Automatic CacheLocation snapshots include topology, caps, media types, and states while omitting element properties that can contain stream credentials. Native dumps explicitly enabled with `GST_DEBUG_DUMP_DOT_DIR` retain GStreamer's full `SHOW_ALL` detail for local debugging and can include credential-bearing source properties; handle those files as sensitive data.
 
 ### Latency tracer
 

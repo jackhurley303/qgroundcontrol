@@ -15,11 +15,13 @@ from _bootstrap import ensure_tools_dir
 
 ensure_tools_dir(__file__)
 
-from common import find_repo_root, get_default_branch_ref, run_captured
+from common.file_traversal import find_repo_root
 from common.gh_actions import write_github_output as _write_github_output
 from common.gh_actions import write_step_summary as _write_step_summary
+from common.git import get_default_branch_ref
 from common.io import chdir
 from common.logging import log_error, log_info, log_ok, log_warn
+from common.proc import run_captured
 
 HOOK_RESULT_RE = re.compile(r"\b(Passed|Failed|Skipped)\b")
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -51,7 +53,9 @@ def strip_ansi(value: str) -> str:
 
 def summarize_output(output: str) -> tuple[int, int, int]:
     passed = failed = skipped = 0
-    for line in output.splitlines():
+    for line in strip_ansi(output).splitlines():
+        if ".........." not in line:
+            continue
         match = HOOK_RESULT_RE.search(line)
         if not match:
             continue
@@ -73,10 +77,14 @@ def extract_hook_lines(output: str, *, limit: int = 40) -> list[str]:
 def build_precommit_args(args: argparse.Namespace) -> list[str]:
     result = ["pre-commit", "run", "--show-diff-on-failure", "--color=always"]
     if args.changed:
-        ref = get_default_branch_ref()
+        ref = os.environ.get("PR_BASE_SHA") or get_default_branch_ref()
+        if ref == "0" * 40:
+            ref = None
         if ref:
             log_info(f"Running on files changed vs {ref}...")
-            result.extend(["--from-ref", ref, "--to-ref", "HEAD"])
+            # The PR merge checkout can include newer base-branch changes.
+            head = os.environ.get("PR_HEAD_SHA") or "HEAD"
+            result.extend(["--from-ref", ref, "--to-ref", head])
         else:
             log_warn("Default branch not available, running on all files")
             result.append("--all-files")
@@ -123,11 +131,11 @@ def write_step_summary(exit_code: int, passed: int, failed: int, skipped: int, o
 
 def handle_install() -> int:
     log_info("Installing pre-commit and hooks...")
-    from common import pip_install
+    from qgc_tools.python_env import tool_command
 
-    pip_install(["pre-commit"])
-    subprocess.run(["pre-commit", "install"], check=True)
-    subprocess.run(["pre-commit", "install", "--hook-type", "commit-msg"], check=True)
+    command = tool_command("pre-commit", "precommit")
+    subprocess.run([*command, "install"], check=True)
+    subprocess.run([*command, "install", "--hook-type", "commit-msg"], check=True)
     log_ok("Pre-commit hooks installed")
     return 0
 
@@ -154,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
 
             if not ensure_precommit_available():
                 log_error("pre-commit not found")
-                log_info("Install with: pip install pre-commit")
+                log_info("Install with: python tools/setup/install_python.py precommit")
                 log_info("Or run: python3 ./tools/pre_commit.py --install")
                 return 1
 

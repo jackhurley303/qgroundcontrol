@@ -12,9 +12,14 @@ from ci_bootstrap import ensure_tools_dir
 ensure_tools_dir(__file__)
 
 from common.gh_actions import list_workflow_runs_for_sha, parse_csv_list, write_github_output
-from common.github_runs import select_latest_runs_by_name
-from common.io import read_json, write_json
+from common.io import write_json
 from common.markdown import md_table
+from qgc_tools.workflow_runs import (
+    add_workflow_run_query_args,
+    evaluate_runs,
+    resolve_workflow_runs,
+    select_latest_runs_by_name,
+)
 
 
 def platform_status(
@@ -65,27 +70,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Collect build status for PR build-results comment."
     )
-    parser.add_argument("--repo", required=True, help="Repository in owner/repo format")
-    parser.add_argument("--head-sha", required=True, help="Commit SHA to inspect")
-    parser.add_argument(
-        "--platform-workflows",
-        default="Linux,Windows,MacOS,Android",
-        help="Comma-separated platform workflow names",
-    )
-    parser.add_argument(
-        "--event",
-        default="pull_request",
-        help="Workflow event name to consider (default: pull_request)",
-    )
-    parser.add_argument(
-        "--runs-input",
-        default="",
-        help="Path to read pre-fetched workflow runs JSON; skips the API call",
-    )
-    parser.add_argument(
-        "--runs-cache",
-        default="",
-        help="Path to write cached workflow runs JSON for downstream scripts",
+    add_workflow_run_query_args(
+        parser,
+        default_event="pull_request",
+        include_runs_cache=True,
     )
     return parser.parse_args(argv)
 
@@ -96,10 +84,11 @@ def main(argv: list[str] | None = None) -> int:
     target_names = set(platforms)
     target_names.add("pre-commit")
 
-    if args.runs_input:
-        runs = read_json(Path(args.runs_input))
-    else:
-        runs = list_workflow_runs_for_sha(args.repo, args.head_sha)
+    runs = resolve_workflow_runs(
+        args.repo, args.head_sha, args.runs_file, list_workflow_runs_for_sha
+    )
+    if runs is None:
+        return 1
 
     if args.runs_cache:
         write_json(Path(args.runs_cache), runs)
@@ -111,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
 
     table = render_table(platforms, states)
     platform_conclusions = [states[name]["conclusion"] for name in platforms]
-    all_complete = all(c in {"success", "failure", "cancelled"} for c in platform_conclusions)
+    all_complete, _, _, _ = evaluate_runs(runs, platforms, args.event, require_success=False)
     all_success = all(c == "success" for c in platform_conclusions)
     summary = (
         "All builds passed."

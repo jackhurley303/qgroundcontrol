@@ -21,9 +21,8 @@ from ci_bootstrap import ensure_tools_dir
 
 ensure_tools_dir(__file__)
 
+from common.cobertura import CoberturaError, read_cobertura
 from common.format import format_bytes, format_delta_bytes
-from xml_utils import XMLParseError
-from xml_utils import xml_parse as _xml_parse
 
 logger = logging.getLogger(__name__)
 
@@ -38,13 +37,11 @@ def _parse_coverage_percent(path: Path) -> float | None:
     if not path.exists():
         return None
     try:
-        root = _xml_parse(path).getroot()
-        if root is None:
+        metrics = read_cobertura(path)
+        if metrics.lines_valid == 0:
             return None
-        if int(root.get("lines-valid", 0)) == 0:
-            return None
-        return float(root.get("line-rate", 0.0)) * 100.0
-    except (XMLParseError, OSError, ValueError):
+        return metrics.line_percent
+    except CoberturaError:
         logger.warning("Failed to parse coverage from %s", path, exc_info=True)
         return None
 
@@ -65,7 +62,7 @@ def _parse_precommit_results(path: Path) -> tuple[str | None, str | None, str | 
     skipped = str(data.get("skipped", "0")).strip()
     run_url = str(data.get("run_url", "")).strip()
 
-    status = "Passed" if exit_code == "0" else "Failed (non-blocking)"
+    status = "Passed" if exit_code == "0" else "Failed"
     details = _view_link(run_url)
     note = f"Pre-commit hooks: {passed} passed, {failed or '0'} failed, {skipped or '0'} skipped."
     return status, details, note
@@ -183,11 +180,21 @@ def _collect_artifact_data(base_dir: Path, env: Mapping[str, str]) -> dict[str, 
         return None
 
     baseline_path = base_dir / _env(env, "BASELINE_SIZES_JSON", "baseline-sizes.json")
+    expected_base_sha = _env(env, "BASELINE_SHA")
     baseline: dict[str, int] = {}
     if baseline_path.exists():
         try:
             baseline_data = json.loads(baseline_path.read_text(encoding="utf-8"))
-            for artifact in baseline_data.get("artifacts", []):
+            if expected_base_sha and baseline_data.get("head_sha") != expected_base_sha:
+                logger.warning(
+                    "Ignoring size baseline for %s; PR base is %s",
+                    baseline_data.get("head_sha", "unknown revision"),
+                    expected_base_sha,
+                )
+                baseline_artifacts = []
+            else:
+                baseline_artifacts = baseline_data.get("artifacts", [])
+            for artifact in baseline_artifacts:
                 if not isinstance(artifact, dict):
                     continue
                 name = str(artifact.get("name", "")).strip()
@@ -219,7 +226,11 @@ def _collect_artifact_data(base_dir: Path, env: Mapping[str, str]) -> dict[str, 
             continue
         size_human = str(artifact.get("size_human", "")).strip() or format_bytes(new_size)
 
-        entry: dict[str, Any] = {"name": name, "size_human": size_human}
+        entry: dict[str, Any] = {
+            "name": name,
+            "size_human": size_human,
+            "delta_human": "N/A (no matching artifact)",
+        }
         if baseline and name in baseline:
             delta = new_size - baseline[name]
             total_delta += delta
@@ -227,9 +238,12 @@ def _collect_artifact_data(base_dir: Path, env: Mapping[str, str]) -> dict[str, 
             entry["delta_human"] = format_delta_bytes(delta)
         items.append(entry)
 
+    if not items:
+        return None
     return {
         "entries": items,
-        "has_baseline": bool(baseline),
+        "has_baseline": any("delta" in item for item in items),
+        "baseline_sha": expected_base_sha[:7],
         "total_delta": total_delta,
         "total_delta_mb": abs(total_delta) / 1024.0 / 1024.0,
     }

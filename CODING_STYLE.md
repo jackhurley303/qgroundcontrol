@@ -17,6 +17,7 @@ For complete worked examples, see the reference files:
 - [C++ Style](#c-style)
   - [Headers](#headers)
   - [Class Declaration Order](#class-declaration-order)
+  - [Constructor Initializer Lists](#constructor-initializer-lists)
   - [Modern C++ (C++20)](#modern-c-c20)
   - [Defensive Coding](#defensive-coding)
   - [Logging](#logging)
@@ -37,6 +38,8 @@ For complete worked examples, see the reference files:
 - **Line endings**: LF (Unix-style)
 - **File encoding**: UTF-8
 - **Max line length**: 120 columns (enforced by `.clang-format`, `ColumnLimit: 120`)
+- **Avoid overengineering**: Prefer the smallest focused solution that satisfies current requirements.
+  Do not add abstractions, extensibility, or speculative handling without a concrete need.
 
 ## Comments
 
@@ -114,6 +117,26 @@ private:
 };
 ```
 
+### Constructor Initializer Lists
+
+Put each base-class or member initializer on its own line, even when several would fit on one line.
+Start the list on the line after the constructor signature with `:`, indented four spaces. Start each
+subsequent initializer with `,` aligned with the colon, as in
+[`CameraMetaData::CameraMetaData`](src/Camera/CameraMetaData.cc). Keep initializers in declaration order.
+When the constructor parameter list spans multiple lines, put one parameter on each line and align
+continuation parameters with the first parameter.
+
+```cpp
+MyClass::MyClass(const QString& name,
+                 int timeout,
+                 QObject* parent)
+    : QObject(parent)
+    , _name(name)
+    , _timeout(timeout)
+{
+}
+```
+
 ### Modern C++ (C++20)
 
 QGroundControl uses C++20. Prefer modern features:
@@ -139,6 +162,9 @@ static constexpr int MaxRetries = 5;
 ```
 
 ### Defensive Coding
+
+Always use braces (`{}`) for `if`, `else if`, and `else` bodies, even when the body contains only one
+statement. Put the body on separate lines.
 
 ```cpp
 // Always null-check pointers
@@ -303,11 +329,15 @@ Connections {
 ```cpp
 // Always null-check vehicle
 Vehicle* vehicle = MultiVehicleManager::instance()->activeVehicle();
-if (!vehicle) return;
+if (!vehicle) {
+    return;
+}
 
 // Access parameters via Fact System
 Fact* param = vehicle->parameterManager()->getParameter(-1, "PARAM_NAME");
-if (param) param->setCookedValue(newValue);
+if (param) {
+    param->setCookedValue(newValue);
+}
 ```
 
 ```qml
@@ -325,6 +355,11 @@ Formatting and static analysis are enforced via [.pre-commit-config.yaml](.pre-c
 - `.qmlformat.ini` - QML formatting
 - `.qmllint.ini` - QML linting
 - `.editorconfig` - Editor settings
+
+Do not run a formatter over an entire existing file as part of an otherwise focused change. Format only
+the lines or regions you modify and preserve the surrounding style; whole-file formatting creates unrelated
+diffs that make contributions harder to review. Put intentional broad formatting changes in a dedicated
+commit or pull request. Whole-file formatting is appropriate for new files.
 
 Run them with `just lint` (fast gate) or `pre-commit run --all-files` (full sweep); see
 [tools/README.md](tools/README.md) for all commands.

@@ -7,22 +7,35 @@ Centralizes the encoding and atomic-write patterns that get repeated in
 from __future__ import annotations
 
 import contextlib
+import hashlib
+import hmac
 import json
 import os
+import re
+import sys
 import tempfile
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from typing import Literal
 
 __all__ = [
     "atomic_write",
     "chdir",
+    "ensure_sha256_sidecar",
+    "extract_tar_data",
+    "extract_zip_safe",
     "read_json",
     "read_toml",
     "require_tar_data_filter",
+    "sha256_file",
+    "verify_sha256_sidecar",
     "write_json",
+    "write_text_if_changed",
 ]
+
+_SHA256_SIDECAR_LINE = re.compile(r"([0-9a-fA-F]{64}) [ *](.+)")
 
 
 @contextlib.contextmanager
@@ -53,6 +66,84 @@ def require_tar_data_filter() -> None:
         )
 
 
+def extract_tar_data(
+    archive: Path,
+    destination: Path,
+    *,
+    mode: Literal["r", "r:*", "r:gz", "r:bz2", "r:xz"] = "r:*",
+) -> None:
+    """Extract a tar archive using Python's path-safe PEP 706 data filter."""
+    import tarfile
+
+    require_tar_data_filter()
+    with tarfile.open(archive, mode) as tar:
+        tar.extractall(destination, filter="data")
+
+
+def extract_zip_safe(archive: Path, destination: Path) -> None:
+    """Extract a zip archive, rejecting members that resolve outside *destination*."""
+    import zipfile
+
+    dest = destination.resolve()
+    with zipfile.ZipFile(archive) as zf:
+        for name in zf.namelist():
+            if not (dest / name).resolve().is_relative_to(dest):
+                raise ValueError(f"Unsafe zip member path: {name!r}")
+        zf.extractall(dest)
+
+
+def sha256_file(path: Path, *, chunk_size: int = 1024 * 1024) -> str:
+    """Return the SHA-256 digest of *path* without loading it all into memory."""
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be a positive integer")
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        while chunk := file.read(chunk_size):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_sha256_sidecar(source: Path, checksum: Path | None = None) -> str:
+    """Validate a sha256sum-compatible sidecar and return the actual digest."""
+    if not source.is_file():
+        raise FileNotFoundError(f"Artifact is not a file: {source}")
+
+    checksum = checksum or source.with_name(f"{source.name}.sha256")
+    lines = [
+        line.strip()
+        for line in checksum.read_text(encoding="utf-8-sig").splitlines()
+        if line.strip()
+    ]
+    if len(lines) != 1:
+        raise ValueError(f"Expected exactly one checksum entry in {checksum}")
+
+    match = _SHA256_SIDECAR_LINE.fullmatch(lines[0])
+    if match is None:
+        raise ValueError(f"Malformed SHA-256 checksum entry in {checksum}")
+
+    expected_digest, listed_name = match.groups()
+    if listed_name.casefold() != source.name.casefold():
+        raise ValueError(
+            f"Checksum filename {listed_name!r} does not match artifact {source.name!r}"
+        )
+
+    actual_digest = sha256_file(source)
+    if not hmac.compare_digest(expected_digest.casefold(), actual_digest):
+        raise ValueError(f"SHA-256 checksum mismatch for {source}")
+    return actual_digest
+
+
+def ensure_sha256_sidecar(source: Path, checksum: Path | None = None) -> Path:
+    """Verify or create a canonical sha256sum-compatible checksum sidecar."""
+    if not source.is_file():
+        raise FileNotFoundError(f"Artifact is not a file: {source}")
+
+    checksum = checksum or source.with_name(f"{source.name}.sha256")
+    digest = verify_sha256_sidecar(source, checksum) if checksum.exists() else sha256_file(source)
+    write_text_if_changed(checksum, f"{digest}  {source.name}\n")
+    return checksum
+
+
 def read_json(path: Path) -> Any:
     """Read JSON from *path* (UTF-8). Raises on parse error or missing file."""
     return json.loads(path.read_text(encoding="utf-8"))
@@ -71,16 +162,16 @@ def read_toml(path: Path) -> dict[str, Any]:
     under runner system python which is 3.10 on some images) don't blow up
     transitively.
     """
-    try:
+    if sys.version_info >= (3, 11):
         import tomllib
-    except ModuleNotFoundError:  # stdlib tomllib is 3.11+; Ubuntu 22 ships 3.10
+    else:
         try:
             import tomli as tomllib  # type: ignore[import-not-found]
         except ModuleNotFoundError as exc:
             raise ModuleNotFoundError(
                 f"Reading {path} needs Python 3.11+ (stdlib tomllib) or the 'tomli' package "
-                "on 3.10. Install uv (recommended) so bootstrap uses 'uv sync', or run "
-                "'pip install tomli'."
+                "on 3.10. Run 'python tools/setup/install_python.py scripts' and use "
+                "the interpreter in tools/.venv."
             ) from exc
 
     with path.open("rb") as fh:
@@ -103,3 +194,14 @@ def atomic_write(path: Path, content: str, *, encoding: str = "utf-8") -> None:
         with contextlib.suppress(FileNotFoundError):
             os.unlink(tmp_name)
         raise
+
+
+def write_text_if_changed(path: Path, content: str, *, encoding: str = "utf-8") -> bool:
+    """Atomically write *content* when it differs; return whether the file changed."""
+    try:
+        if path.read_text(encoding=encoding) == content:
+            return False
+    except FileNotFoundError:
+        pass
+    atomic_write(path, content, encoding=encoding)
+    return True

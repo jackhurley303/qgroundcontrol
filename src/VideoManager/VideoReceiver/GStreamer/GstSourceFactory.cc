@@ -7,6 +7,7 @@
 
 #include "GStreamerHelpers.h"
 #include "QGCLoggingCategory.h"
+#include "QGCNetworkHelper.h"
 
 QGC_LOGGING_CATEGORY(GstSourceFactoryLog, "Video.GStreamer.GstSourceFactory")
 
@@ -15,6 +16,28 @@ namespace {
 constexpr guint64 kRtspTcpTimeoutUs = G_GUINT64_CONSTANT(5000000);
 constexpr int kRtspRetry = 3;
 constexpr int kUdpBufferSizeBytes = 8 * 1024 * 1024;
+
+void configureH26xParser(GstElement* element)
+{
+    GstElementFactory* factory = gst_element_get_factory(element);
+    if (!factory) {
+        return;
+    }
+
+    const char* factoryName = gst_plugin_feature_get_name(GST_PLUGIN_FEATURE(factory));
+    if ((g_strcmp0(factoryName, "h264parse") == 0) || (g_strcmp0(factoryName, "h265parse") == 0)) {
+        // Recording can begin long after RTSP setup. Repeat codec parameter sets at every IDR so
+        // the late-opened recording branch can construct MP4/MOV codec_data without relying on
+        // the camera to resend its startup-only VPS/SPS/PPS or SPS/PPS.
+        g_object_set(element, "config-interval", -1, nullptr);
+    }
+}
+
+void configureAutopluggedParser([[maybe_unused]] GstBin* bin, [[maybe_unused]] GstBin* subBin, GstElement* element,
+                                [[maybe_unused]] gpointer data)
+{
+    configureH26xParser(element);
+}
 
 // Older Linux/system GStreamer needs an autoplug-query caps filter to keep parsebin on byte-stream output.
 #if defined(QGC_GST_ENABLE_LEGACY_PARSEBIN_CAPS_FILTER)
@@ -273,7 +296,7 @@ void linkPad(GstElement* element, GstPad* pad, gpointer data)
 GstElement* buildRtspSource(const QString& uri, const QUrl& sourceUrl, const Config& config, guint latencyMs)
 {
     if (!GStreamer::isValidRtspUri(uri.toUtf8().constData())) {
-        qCCritical(GstSourceFactoryLog) << "Invalid RTSP URI:" << sourceUrl.toDisplayString(QUrl::RemoveUserInfo);
+        qCWarning(GstSourceFactoryLog) << "Invalid RTSP URI:" << QGCNetworkHelper::redactedUrlForLogging(sourceUrl);
         return nullptr;
     }
 
@@ -292,13 +315,14 @@ GstElement* buildRtspSource(const QString& uri, const QUrl& sourceUrl, const Con
     constexpr GstRTSPLowerTrans kRtspProtocols =
         static_cast<GstRTSPLowerTrans>(GST_RTSP_LOWER_TRANS_UDP | GST_RTSP_LOWER_TRANS_TCP);
 
-    // do-retransmission forwards to rtspsrc's internal rtpjitterbuffer (added 1.6);
-    // drop-on-latency=TRUE unless jitterBuffer==Buffered (opt out of bounded playout).
+    // rtspsrc always owns an internal jitterbuffer, so None maps to zero playout latency and no retransmission.
+    const guint rtspLatencyMs = (config.jitterBuffer == JitterBuffer::None) ? 0u : latencyMs;
+    const gboolean doRetransmission =
+        ((config.jitterBuffer != JitterBuffer::None) && config.doRetransmission) ? TRUE : FALSE;
     const gboolean dropOnLatency = (config.jitterBuffer == JitterBuffer::Buffered) ? FALSE : TRUE;
-    g_object_set(source, "location", cleanLocation.constData(), "latency", latencyMs, "do-rtcp", TRUE,
-                 "do-retransmission", config.doRetransmission ? TRUE : FALSE, "tcp-timeout", kRtspTcpTimeoutUs,
-                 "udp-reconnect", TRUE, "drop-on-latency", dropOnLatency, "retry", kRtspRetry, "protocols",
-                 kRtspProtocols, nullptr);
+    g_object_set(source, "location", cleanLocation.constData(), "latency", rtspLatencyMs, "do-rtcp", TRUE,
+                 "do-retransmission", doRetransmission, "tcp-timeout", kRtspTcpTimeoutUs, "udp-reconnect", TRUE,
+                 "drop-on-latency", dropOnLatency, "retry", kRtspRetry, "protocols", kRtspProtocols, nullptr);
 
     const QString rtspUser = sourceUrl.userName(QUrl::FullyDecoded);
     const QString rtspPassword = sourceUrl.password(QUrl::FullyDecoded);
@@ -313,12 +337,14 @@ GstElement* buildTcpSource(const QUrl& sourceUrl)
 {
     const int port = sourceUrl.port();
     if (!validPort(port)) {
-        qCCritical(GstSourceFactoryLog) << "Invalid TCP port" << port << "in" << sourceUrl.toDisplayString(QUrl::RemoveUserInfo);
+        qCWarning(GstSourceFactoryLog) << "Invalid TCP port" << port << "in"
+                                       << QGCNetworkHelper::redactedUrlForLogging(sourceUrl);
         return nullptr;
     }
     const QString host = sourceUrl.host();
     if (host.isEmpty()) {
-        qCCritical(GstSourceFactoryLog) << "Missing host in TCP URI" << sourceUrl.toDisplayString(QUrl::RemoveUserInfo);
+        qCWarning(GstSourceFactoryLog) << "Missing host in TCP URI"
+                                       << QGCNetworkHelper::redactedUrlForLogging(sourceUrl);
         return nullptr;
     }
 
@@ -336,7 +362,8 @@ GstElement* buildUdpSource(const QUrl& sourceUrl, bool isUdpH264, bool isUdpH265
 {
     const int port = sourceUrl.port();
     if (!validPort(port)) {
-        qCCritical(GstSourceFactoryLog) << "Invalid UDP port" << port << "in" << sourceUrl.toDisplayString(QUrl::RemoveUserInfo);
+        qCWarning(GstSourceFactoryLog) << "Invalid UDP port" << port << "in"
+                                       << QGCNetworkHelper::redactedUrlForLogging(sourceUrl);
         return nullptr;
     }
 
@@ -505,7 +532,8 @@ GstElement* create(const QString& uri, const Config& config)
     const bool isTcpMPEGTS = (scheme == QLatin1String("tcp"));
 
     if (!isRtsp && !isUdpH264 && !isUdpH265 && !isUdpMPEGTS && !isTcpMPEGTS) {
-        qCWarning(GstSourceFactoryLog) << "Unsupported URI scheme:" << scheme << "in" << sourceUrl.toDisplayString(QUrl::RemoveUserInfo);
+        qCWarning(GstSourceFactoryLog) << "Unsupported URI scheme:" << scheme << "in"
+                                      << QGCNetworkHelper::redactedUrlForLogging(sourceUrl);
         return nullptr;
     }
 
@@ -552,7 +580,11 @@ GstElement* create(const QString& uri, const Config& config)
                 qCCritical(GstSourceFactoryLog) << "gst_element_factory_make('rtph265depay') failed";
                 break;
             }
-            g_object_set(parser, "config-interval", -1, nullptr);
+            configureH26xParser(parser);
+        } else {
+            // parsebin creates the codec parser only after it sees the stream caps. Configure that
+            // parser as soon as it is autoplugged, before the pipeline reaches PLAYING.
+            (void) g_signal_connect(parser, "deep-element-added", G_CALLBACK(configureAutopluggedParser), nullptr);
         }
 
         // Older Linux/system GStreamer misnegotiates parser->decoder caps; force avc/hvc1 there only.

@@ -18,9 +18,10 @@
 #include "VideoManager.h"
 #include "MultiVehicleManager.h"
 #include "LoggingCategoryModel.h"
-#ifndef QGC_NO_SERIAL_LINK
 #include "GPSManager.h"
 #include "GPSRtk.h"
+#ifndef QGC_NO_SERIAL_LINK
+#include "SerialPortManager.h"
 #endif
 #ifdef QT_DEBUG
 #include "MockLink.h"
@@ -30,6 +31,8 @@
 #include <QtCore/QSettings>
 #include <QtGui/QClipboard>
 #include <QtGui/QGuiApplication>
+
+#include "qgc_version.h"
 
 #include "QGCLoggingCategory.h"
 
@@ -53,9 +56,7 @@ QGroundControlQmlGlobal::QGroundControlQmlGlobal(QObject *parent)
     , _corePlugin(QGCCorePlugin::instance())
     , _pluginManager(QGCPluginManager::instance())
     , _globalPalette(new QGCPalette(this))
-#ifndef QGC_NO_SERIAL_LINK
     , _gpsRtkFactGroup(GPSManager::instance()->gpsRtk()->gpsRtkFactGroup())
-#endif
 {
     // We clear the parent on this object since we run into shutdown problems caused by hybrid qml app. Instead we let it leak on shutdown.
     // setParent(nullptr);
@@ -233,16 +234,12 @@ void QGroundControlQmlGlobal::stopOneMockLink(void)
 
 bool QGroundControlQmlGlobal::singleFirmwareSupport(void)
 {
-    return FirmwarePluginManager::instance()->supportedFirmwareClasses().count() == 1;
+    return FirmwarePluginManager::instance()->singleFirmwareSupport();
 }
 
 bool QGroundControlQmlGlobal::singleVehicleSupport(void)
 {
-    if (singleFirmwareSupport()) {
-        return FirmwarePluginManager::instance()->supportedVehicleClasses(FirmwarePluginManager::instance()->supportedFirmwareClasses()[0]).count() == 1;
-    }
-
-    return false;
+    return FirmwarePluginManager::instance()->singleVehicleSupport();
 }
 
 bool QGroundControlQmlGlobal::px4ProFirmwareSupported()
@@ -294,6 +291,11 @@ QString QGroundControlQmlGlobal::qgcVersion(void)
         versionStr += QStringLiteral(" %1").arg(tr("64 bit"));
     }
     return versionStr;
+}
+
+QString QGroundControlQmlGlobal::qgcAppDate()
+{
+    return QGC_APP_DATE;
 }
 
 QString QGroundControlQmlGlobal::altitudeFrameExtraUnits(AltitudeFrame altFrame)
@@ -384,4 +386,13 @@ QString QGroundControlQmlGlobal::appName()
     return QCoreApplication::applicationName();
 }
 
-
+QObject* QGroundControlQmlGlobal::serialPortManager() const
+{
+#ifndef QGC_NO_SERIAL_LINK
+    auto* manager = SerialPortManager::instance();
+    (void) manager->availablePorts();
+    return manager;
+#else
+    return nullptr;
+#endif
+}

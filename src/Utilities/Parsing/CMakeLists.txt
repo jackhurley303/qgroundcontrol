@@ -3,6 +3,8 @@
 # EXIF, APMDataFlash (ArduPilot DataFlash binary log), PX4ULog (PX4 ULog), JSON
 # ============================================================================
 
+add_subdirectory(Json)
+
 qt_add_library(QGCParsing STATIC
     APMDataFlash/APMDataFlashUtility.cc
     APMDataFlash/APMDataFlashUtility.h
@@ -131,9 +133,13 @@ CPMAddPackage(
     PATCHES valijson-qtjson-int64.patch
 )
 
+# Keep header-only Valijson diagnostics outside QGC's warning policy.
+set_target_properties(valijson PROPERTIES SYSTEM TRUE)
+
 target_link_libraries(QGCParsing
     PUBLIC
         Qt6::Core
+        QGCJsonValidation
         exif
         ulog_cpp::ulog_cpp
     PRIVATE
@@ -147,6 +153,11 @@ target_link_libraries(QGCParsing
 target_compile_definitions(QGCParsing PRIVATE VALIJSON_USE_EXCEPTIONS=1)
 
 target_include_directories(QGCParsing SYSTEM PUBLIC ${ulog_cpp_SOURCE_DIR})
+
+# GCC 12 emits false-positive bounds warnings from Valijson's inlined string code.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set_property(SOURCE Json/JsonSchemaValidator.cc APPEND PROPERTY COMPILE_OPTIONS -Wno-error)
+endif()
 
 target_include_directories(QGCParsing
     PUBLIC

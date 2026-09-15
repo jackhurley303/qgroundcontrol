@@ -17,7 +17,9 @@ def clamped_repr(value: object) -> str:
     return _repr.repr(value)
 
 
-def reject_unknown_keys(data: object, allowed: frozenset[str], context: str, source: object) -> None:
+def reject_unknown_keys(
+    data: object, allowed: frozenset[str], context: str, source: object
+) -> None:
     """Fail the build loudly on unknown keys so typos can't silently drop generated UI.
 
     `source` identifies the offending JSON file in the error (path or filename).
@@ -49,5 +51,24 @@ def require_dict(value: object, context: str, source: object) -> dict:
         raise ValueError(
             f"{source}: {context} must be a JSON object, "
             f"got {type(value).__name__}: {_repr.repr(value)}"
+        )
+    return value
+
+
+def require_qml_safe_string(value: object, context: str, source: object) -> str:
+    """Reject strings that would break out of a generated QML string literal.
+
+    These strings are embedded verbatim inside "..." in generated QML and also
+    serve as untranslated section IDs, so quote/backslash/newline are banned
+    rather than escaped.
+    """
+    if not isinstance(value, str):
+        raise ValueError(
+            f"{source}: {context} must be a string, got {type(value).__name__}: {_repr.repr(value)}"
+        )
+    if any(c in value for c in ('"', "\\", "\n", "\r")):
+        raise ValueError(
+            f"{source}: {context} must not contain double-quote, backslash, or "
+            f"newline characters: {clamped_repr(value)}"
         )
     return value

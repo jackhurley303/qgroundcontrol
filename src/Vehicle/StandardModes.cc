@@ -1,15 +1,18 @@
 #include "StandardModes.h"
-#include "Vehicle.h"
+
+#include "MAVLinkLib.h"
 #include "QGCLoggingCategory.h"
+#include "QGCMAVLink.h"
+#include "Vehicle.h"
 
 QGC_LOGGING_CATEGORY(StandardModesLog, "Vehicle.StandardModes")
 
 static void requestMessageResultHandler(void *resultHandlerData, MAV_RESULT result,
-                                        [[maybe_unused]] Vehicle::RequestMessageResultHandlerFailureCode_t failureCode,
+                                        VehicleTypes::RequestMessageResultHandlerFailureCode_t failureCode,
                                         const mavlink_message_t &message)
 {
     StandardModes* standardModes = static_cast<StandardModes*>(resultHandlerData);
-    standardModes->gotMessage(result, message);
+    standardModes->gotMessage(result, failureCode, message);
 }
 
 StandardModes::StandardModes(QObject *parent, Vehicle *vehicle)
@@ -17,7 +20,7 @@ StandardModes::StandardModes(QObject *parent, Vehicle *vehicle)
 {
 }
 
-void StandardModes::gotMessage(MAV_RESULT result, const mavlink_message_t &message)
+void StandardModes::gotMessage(MAV_RESULT result, VehicleTypes::RequestMessageResultHandlerFailureCode_t failureCode, const mavlink_message_t &message)
 {
     _requestActive = false;
     if (_wantReset) {
@@ -88,7 +91,7 @@ void StandardModes::gotMessage(MAV_RESULT result, const mavlink_message_t &messa
             requestMode(availableModes.mode_index + 1);
         }
     } else {
-        qCDebug(StandardModesLog) << "Failed to retrieve available modes - REQUEST_MESSAGE:MAV_RESULT" << result;
+        qCWarning(StandardModesLog) << "Failed to retrieve available modes - REQUEST_MESSAGE:MAV_RESULT" << QGCMAVLink::mavResultToString(result) << "failureCode:" << failureCode;
         emit requestCompleted();
     }
 }

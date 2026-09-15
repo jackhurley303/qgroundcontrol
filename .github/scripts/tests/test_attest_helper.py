@@ -116,7 +116,7 @@ class TestAttestHelper:
                 str(artifact),
             ]
         )
-        assert outputs == {"path": str(artifact)}
+        assert outputs == {"parent": str(artifact.parent), "path": str(artifact)}
 
     def test_resolve_path_prefers_override(self, tmp_path):
         override = tmp_path / "override.zip"
@@ -132,7 +132,7 @@ class TestAttestHelper:
                 str(default),
             ]
         )
-        assert outputs == {"path": str(override)}
+        assert outputs == {"parent": str(override.parent), "path": str(override)}
 
     def test_resolve_path_missing_artifact_exits(self, tmp_path):
         import pytest
@@ -146,3 +146,52 @@ class TestAttestHelper:
                 ]
             )
         assert excinfo.value.code == 1
+
+    def test_checksum_creates_sidecar(self, tmp_path):
+        artifact = tmp_path / "QGroundControl.AppImage"
+        artifact.write_bytes(b"artifact")
+
+        outputs = self._run_main(["checksum", "--source-path", str(artifact)])
+
+        checksum = tmp_path / "QGroundControl.AppImage.sha256"
+        assert outputs == {"path": str(checksum)}
+        assert checksum.read_text(encoding="utf-8").endswith("  QGroundControl.AppImage\n")
+
+    def test_checksum_rejects_mismatch(self, tmp_path):
+        import pytest
+
+        artifact = tmp_path / "QGroundControl.dmg"
+        artifact.write_bytes(b"artifact")
+        checksum = tmp_path / "QGroundControl.dmg.sha256"
+        checksum.write_text(f"{'0' * 64}  QGroundControl.dmg\n", encoding="utf-8")
+
+        with pytest.raises(SystemExit) as excinfo:
+            self._run_main(["checksum", "--source-path", str(artifact)])
+
+        assert excinfo.value.code == 1
+
+
+def test_package_manifest_records_producer_and_checksum_without_arbitrary_cache_values(
+    tmp_path, monkeypatch
+):
+    import argparse
+    import hashlib
+    import json
+
+    from attest_helper import cmd_metadata
+
+    package = tmp_path / "QGC.zip"
+    package.write_bytes(b"package")
+    (tmp_path / "CMakeCache.txt").write_text(
+        "CMAKE_BUILD_TYPE:STRING=Release\nMY_TOKEN:STRING=secret\n"
+    )
+    monkeypatch.setenv("GITHUB_RUN_ID", "123")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "2")
+    monkeypatch.setenv("GITHUB_SHA", "abc")
+    cmd_metadata(argparse.Namespace(source_path=str(package), build_dir=str(tmp_path)))
+    manifest = json.loads((tmp_path / "QGC.zip.build.json").read_text())
+    assert manifest["artifact"]["sha256"] == hashlib.sha256(b"package").hexdigest()
+    assert manifest["commit"] == "abc"
+    assert manifest["run_id"] == "123"
+    assert manifest["run_attempt"] == "2"
+    assert manifest["configuration"] == {"CMAKE_BUILD_TYPE": "Release"}

@@ -200,7 +200,7 @@ Item {
                     Layout.fillWidth:   true
                     text:               qsTr("Point Home")
                     onClicked: {
-                        activeVehicle.guidedModeROI(activeVehicle.homePosition)
+                        activeVehicle.guidedModeROI(activeVehicle.homePosition, 0)
                         mainWindow.closeIndicatorDrawer()
                     }
                 }
@@ -324,8 +324,8 @@ Item {
                 acquirePopupConnection.isPopupOpen = true;
                 QGroundControl.showMessageDialog(
                     control,
-                    "Request Gimbal Control?",
-                    "Command not sent. Another user has control of the gimbal.",
+                    qsTr("Request Gimbal Control?"),
+                    qsTr("Command not sent. Another user has control of the gimbal."),
                     Dialog.Yes | Dialog.No,
                     gimbalController.acquireGimbalControl,
                     function() { acquirePopupConnection.isPopupOpen = false }

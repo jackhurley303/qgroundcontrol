@@ -204,6 +204,7 @@ public:
     Q_PROPERTY(GimbalController*    gimbalController            READ gimbalController                                               CONSTANT)
     Q_PROPERTY(bool                 hasGripper                  READ hasGripper                                                     NOTIFY hasGripperChanged)
     Q_PROPERTY(bool                 isROIEnabled                READ isROIEnabled                                                   NOTIFY isROIEnabledChanged)
+    Q_PROPERTY(double               roiRelativeAltitudeMeters   READ roiRelativeAltitudeMeters                                      NOTIFY roiRelativeAltitudeMetersChanged)
     Q_PROPERTY(CheckList            checkListState              READ checkListState             WRITE setCheckListState             NOTIFY checkListStateChanged)
     Q_PROPERTY(bool                 readyToFlyAvailable         READ readyToFlyAvailable                                            NOTIFY readyToFlyAvailableChanged)  ///< true: readyToFly signalling is available on this vehicle
     Q_PROPERTY(bool                 readyToFly                  READ readyToFly                                                     NOTIFY readyToFlyChanged)
@@ -323,9 +324,11 @@ public:
     ///     @param amslAltitude Desired vehicle altitude
     Q_INVOKABLE void guidedModeOrbit(const QGeoCoordinate& centerCoord, double radius, double amslAltitude);
 
-    /// Command vehicle to keep given point as ROI
-    ///     @param centerCoord ROI coordinates
-    Q_INVOKABLE void guidedModeROI(const QGeoCoordinate& centerCoord);
+    /// Command vehicle to set a Region Of Interest at the specified location.
+    ///     @param centerCoord ROI location (altitude within the coordinate is ignored)
+    ///     @param relativeAltitudeMeters ROI altitude in meters above home
+    /// @return true: ROI command sent, false: unable to send
+    Q_INVOKABLE bool guidedModeROI(const QGeoCoordinate &centerCoord, double relativeAltitudeMeters);
     Q_INVOKABLE void stopGuidedModeROI();
 
     /// Command vehicle to pause at current location. If vehicle supports guide mode, vehicle will be left
@@ -545,9 +548,6 @@ public:
     void startCalibration   (QGCMAVLink::CalibrationType calType);
     void stopCalibration    (bool showError);
 
-    void startUAVCANBusConfig(void);
-    void stopUAVCANBusConfig(void);
-
     FactGroup* vehicleFactGroup             () { return _vehicleFactGroup; }
     FactGroup* gpsFactGroup                 ();
     FactGroup* gps2FactGroup                ();
@@ -733,6 +733,9 @@ public:
 
     bool        isROIEnabled            () const{ return _isROIEnabled; }
 
+    /// Last commanded ROI altitude in meters above home. Used to preserve the altitude when the ROI is re-positioned.
+    double      roiRelativeAltitudeMeters() const{ return _roiRelativeAltitudeMeters; }
+
     CheckList   checkListState          () { return _checkListState; }
     void        setCheckListState       (CheckList cl)  { _checkListState = cl; emit checkListStateChanged(); }
 
@@ -824,6 +827,7 @@ signals:
     void mavlinkStatusChanged           ();
 
     void isROIEnabledChanged            ();
+    void roiRelativeAltitudeMetersChanged();
     void roiCoordChanged                (const QGeoCoordinate& centerCoord);
     void initialConnectComplete         ();
 
@@ -1017,6 +1021,7 @@ private:
     bool                _heardFrom = false;
 
     bool                _isROIEnabled   = false;
+    double              _roiRelativeAltitudeMeters = 0;
 \
     bool _checkLatestStableFWDone = false;
     int _firmwareMajorVersion = versionNotSetValue;
@@ -1058,12 +1063,6 @@ private:
     RequestMessageCoordinator*  _reqMsgCoord    = nullptr;
 
 public:
-    /// Ack timeout used in unit tests — kept on Vehicle for source-compat with
-    /// existing tests (mirrors MavCommandQueue::kTestAckTimeoutMs).
-    static constexpr int _mavCommandMaxRetryCount    = 3;
-    static constexpr int kTestMavCommandAckTimeoutMs = 500;
-    static constexpr int kTestMavCommandMaxWaitMs    = kTestMavCommandAckTimeoutMs * _mavCommandMaxRetryCount * 2;
-
     /// Test-only helper: forwards to MavCommandQueue::findEntryIndex.
     int  _findMavCommandListEntryIndex(int targetCompId, MAV_CMD command);
 

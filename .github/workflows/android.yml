@@ -13,6 +13,10 @@ on:
   merge_group:
   workflow_dispatch:
     inputs:
+      debug_runner:
+        description: 'Open an actor-only SSH session after a failure (up to 15 minutes, branches only)'
+        type: boolean
+        default: false
       build_type:
         description: 'Build type'
         required: false
@@ -46,15 +50,19 @@ jobs:
     outputs:
       include: ${{ steps.build.outputs.include }}
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@v7
         with:
           sparse-checkout: |
             .github/scripts/android_matrix.py
             .github/scripts/ci_bootstrap.py
             tools/_bootstrap.py
-            tools/common/__init__.py
-            tools/common/file_traversal.py
-            tools/common/gh_actions.py
+            tools/common
+            tools/qgc_tools
           sparse-checkout-cone-mode: false
           fetch-depth: 1
           persist-credentials: false
@@ -69,7 +77,19 @@ jobs:
     needs: [changes, build-matrix]
     if: needs.changes.outputs.should_build == 'true'
     # RunsOn runners only when the leg defines one, on mavlink, and not from a fork.
-    runs-on: ${{ github.repository_owner == 'mavlink' && matrix.runson_runner != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}/runner={1}', github.run_id, matrix.runson_runner) || matrix.fallback_runner }}
+    runs-on: >-
+      ${{
+        github.repository_owner == 'mavlink' &&
+        matrix.runson_runner != '' &&
+        (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+        format('runs-on={0}/{1}', github.run_id,
+          matrix.host == 'windows' && vars.RUNS_ON_WINDOWS_POOL != '' &&
+            format('pool={0}', vars.RUNS_ON_WINDOWS_POOL) ||
+          matrix.host == 'linux' &&
+            format('runner={0}', vars.RUNS_ON_LINUX_BUILDER || matrix.runson_runner) ||
+          format('runner={0}', matrix.runson_runner)) ||
+        matrix.fallback_runner
+      }}
     timeout-minutes: 120
 
     # id-token/attestations scoped here: only the "Attest and Upload" step needs them.
@@ -95,24 +115,27 @@ jobs:
       QT_ANDROID_KEYSTORE_ALIAS: QGCAndroidKeyStore
       QT_ANDROID_KEYSTORE_STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       QT_ANDROID_KEYSTORE_KEY_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      QT_ANDROID_ABIS: >-
-        ${{ matrix.emulator && 'x86_64'
-          || (matrix.primary && github.event_name != 'pull_request' && github.event_name != 'pull_request_target') && 'arm64-v8a;armeabi-v7a'
-          || 'arm64-v8a' }}
+      QT_ANDROID_ABIS: ${{ matrix.android_abis }}
       HAS_PLAYSTORE_SECRET: ${{ secrets.GOOGLE_SERVICE_ACCOUNT != '' }}
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Record build timeline
+        uses: Kesin11/actions-timeline@v3
+        continue-on-error: true
+        with:
+          show-waiting-runner: true
+
       - name: Enable RunsOn magic cache
         if: github.repository_owner == 'mavlink' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && matrix.host != 'mac'
         uses: runs-on/action@v2
         with:
           metrics: cpu,network,memory,disk,io
           show_costs: summary
-
-      - name: Harden Runner
-        uses: step-security/harden-runner@v2
-        with:
-          egress-policy: audit
 
       - name: Checkout repo
         uses: actions/checkout@v7
@@ -144,7 +167,7 @@ jobs:
           # resolve to identical cache inputs and would race on the moccache
           # save key.
           cache-key-suffix: ${{ matrix.host }}
-          cpm-modules: ${{ runner.temp }}/build/cpm_modules
+          cpm-modules: .cache/CPM
 
       - name: Install host build dependencies
         if: runner.os == 'Linux'
@@ -171,6 +194,7 @@ jobs:
         with:
           build-dir: ${{ runner.temp }}/build
           build-type: ${{ env.BUILD_TYPE }}
+          preset: ${{ env.BUILD_TYPE == 'Debug' && 'Android-debug' || 'Android' }}
           use-qt-cmake: 'false'
           extra-args: >-
             -DCMAKE_WARN_DEPRECATED=FALSE
@@ -202,6 +226,10 @@ jobs:
           python3 "${GITHUB_WORKSPACE}/.github/scripts/android_build_retry.py" \
             --build-dir "${{ runner.temp }}/build" \
             --build-type "${BUILD_TYPE}"
+
+      - name: Save recovered build caches
+        if: steps.build-retry.outcome == 'success'
+        uses: ./.github/actions/save-build-cache
 
       # `failure()` is required: build's continue-on-error makes outcome alone insufficient.
       - name: Annotate emulator build retry failure
@@ -254,8 +282,6 @@ jobs:
           apk-path: ${{ runner.temp }}/build/${{ env.PACKAGE }}.apk
           package: org.mavlink.qgroundcontrol
           android-platform: ${{ steps.setup.outputs.android_platform }}
-          qt-version: ${{ steps.setup.outputs.qt_version }}
-          ndk-version: ${{ steps.setup.outputs.android_ndk_full_version }}
           diagnostics-name: ${{ matrix.host }}
 
       - name: Attest and Upload
@@ -263,7 +289,7 @@ jobs:
         uses: ./.github/actions/attest-and-upload
         with:
           artifact-name: ${{ env.PACKAGE }}.apk
-          package-name: ${{ format('{0}-{1}', env.PACKAGE, matrix.host) }}
+          package-name: ${{ format('{0}-{1}-{2}', env.PACKAGE, matrix.host, matrix.artifact_abi_suffix) }}
           subject-name: ${{ env.PACKAGE }}-${{ matrix.host }}
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           aws-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -295,3 +321,8 @@ jobs:
           status: ${{ steps.playstore_rollout.outputs.status }}
           user_fraction: ${{ steps.playstore_rollout.outputs.user_fraction }}
           whats_new_directory: ${{ github.workspace }}/deploy/android/whatsnew
+
+      - name: Debug failed runner
+        if: ${{ failure() && !cancelled() && github.event_name == 'workflow_dispatch' && inputs.debug_runner && github.ref_type == 'branch' }}
+        timeout-minutes: 15
+        uses: ./.github/actions/debug-runner

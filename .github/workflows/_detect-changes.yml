@@ -53,6 +53,11 @@ jobs:
       docker_linux: ${{ steps.nonpr.outputs.docker_linux || steps.pr.outputs.docker_linux }}
       docker_android: ${{ steps.nonpr.outputs.docker_android || steps.pr.outputs.docker_android }}
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
       # Non-PR events (push, merge_group, workflow_dispatch) always rebuild
       # everything. Sparse-checkout just the script + bootstrap shim it needs.
       - name: Checkout passthrough script (non-PR)
@@ -64,11 +69,8 @@ jobs:
             .github/scripts/detect_changes.py
             .github/scripts/ci_bootstrap.py
             tools/_bootstrap.py
-            tools/common/__init__.py
-            tools/common/file_traversal.py
-            tools/common/gh_actions.py
-            tools/common/git.py
-            tools/common/proc.py
+            tools/common
+            tools/qgc_tools
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
@@ -77,12 +79,6 @@ jobs:
         id: nonpr
         shell: bash
         run: python3 "${GITHUB_WORKSPACE}/.github/scripts/detect_changes.py" --non-pr-passthrough
-
-      - name: Harden Runner
-        if: github.event_name == 'pull_request'
-        uses: step-security/harden-runner@v2
-        with:
-          egress-policy: audit
 
       - name: Checkout repo
         if: github.event_name == 'pull_request'

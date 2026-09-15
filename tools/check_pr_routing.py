@@ -118,13 +118,7 @@ _MAINLINE_ONLY = (
 # Routed in principle, deliberately not specced yet. Unlike the two lists above these are
 # open questions with a recorded answer, so they stay visible: the audit prints them every
 # run and only stops counting them as failures.
-_DEFERRED_ROUTING = {
-    "qgcresources.qrc": (
-        "rule 1 (fixes stock QGC: registers QGCLogoBlack.svg for custom-example's "
-        "dangling reference) — held with the other 9 upstream dangling resource refs, "
-        "which are a single PR's worth of work not yet specced"
-    ),
-}
+_DEFERRED_ROUTING: dict[str, str] = {}
 
 
 def check_routing_coverage(mainline_ref: str, since: str, repo_root: Path) -> bool:

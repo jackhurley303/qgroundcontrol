@@ -417,13 +417,23 @@ bool OnboardLogController::_logComplete() const
 void OnboardLogController::_receivedAllData()
 {
     _timer->stop();
-    if (_prepareLogDownload()) {
+    while (_prepareLogDownload()) {
+        if (_downloadData->chunk_table.isEmpty()) {
+            // Nothing to request (0 byte log): _logComplete() can never become true and the
+            // vehicle never answers a zero-length request, so the download would stall
+            // forever (issue #15068). The empty file already exists.
+            _downloadData->entry->setStatus(tr("Downloaded"));
+            _downloadData.reset();
+            continue;
+        }
+
         _requestLogData(_downloadData->ID, 0, _downloadData->chunk_table.size() * MAVLINK_MSG_LOG_DATA_FIELD_DATA_LEN);
         _timer->start(kTimeOutMs);
-    } else {
-        _resetSelection();
-        _setDownloading(false);
+        return;
     }
+
+    _resetSelection();
+    _setDownloading(false);
 }
 
 bool OnboardLogController::_prepareLogDownload()
@@ -494,6 +504,13 @@ bool OnboardLogController::_prepareLogDownload()
 
 void OnboardLogController::refresh()
 {
+    if (_downloadingLogs || _requestingLogEntries || _ftpDeleting) {
+        // Re-entering the page while a transfer is active must not clear the model:
+        // the transfer holds pointers into it (issue #14881)
+        qCDebug(OnboardLogControllerLog) << "refresh: ignored - transfer in progress";
+        return;
+    }
+
     _logEntriesModel->clearAndDeleteContents();
     emit selectionChanged();
 

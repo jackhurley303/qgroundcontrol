@@ -30,6 +30,7 @@ class QTimer;
 class SurfaceModel;
 class TileImageSource;
 
+Q_MOC_INCLUDE("GeoMapCamera.h")
 Q_MOC_INCLUDE("GeoScene.h")
 Q_MOC_INCLUDE("HeightField.h")
 
@@ -101,6 +102,21 @@ public:
     /// whenever the surface model is rebuilt.
     HeightField* heightField() const { return _heightField; }
 
+    /// Best-estimate terrain height (true meters) at a coordinate: real data
+    /// where loaded, coarser estimate or 0 elsewhere (see HeightField). Emits
+    /// terrainHeightsChanged as estimates improve.
+    Q_INVOKABLE double terrainHeightAt(const QGeoCoordinate& coordinate) const;
+
+    /// Coordinate of the rendered surface under screenPos: marches the camera's
+    /// pick ray to its first crossing of z = heightAt(x, y) * zScale, so the pick
+    /// lands on the visible front surface and ridges occlude the ground behind
+    /// them. zScale is the height-to-scene-z factor (verticalScale * terrainScale,
+    /// never negative); 0 reduces to a flat z=0 plane pick. The march is capped at
+    /// the rendered range (maxRangeMultiplier * camera distance). Invalid coordinate
+    /// when nothing is hit (sky pick) or camera is null.
+    Q_INVOKABLE QGeoCoordinate surfaceCoordinateAtScreenPoint(const GeoMapCamera* camera, const QPointF& screenPos,
+                                                              double zScale) const;
+
     /// SurfaceModel::kMaxRangeMultiplier, exposed so the scene camera's far
     /// clip plane can cover the full retained patch range
     double maxRangeMultiplier() const;
@@ -120,7 +136,7 @@ public:
         _tileImageNetworkManager = networkManager;
     }
 
-    bool statsEnabled() const { return _statsEnabled; }
+    bool statsEnabled() const { return _statsEnabled; }  // GCOVR_EXCL_LINE
 
     /// Enables the once-per-second perf counter sampling behind statsText:
     /// model update rate/duration, patch churn, and fallback composites
@@ -160,6 +176,8 @@ signals:
     void statsEnabledChanged();
     void statsTextChanged();
     void capturingChanged();
+    /// terrainHeightAt answers changed somewhere: consumers re-query
+    void terrainHeightsChanged();
 
 private slots:
     void _patchAdded(const TileMath::TileKey& key);
@@ -182,6 +200,8 @@ private:
     void _scheduleStatsChanged();
     void _startStatsSampling();
     QImage _fallbackImage(const TileMath::TileKey& key) const;
+    QImage _compositeFromChildren(const TileMath::TileKey& key) const;
+    QImage _cropFromAncestor(const TileMath::TileKey& key) const;
     bool _fallbackAvailable(const TileMath::TileKey& key) const;
     GeoMapCamera* _camera() const;
 

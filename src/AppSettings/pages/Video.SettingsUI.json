@@ -13,7 +13,7 @@
             "heading": "Video Source",
             "keywords": ["video source", "camera", "stream"],
             "enableWhen": "!autoStreamConfig",
-            "headingDescription": "autoStreamConfig ? qsTr(\"Mavlink camera stream is automatically configured\") : \"\"",
+            "headingDescription": "autoStreamConfig ? qsTr(\"MAVLink camera stream is automatically configured\") : \"\"",
             "controls": [
                 {
                     "setting": "videoSettings.videoSource",
@@ -77,6 +77,7 @@
         {
             "heading": "Local Video Storage",
             "keywords": ["record", "recording format", "mp4", "mkv", "storage limit", "video file"],
+            "showWhen": "!sourceDisabled",
             "controls": [
                 {
                     "setting": "videoSettings.recordingFormat"

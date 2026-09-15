@@ -15,8 +15,6 @@ target_sources(${CMAKE_PROJECT_NAME}
         AndroidInit.cc
         AndroidInterface.cc
         AndroidInterface.h
-        AndroidSerial.cc
-        AndroidSerial.h
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -69,6 +67,7 @@ add_library(qtandroidextensions_lockers STATIC
     ${_qlocks_moc}
 )
 set_target_properties(qtandroidextensions_lockers PROPERTIES AUTOMOC OFF)
+qgc_disable_dependency_warnings(qtandroidextensions_lockers)
 
 target_include_directories(qtandroidextensions_lockers
     PUBLIC

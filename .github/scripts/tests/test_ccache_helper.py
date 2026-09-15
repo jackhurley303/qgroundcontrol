@@ -39,22 +39,34 @@ class TestCcacheInstaller:
 
     def test_detect_arch_x86_64(self):
         """Test x86_64 architecture detection."""
-        with patch("platform.machine", return_value="x86_64"):
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("platform.machine", return_value="x86_64"),
+        ):
             assert CcacheInstaller.detect_arch() == "x86_64"
 
     def test_detect_arch_amd64(self):
         """Test amd64 (alias) architecture detection."""
-        with patch("platform.machine", return_value="amd64"):
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("platform.machine", return_value="amd64"),
+        ):
             assert CcacheInstaller.detect_arch() == "x86_64"
 
     def test_detect_arch_arm64(self):
         """Test arm64 architecture detection."""
-        with patch("platform.machine", return_value="arm64"):
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("platform.machine", return_value="arm64"),
+        ):
             assert CcacheInstaller.detect_arch() == "aarch64"
 
     def test_detect_arch_aarch64(self):
         """Test aarch64 architecture detection."""
-        with patch("platform.machine", return_value="aarch64"):
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("platform.machine", return_value="aarch64"),
+        ):
             assert CcacheInstaller.detect_arch() == "aarch64"
 
     def test_default_prefix_from_env(self):
@@ -254,6 +266,16 @@ class TestCacheScope:
     def test_push_non_master_scope(self):
         assert determine_cache_scope("push", "feature/test") == "branch-feature-test"
 
+    @pytest.mark.parametrize("event", ["push", "schedule", "workflow_dispatch"])
+    def test_master_builds_populate_shared_baseline(self, event):
+        assert determine_cache_scope(event, "master") == "shared"
+
+    def test_manual_branch_cannot_populate_shared_baseline(self):
+        assert determine_cache_scope("workflow_dispatch", "feature/test") == "manual-feature-test"
+
+    def test_pull_request_target_cannot_populate_shared_baseline(self):
+        assert determine_cache_scope("pull_request_target", "master", "42") != "shared"
+
 
 class TestWindowsConfig:
     """Tests for Windows ccache binary resolution."""
@@ -279,3 +301,18 @@ class TestEnvironmentConfig:
         content = github_env.read_text()
         assert "CCACHE_DIR=" in content
         assert "CCACHE_CONFIGPATH=" in content
+        assert "CCACHE_MAXSIZE=2G" in content
+
+    def test_configure_ccache_environment_accepts_max_size(self, tmp_path):
+        github_env = tmp_path / "env.txt"
+        workspace = tmp_path / "workspace"
+        with patch.dict(os.environ, {"GITHUB_ENV": str(github_env)}):
+            configure_ccache_environment(workspace, "5G")
+        assert "CCACHE_MAXSIZE=5G" in github_env.read_text()
+
+    def test_configure_env_cli_accepts_max_size(self, tmp_path):
+        github_env = tmp_path / "env.txt"
+        workspace = tmp_path / "workspace"
+        with patch.dict(os.environ, {"GITHUB_ENV": str(github_env)}):
+            assert main(["configure-env", "--workspace", str(workspace), "--max-size", "5G"]) == 0
+        assert "CCACHE_MAXSIZE=5G" in github_env.read_text()

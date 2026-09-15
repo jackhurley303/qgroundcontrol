@@ -1,8 +1,5 @@
 #include "QGCCorePlugin.h"
 #include "AppSettings.h"
-#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
-#include "MavlinkSettings.h"
-#endif
 #ifdef Q_OS_ANDROID
 #include "Viewer3DSettings.h"
 #ifndef QGC_NO_SERIAL_LINK
@@ -10,6 +7,7 @@
 #endif
 #endif
 #include "FactMetaData.h"
+#include "FirmwarePluginManager.h"
 #include "QGCMAVLink.h"
 #include "HorizontalFactValueGrid.h"
 #include "InstrumentValueData.h"
@@ -158,12 +156,6 @@ void QGCCorePlugin::adjustSettingMetaData(const QString &settingsGroup, FactMeta
             metaData.setRawDefaultValue(outdoorPalette);
             return;
         }
-#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
-        else if (metaData.name() == MavlinkSettings::telemetrySaveName) {
-            metaData.setRawDefaultValue(false);
-            return;
-        }
-#endif
 #ifndef Q_OS_ANDROID
         else if (metaData.name() == AppSettings::androidDontSaveToSDCardName) {
             userVisible = false;
@@ -188,6 +180,16 @@ QString QGCCorePlugin::showAdvancedUIMessage() const
               "If used incorrectly, this may cause your vehicle to malfunction thus voiding your warranty. "
               "You should do so only if instructed by customer support. "
               "Are you sure you want to enable Advanced Mode?");
+}
+
+bool QGCCorePlugin::showInitialSetupVehiclePreferences() const
+{
+    return !FirmwarePluginManager::instance()->singleVehicleSupport();
+}
+
+bool QGCCorePlugin::showInitialSetupMeasurementUnits() const
+{
+    return true;
 }
 
 void QGCCorePlugin::factValueGridCreateDefaultSettings(FactValueGrid* factValueGrid)
@@ -347,6 +349,15 @@ const QVariantList &QGCCorePlugin::toolBarIndicators()
     );
 
     return toolBarIndicatorList;
+}
+
+QList<int> QGCCorePlugin::firstRunPromptStdIds()
+{
+    if (showInitialSetupVehiclePreferences() || showInitialSetupMeasurementUnits()) {
+        return { kInitialSetupPromptId };
+    }
+
+    return {};
 }
 
 QVariantList QGCCorePlugin::firstRunPromptsToShow()

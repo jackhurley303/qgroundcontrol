@@ -293,7 +293,8 @@ UDPWorker::~UDPWorker()
 
 bool UDPWorker::isConnected() const
 {
-    return (_socket && _socket->isValid() && _isConnected);
+    // Called cross-thread from UDPLink; must not touch the thread-affine _socket
+    return _isConnected;
 }
 
 void UDPWorker::setupSocket()
@@ -533,14 +534,15 @@ UDPLink::UDPLink(SharedLinkConfigurationPtr &config, QObject *parent)
 UDPLink::~UDPLink()
 {
     if (isConnected()) {
-        (void) QMetaObject::invokeMethod(_worker, "disconnectLink", Qt::BlockingQueuedConnection);
+        // Queued, not blocking: keeps a wedged worker from hanging the destructor before
+        // _shutdownWorkerThread can bound the wait. If quit() beats the queued call,
+        // ~UDPWorker still disconnects on thread finish.
+        (void) QMetaObject::invokeMethod(_worker, "disconnectLink", Qt::QueuedConnection);
         _onDisconnected();
     }
 
-    _workerThread->quit();
-    if (!_workerThread->wait()) {
-        qCWarning(UDPLinkLog) << "Failed to wait for UDP Thread to close";
-    }
+    // No terminate: it could kill the worker while it holds _sessionTargetsMutex
+    _shutdownWorkerThread(_workerThread, UDPLinkLog(), false /* allowTerminate */);
 
     qCDebug(UDPLinkLog) << this;
 }

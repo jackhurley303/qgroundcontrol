@@ -62,6 +62,13 @@ qgc_test_assert_in_list("unsat: videoconvert retained"      videoconvert      _r
 qgc_test_assert_in_list("unsat: videoscale retained"        videoscale        _req3)
 qgc_test_pass("filter_alternates none-satisfied")
 
+set(_req_empty videoconvertscale videoconvert videoscale)
+gstreamer_filter_alternates(IN_OUT_PLUGINS _req_empty AVAILABLE)
+qgc_test_assert_in_list("empty available: fused retained" videoconvertscale _req_empty)
+qgc_test_assert_in_list("empty available: convert retained" videoconvert _req_empty)
+qgc_test_assert_in_list("empty available: scale retained" videoscale _req_empty)
+qgc_test_pass("filter_alternates empty available")
+
 set(_req_partial videoconvertscale videoconvert videoscale x264enc)
 set(_avail_partial videoconvert x264enc)
 gstreamer_filter_alternates(IN_OUT_PLUGINS _req_partial AVAILABLE ${_avail_partial})
@@ -72,7 +79,20 @@ qgc_test_assert_in_list("partial: x264enc retained"           x264enc           
 qgc_test_pass("filter_alternates partial-pair unsatisfied")
 
 gstreamer_runtime_required_plugins(_required)
-foreach(_p IN ITEMS coreelements isomp4 matroska multifile opengl playback rtsp rtp rtpmanager tcp udp videoconvertscale)
+foreach(_p IN ITEMS
+        coreelements
+        isomp4
+        matroska
+        multifile
+        opengl
+        playback
+        rtsp
+        rtp
+        rtpmanager
+        tcp
+        udp
+        videoparsersbad
+        videoconvertscale)
     qgc_test_assert_in_list("runtime required: ${_p}" "${_p}" _required)
 endforeach()
 qgc_test_assert_not_in_list("runtime required: openh264 is optional codec implementation" openh264 _required)

@@ -1,11 +1,13 @@
 #include "PlanManager.h"
-#include "Vehicle.h"
-#include "VehicleLinkManager.h"
+
+#include "AppMessages.h"
 #include "FirmwarePlugin.h"
+#include "MAVLinkLib.h"
 #include "MAVLinkProtocol.h"
 #include "MissionCommandTree.h"
-#include "AppMessages.h"
 #include "QGCLoggingCategory.h"
+#include "Vehicle.h"
+#include "VehicleLinkManager.h"
 
 QGC_LOGGING_CATEGORY(PlanManagerLog, "PlanManager.PlanManager")
 
@@ -418,6 +420,8 @@ void PlanManager::_handleMissionItem(const mavlink_message_t& message)
         frame = MAV_FRAME_GLOBAL;
     } else if (frame == MAV_FRAME_GLOBAL_RELATIVE_ALT_INT) {
         frame = MAV_FRAME_GLOBAL_RELATIVE_ALT;
+    } else if (frame == MAV_FRAME_GLOBAL_TERRAIN_ALT_INT) {
+        frame = MAV_FRAME_GLOBAL_TERRAIN_ALT;
     }
 
     bool ardupilotHomePositionUpdate = false;

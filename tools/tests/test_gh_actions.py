@@ -1,13 +1,14 @@
-#!/usr/bin/env python3
 """Tests for tools/common/gh_actions.py."""
 
 from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from unittest.mock import patch
 
-from common import gh_actions as mod
+import common.gh_actions as mod
+import pytest
 
 from ._helpers import completed
 
@@ -59,6 +60,26 @@ def test_list_run_artifacts_rejects_invalid_run_id() -> None:
         raise AssertionError("Expected ValueError for invalid run_id")
 
 
+def test_require_repository_prefers_override_and_requires_value(capsys) -> None:
+    with patch.dict(
+        os.environ,
+        {"GH_REPO": "override/repo", "GITHUB_REPOSITORY": "event/repo"},
+        clear=True,
+    ):
+        assert mod.require_repository() == "override/repo"
+    with patch.dict(os.environ, {"GITHUB_REPOSITORY": "event/repo"}, clear=True):
+        assert mod.require_repository() == "event/repo"
+    with patch.dict(
+        os.environ,
+        {"GH_REPO": "  ", "GITHUB_REPOSITORY": " fallback/repo "},
+        clear=True,
+    ):
+        assert mod.require_repository() == "fallback/repo"
+    with patch.dict(os.environ, {}, clear=True), pytest.raises(SystemExit):
+        mod.require_repository()
+    assert capsys.readouterr().out == "::error::GH_REPO or GITHUB_REPOSITORY must be set\n"
+
+
 class TestIsForkPr:
     def test_not_pr_event(self) -> None:
         with patch.dict(os.environ, {"EVENT_NAME": "push"}, clear=False):
@@ -94,12 +115,12 @@ class TestResolveCachePolicy:
     def test_auto_same_repo_pr(self) -> None:
         env = {"EVENT_NAME": "pull_request", "PR_REPO": "owner/repo", "THIS_REPO": "owner/repo"}
         with patch.dict(os.environ, env, clear=False):
-            assert mod.resolve_cache_policy("auto") == "false"
+            assert mod.resolve_cache_policy("auto") == "true"
 
     def test_auto_fork_pr(self) -> None:
         env = {"EVENT_NAME": "pull_request", "PR_REPO": "fork/repo", "THIS_REPO": "owner/repo"}
         with patch.dict(os.environ, env, clear=False):
-            assert mod.resolve_cache_policy("auto") == "false"
+            assert mod.resolve_cache_policy("auto") == "true"
 
     def test_auto_pull_request_target(self) -> None:
         env = {
@@ -117,6 +138,24 @@ class TestResolveCachePolicy:
     def test_auto_workflow_dispatch(self) -> None:
         with patch.dict(os.environ, {"EVENT_NAME": "workflow_dispatch"}, clear=False):
             assert mod.resolve_cache_policy("auto") == "true"
+
+
+@pytest.mark.parametrize("cache_dir", [".ccache", ".cache/moccache", ".cache/CPM", ".qt"])
+def test_cache_path_survives_runner_workspace_changes(monkeypatch, tmp_path, cache_dir):
+    paths = []
+    for root in ("actions-runner/_work/qgc/qgc", "a/qgc/qgc"):
+        workspace = tmp_path / root
+        monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+        paths.append(mod.github_cache_path(workspace / cache_dir))
+        assert mod.github_cache_path(Path(cache_dir)) == cache_dir
+    assert paths == [cache_dir, cache_dir]
+
+
+def test_external_cache_path_is_not_relocated(monkeypatch, tmp_path):
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path / "workspace"))
+    external = tmp_path / "sdk"
+    assert mod.github_cache_path(external) == external.as_posix()
+    assert mod.github_cache_path(Path("../sdk")) == external.as_posix()
 
 
 class TestWriteGithubOutput:

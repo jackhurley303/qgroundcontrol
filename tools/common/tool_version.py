@@ -9,19 +9,31 @@ from __future__ import annotations
 
 import re
 import shutil
+import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .io import read_toml
 from .proc import run_captured
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-__all__ = ["DEFAULT_VERSION_RE", "probe_version", "uv_lock_version"]
+__all__ = ["DEFAULT_VERSION_RE", "probe_version", "uv_lock_version", "version_prefix_matches"]
 
 DEFAULT_VERSION_RE: re.Pattern[str] = re.compile(r"(\d+)\.(\d+)(?:\.(\d+))?")
 
 _UV_LOCK = Path(__file__).resolve().parents[1] / "uv.lock"
+
+
+def version_prefix_matches(installed: tuple[int, ...], expected: str) -> bool:
+    """Compare installed and expected versions over their shared components."""
+    try:
+        wanted = tuple(int(part) for part in expected.split("."))
+    except ValueError:
+        return False
+    compare_len = min(len(installed), len(wanted))
+    return compare_len > 0 and installed[:compare_len] == wanted[:compare_len]
 
 
 def uv_lock_version(package: str, *, lock_path: Path | None = None) -> str | None:
@@ -33,15 +45,17 @@ def uv_lock_version(package: str, *, lock_path: Path | None = None) -> str | Non
     scripts out of the repo), leaving the caller to apply its own fallback.
     """
     path = lock_path or _UV_LOCK
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError:
+    if not path.exists():
         return None
-    match = re.search(
-        r'\[\[package\]\]\s*\nname\s*=\s*"' + re.escape(package) + r'"\s*\nversion\s*=\s*"([\d.]+)"',
-        text,
-    )
-    return match.group(1) if match else None
+    packages = read_toml(path).get("package", [])
+    versions = {
+        str(entry["version"])
+        for entry in packages
+        if entry.get("name") == package and "version" in entry
+    }
+    if len(versions) > 1:
+        raise ValueError(f"Multiple locked versions of {package}: {', '.join(sorted(versions))}")
+    return next(iter(versions), None)
 
 
 def probe_version(
@@ -62,7 +76,7 @@ def probe_version(
 
     try:
         result = run_captured([tool, *args], timeout=timeout)
-    except (TimeoutError, OSError):
+    except (subprocess.TimeoutExpired, OSError):
         return None
 
     if result.returncode != 0:

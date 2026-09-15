@@ -18,6 +18,7 @@ class QGeoPositionInfoSource;
 class QmlObjectListModel;
 class QQmlApplicationEngine;
 class QQuickItem;
+class SettingsManager;
 class Vehicle;
 class VideoReceiver;
 class VideoSink;
@@ -42,6 +43,8 @@ class QGCCorePlugin : public QObject
     Q_MOC_INCLUDE("QmlObjectListModel.h")
     Q_PROPERTY(bool showAdvancedUI                      READ showAdvancedUI                     WRITE _setShowAdvancedUI    NOTIFY showAdvancedUIChanged)
     Q_PROPERTY(bool showTouchAreas                      READ showTouchAreas                     WRITE _setShowTouchAreas    NOTIFY showTouchAreasChanged)
+    Q_PROPERTY(bool showInitialSetupVehiclePreferences  READ showInitialSetupVehiclePreferences                              CONSTANT)
+    Q_PROPERTY(bool showInitialSetupMeasurementUnits    READ showInitialSetupMeasurementUnits                                CONSTANT)
     Q_PROPERTY(int defaultSettings                      READ defaultSettings                                                CONSTANT)
     Q_PROPERTY(int initialSetupPromptId                 MEMBER kInitialSetupPromptId                                       CONSTANT)
     Q_PROPERTY(const QGCOptions *options                READ options                                                        CONSTANT)
@@ -83,8 +86,19 @@ public:
     /// If not overridden, metaData and userVisible are left unchanged.
     virtual void adjustSettingMetaData(const QString &settingsGroup, FactMetaData &metaData, bool &userVisible);
 
+    /// Called at the end of SettingsManager::init. Override to register custom build
+    /// settings groups via SettingsManager::registerCustomSettingsGroup so generated
+    /// settings pages can reference them as QGroundControl.settingsManager.<accessor>.
+    virtual void registerCustomSettings(SettingsManager *settingsManager) { Q_UNUSED(settingsManager); }
+
     /// @return The message to show to the user when they are prompted to confirm turning on advanced ui.
     virtual QString showAdvancedUIMessage() const;
+
+    /// @return true if the initial setup prompt should show vehicle preferences.
+    virtual bool showInitialSetupVehiclePreferences() const;
+
+    /// @return true if the initial setup prompt should show measurement units.
+    virtual bool showInitialSetupMeasurementUnits() const;
 
     /// @return An instance of an alternate position source (or NULL if not available)
     virtual QGeoPositionInfoSource *createPositionSource(QObject *parent) { Q_UNUSED(parent); return nullptr; }
@@ -187,7 +201,7 @@ public:
     /// Returns the standard list of first run prompt ids for possible display. Actual display is based on the
     /// current AppSettings::firstRunPromptIds value. The order of this list also determines the order the prompts
     /// will be displayed in.
-    virtual QList<int> firstRunPromptStdIds() { return QList<int>({ kInitialSetupPromptId }); }
+    virtual QList<int> firstRunPromptStdIds();
 
     /// Returns the custom build list of first run prompt ids for possible display. Actual display is based on the
     /// current AppSettings::firstRunPromptIds value. The order of this list also determines the order the prompts

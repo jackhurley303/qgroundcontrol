@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Detect drift between platform workflow display names and the places that
 match against them by literal string.
 
@@ -36,14 +35,20 @@ PLATFORM_FILES: dict[str, str] = {
     "Android": "android.yml",
 }
 
+# iOS produces release artifacts but is intentionally excluded from the
+# build-results workflow's regular PR platform set.
+RELEASE_PLATFORM_FILES: dict[str, str] = PLATFORM_FILES | {"iOS": "ios.yml"}
+
 
 def _workflow_name(path: Path) -> str:
     return yaml.safe_load(path.read_text(encoding="utf-8")).get("name", "")
 
 
 def _platform_workflows() -> list[str]:
-    raw = json.loads(BUILD_CONFIG_JSON.read_text(encoding="utf-8")).get("build", {}).get(
-        "platform_workflows", ""
+    raw = (
+        json.loads(BUILD_CONFIG_JSON.read_text(encoding="utf-8"))
+        .get("build", {})
+        .get("platform_workflows", "")
     )
     assert raw, "platform_workflows missing from build-config.json"
     return [n.strip() for n in raw.split(",") if n.strip()]
@@ -99,6 +104,44 @@ def test_build_results_trigger_matches_build_config() -> None:
         pytest.fail(" / ".join(msg_parts))
 
 
+def test_build_results_pr_number_uses_plain_string_output() -> None:
+    if not BUILD_RESULTS_YML.exists():
+        pytest.skip("build-results.yml not in checkout")
+    doc = yaml.safe_load(BUILD_RESULTS_YML.read_text(encoding="utf-8"))
+    steps = doc["jobs"]["post-pr-comment"]["steps"]
+    get_pr = next(step for step in steps if step.get("name") == "Get PR number")
+    assert "needs.load-config.outputs.pr" in get_pr["env"]["PR_NUMBER"]
+    assert '"result=$PR_NUMBER"' in get_pr["run"]
+    report = next(step for step in steps if step.get("name") == "Generate combined report")
+    assert report["env"]["BASELINE_SHA"] == "${{ steps.baseline.outputs.sha }}"
+
+
+def test_only_pr_reporting_allows_missing_diagnostic_artifacts() -> None:
+    doc = yaml.safe_load(BUILD_RESULTS_YML.read_text(encoding="utf-8"))
+    for job, allows_missing in (("post-pr-comment", "true"), ("save-baselines", "false")):
+        download = next(
+            step
+            for step in doc["jobs"][job]["steps"]
+            if step.get("uses") == "./.github/actions/download-all-artifacts"
+        )
+        assert download["with"].get("allow-missing", "false") == allows_missing
+        sizes = next(
+            step
+            for step in doc["jobs"][job]["steps"]
+            if step.get("uses") == "./.github/actions/collect-artifact-sizes"
+        )
+        assert sizes["with"].get("require-artifacts", "false") == (
+            "true" if job == "save-baselines" else "false"
+        )
+    action = yaml.safe_load(
+        (REPO_ROOT / ".github/actions/download-all-artifacts/action.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert action["inputs"]["allow-missing"]["default"] == "false"
+    assert "--allow-missing" in action["runs"]["steps"][0]["run"]
+
+
 def test_release_wait_for_builds_lists_match_platforms() -> None:
     if not RELEASE_YML.exists() or not BUILD_CONFIG_JSON.exists():
         pytest.skip("release.yml or build-config.json not in checkout")
@@ -106,16 +149,16 @@ def test_release_wait_for_builds_lists_match_platforms() -> None:
     jobs = doc.get("jobs") or {}
     wait = jobs.get("wait-for-builds") or {}
     steps = wait.get("steps") or []
-    names_block: str | None = None
-    for step in steps:
-        with_ = step.get("with") or {}
-        if "workflow-names" in with_:
-            names_block = str(with_["workflow-names"])
-            break
-    assert names_block is not None, "wait-for-builds step missing workflow-names"
-    listed = {line.strip() for line in names_block.splitlines() if line.strip()}
-    expected = set(_platform_workflows())
-    assert listed == expected, (
-        f"release.yml wait-for-builds workflow-names {sorted(listed)} != "
-        f"build-config.json platform_workflows {sorted(expected)}"
+    from release_builds import WORKFLOWS
+
+    assert WORKFLOWS == RELEASE_PLATFORM_FILES
+    dispatch = next(
+        step for step in steps if step.get("name") == "Dispatch and wait for release builds"
     )
+    assert "release_builds.py" in dispatch["run"]
+    assert '--sha "$GITHUB_SHA"' in dispatch["run"]
+    downloads = jobs["upload-artifacts"]["steps"]
+    download = next(step for step in downloads if step.get("name") == "Download artifacts")
+    assert download["with"]["runs-file"] == "release-build-runs.json"
+    assert download["with"]["strict-runs"] == "true"
+    assert download["with"].get("allow-missing", "false") == "false"

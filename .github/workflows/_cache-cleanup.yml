@@ -21,7 +21,7 @@ on:
         type: boolean
         default: false
       prune:
-        description: 'GC mode: keep build caches (ccache/cpm), evict the rest when the pool nears the cap'
+        description: 'GC mode: keep newest build/dependency cache generations and evict stale caches near the cap'
         required: false
         type: boolean
         default: false
@@ -32,14 +32,23 @@ on:
         default: 30
 
 permissions:
-  actions: write
+  contents: read
 
 jobs:
   cleanup:
     name: Cleanup Caches
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+      # Required to delete cache entries.
+      actions: write
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@v7
         with:
           sparse-checkout: |
@@ -47,10 +56,8 @@ jobs:
             .github/scripts/ci_bootstrap.py
             tools/_bootstrap.py
             .github/scripts/gh_cache_cleanup.py
-            tools/common/__init__.py
-            tools/common/file_traversal.py
-            tools/common/gh_actions.py
-            tools/common/markdown.py
+            tools/common
+            tools/qgc_tools
           sparse-checkout-cone-mode: false
           fetch-depth: 1
           persist-credentials: false

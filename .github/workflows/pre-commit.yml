@@ -33,7 +33,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Get build config
@@ -43,7 +43,7 @@ jobs:
       - name: Setup Python
         uses: ./.github/actions/setup-python
         with:
-          groups: precommit
+          groups: dev
           python-version: '3.12'
 
       - name: Install Qt (for qmllint)
@@ -60,7 +60,9 @@ jobs:
         continue-on-error: true
         env:
           PRE_COMMIT_OUTPUT: pre-commit-output.txt
-        run: python3 ./tools/pre_commit.py --ci
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 ./tools/pre_commit.py --ci --changed
 
       - name: Prepare pre-commit results artifact
         if: github.event_name == 'pull_request' && always()
@@ -88,10 +90,8 @@ jobs:
           path: pre-commit-results
           retention-days: 7
 
-      # Hook failures are surfaced via the PR comment; only fail the job when
-      # the runner script itself didn't complete (no exit_code output written).
-      - name: Fail job on pre-commit script crash
-        if: always() && steps.pre-commit.outcome == 'failure' && steps.pre-commit.outputs.exit_code == ''
+      - name: Enforce hook results
+        if: always() && steps.pre-commit.outcome != 'success'
         run: |
-          echo "::error::pre-commit runner crashed before writing results"
+          echo "::error::Required pre-commit checks failed or did not run."
           exit 1

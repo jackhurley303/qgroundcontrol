@@ -1,11 +1,12 @@
 #include "CustomPlugin.h"
+#include "CustomSettings.h"
 #include "PerimeterScanComplexItem.h"
 #include "PerimeterScanPlanCreator.h"
-#include "QmlComponentInfo.h"
 #include "QGCLoggingCategory.h"
 #include "QGCPalette.h"
 #include "QGCMAVLink.h"
 #include "AppSettings.h"
+#include "SettingsManager.h"
 
 #include <QtCore/QApplicationStatic>
 #include <QtQml/QQmlApplicationEngine>
@@ -52,18 +53,9 @@ void CustomPlugin::_advancedChanged(bool changed)
     emit _options->showFirmwareUpgradeChanged(changed);
 }
 
-void CustomPlugin::_addSettingsEntry(const QString &title, const char *qmlFile, const char *iconFile)
+void CustomPlugin::registerCustomSettings(SettingsManager *settingsManager)
 {
-    Q_CHECK_PTR(qmlFile);
-    // 'this' instance will take ownership on the QmlComponentInfo instance
-    _customSettingsList.append(QVariant::fromValue(
-        new QmlComponentInfo(
-            title,
-            QUrl::fromUserInput(qmlFile),
-            !iconFile ? QUrl() : QUrl::fromUserInput(iconFile),
-            this)
-        )
-    );
+    settingsManager->registerCustomSettingsGroup(QStringLiteral("customSettings"), new CustomSettings());
 }
 
 void CustomPlugin::adjustSettingMetaData(const QString& settingsGroup, FactMetaData& metaData, bool &userVisible)
@@ -232,12 +224,12 @@ void CustomPlugin::paletteOverride(const QString &colorName, QGCPalette::Palette
         colorInfo[QGCPalette::Dark][QGCPalette::ColorGroupDisabled]  = QColor("#000000");
         colorInfo[QGCPalette::Light][QGCPalette::ColorGroupEnabled]  = QColor("#212529");
         colorInfo[QGCPalette::Light][QGCPalette::ColorGroupDisabled] = QColor("#000000");
-    } else if (colorName == QStringLiteral("brandingPurple")) {
+    } else if (colorName == QStringLiteral("brandPrimary")) {
         colorInfo[QGCPalette::Dark][QGCPalette::ColorGroupEnabled]   = QColor("#4a2c6d");
         colorInfo[QGCPalette::Dark][QGCPalette::ColorGroupDisabled]  = QColor("#4a2c6d");
         colorInfo[QGCPalette::Light][QGCPalette::ColorGroupEnabled]  = QColor("#4a2c6d");
         colorInfo[QGCPalette::Light][QGCPalette::ColorGroupDisabled] = QColor("#4a2c6d");
-    } else if (colorName == QStringLiteral("brandingBlue")) {
+    } else if (colorName == QStringLiteral("brandAccent")) {
         colorInfo[QGCPalette::Dark][QGCPalette::ColorGroupEnabled]   = QColor("#6045c5");
         colorInfo[QGCPalette::Dark][QGCPalette::ColorGroupDisabled]  = QColor("#48d6ff");
         colorInfo[QGCPalette::Light][QGCPalette::ColorGroupEnabled]  = QColor("#6045c5");

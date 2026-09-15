@@ -26,9 +26,38 @@ void PX4VehicleConfigUITest::_testNavigateVehicleConfig()
     QTest::qWait(_viewDelay);
 
     // -------------------------------------------------------------------------
-    // Click through each vehicle component
+    // Click through each vehicle component, in English and Chinese
     // -------------------------------------------------------------------------
-    clickThroughAllComponents(vehicle);
+    clickThroughAllComponentsAllLocales(vehicle);
+
+    });
+}
+
+// With a full-parameter vehicle both dividers show; searching flattens the sidebar and hides them.
+void PX4VehicleConfigUITest::_testSidebarDividers()
+{
+    runWithMockLink(
+        [] { return MockLink::startPX4MockLink(); },
+        [&](QPointer<MockLink> /*mockLink*/, Vehicle * /*vehicle*/) {
+    navigateToConfigureView();
+    if (QTest::currentTestFailed()) return;
+
+    QQuickItem *const summaryDivider = findItem(_rootItem, QStringLiteral("vehicleConfig_summaryDivider"));
+    QQuickItem *const componentsDivider = findItem(_rootItem, QStringLiteral("vehicleConfig_componentsDivider"));
+    QVERIFY(summaryDivider);
+    QVERIFY(componentsDivider);
+    QTRY_VERIFY(summaryDivider->isVisible());
+    QTRY_VERIFY(componentsDivider->isVisible());
+
+    QQuickItem *const searchField = findVisibleItem(_rootItem, QStringLiteral("vehicleConfig_searchField"), 3000);
+    QVERIFY(searchField);
+    searchField->setProperty("text", QStringLiteral("sensors"));
+    QTRY_VERIFY(!summaryDivider->isVisible());
+    QTRY_VERIFY(!componentsDivider->isVisible());
+
+    searchField->setProperty("text", QString());
+    QTRY_VERIFY(summaryDivider->isVisible());
+    QTRY_VERIFY(componentsDivider->isVisible());
 
     });
 }

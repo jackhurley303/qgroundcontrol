@@ -200,4 +200,8 @@ if(MACOS AND GSTREAMER_LIB_PATH)
         BUILD_RPATH "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_LIBS}" "${GSTREAMER_LIB_PATH}")
 endif()
 
+# Native packages install only the Runtime component. Keep this assignment
+# scoped here so bundled SDK files are included without packaging dependency
+# development files declared elsewhere in the source tree.
+set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME Runtime)
 gstreamer_install_platform_sdk(${CMAKE_PROJECT_NAME})

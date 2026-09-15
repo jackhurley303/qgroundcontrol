@@ -14,37 +14,28 @@ from __future__ import annotations
 import argparse
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
+from pathlib import Path
 
 from ci_bootstrap import ensure_tools_dir
 
 ensure_tools_dir(__file__)
 
-from common.gh_actions import append_github_env, gh_error, gh_notice, write_github_output
-
-
-def _run_with_tee(cmd: list[str], output_file: str) -> int:
-    # Use `bash | tee` so children keep a real stdout — Popen+PIPE deadlocks
-    # Gradle/javac on Windows when grandchildren block-buffer 8KB+ output.
-    bash = shutil.which("bash")
-    if bash:
-        quoted_cmd = " ".join(shlex.quote(c) for c in cmd)
-        quoted_log = shlex.quote(output_file)
-        script = f"set -o pipefail; {quoted_cmd} 2>&1 | tee {quoted_log}"
-        return subprocess.run([bash, "-c", script], check=False).returncode
-
-    with open(output_file, "w", encoding="utf-8") as log:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        assert proc.stdout is not None
-        for line in proc.stdout:
-            sys.stdout.write(line)
-            log.write(line)
-        proc.wait()
-        return proc.returncode
+from build_profile import parse_ninja_log, write_snapshot
+from common.cmake import read_cache_var
+from common.gh_actions import (
+    append_github_env,
+    gh_error,
+    gh_notice,
+    gh_warning,
+    write_github_output,
+    write_step_summary,
+)
+from common.proc import run_tee
 
 
 def detect_jobs(requested: str = "auto") -> int:
@@ -74,9 +65,7 @@ def cmd_build(args: argparse.Namespace) -> None:
     if args.parallel:
         if args.parallel_jobs:
             if not re.match(r"^[1-9]\d*$", args.parallel_jobs):
-                gh_error(
-                    f"parallel-jobs must be a positive integer, got '{args.parallel_jobs}'"
-                )
+                gh_error(f"parallel-jobs must be a positive integer, got '{args.parallel_jobs}'")
                 sys.exit(1)
             cmd += ["--parallel", args.parallel_jobs]
         else:
@@ -89,17 +78,36 @@ def cmd_build(args: argparse.Namespace) -> None:
     if output_file and args.reviewdog:
         append_github_env({"REVIEWDOG_LOG": output_file})
 
-    print(f"Running: {' '.join(cmd)}")
+    print(f"Running: {' '.join(cmd)}", flush=True)
+    previous = None
+    try:
+        previous = parse_ninja_log(Path(".ninja_log")) if Path(".ninja_log").exists() else []
+    except (OSError, ValueError) as error:
+        gh_warning(f"Cannot read previous Ninja timings: {error}")
     start = time.monotonic()
 
     if output_file:
-        exit_code = _run_with_tee(cmd, output_file)
+        exit_code = run_tee(cmd, output_file)
     else:
         result = subprocess.run(cmd, check=False)
         exit_code = result.returncode
 
     duration = int(time.monotonic() - start)
 
+    if Path(".ninja_log").is_file():
+        try:
+            directory = Path(
+                tempfile.mkdtemp(prefix="build-profile-", dir=os.environ.get("RUNNER_TEMP"))
+            )
+            report = write_snapshot(Path.cwd(), directory, previous=previous, wall_seconds=duration)
+            write_step_summary(
+                f"### Build timings: {args.target or 'all'} ({args.build_type})\n\n{report}"
+            )
+            write_github_output({"profile_path": str(directory), "profile_name": directory.name})
+        except (OSError, ValueError) as error:
+            gh_warning(f"Cannot write Ninja build timings: {error}")
+
+    write_github_output({"build_success": str(exit_code == 0).lower()})
     if exit_code == 0:
         gh_notice(f"Build completed in {duration}s")
     else:
@@ -123,6 +131,8 @@ def cmd_configure(args: argparse.Namespace) -> None:
         "-t",
         args.build_type,
     ]
+    if args.preset:
+        cmd += ["--preset", args.preset]
     if args.testing:
         cmd.append("--testing")
     if args.coverage:
@@ -133,9 +143,12 @@ def cmd_configure(args: argparse.Namespace) -> None:
         cmd.append("--no-qt-cmake")
     if args.unity_build:
         cmd += ["--unity", "--unity-batch", args.unity_batch_size]
-    if args.extra_args:
+    cache_program = os.environ.get("QGC_CACHE_PROGRAM")
+    if args.extra_args or cache_program:
         cmd.append("--")
         cmd.extend(args.extra_args.split())
+        if cache_program:
+            cmd.append(f"-DQGC_CACHE_PROGRAM:FILEPATH={cache_program}")
 
     start = time.monotonic()
     result = subprocess.run(cmd, check=False)
@@ -161,11 +174,16 @@ def cmd_ctest(args: argparse.Namespace) -> None:
     cmd = [
         "ctest",
         "--output-on-failure",
+        "--no-tests=error",
         "--output-junit",
         args.junit_output,
         "--parallel",
         str(args.jobs),
     ]
+    if getattr(args, "build_type", ""):
+        cmd += ["-C", args.build_type]
+    if getattr(args, "tests_regex", ""):
+        cmd += ["-R", args.tests_regex]
     if args.include_labels:
         cmd += ["-L", args.include_labels]
     if args.exclude_labels:
@@ -178,32 +196,10 @@ def cmd_ctest(args: argparse.Namespace) -> None:
         cmd += ["-I", f"{start_idx},0,{args.shard_count}"]
 
     start = time.monotonic()
-    exit_code = _run_with_tee(_maybe_wrap_xvfb(cmd), args.ctest_output)
+    exit_code = run_tee(_maybe_wrap_xvfb(cmd), args.ctest_output)
     duration = int(time.monotonic() - start)
     gh_notice(f"Tests completed in {duration}s")
     sys.exit(exit_code)
-
-
-_CACHE_LINE_RE = re.compile(r"^([A-Za-z0-9_.\-]+):[^=]+=(.*)$")
-
-
-def read_cache_var(cache_path: str, name: str) -> str | None:
-    """Return the value of a CMake cache variable, or None if not set."""
-    return read_cache_dict(cache_path).get(name)
-
-
-def read_cache_dict(cache_path: str) -> dict[str, str]:
-    """Return all typed entries from CMakeCache.txt as a flat name->value dict."""
-    entries: dict[str, str] = {}
-    try:
-        with open(cache_path, encoding="utf-8") as fh:
-            for line in fh:
-                match = _CACHE_LINE_RE.match(line.rstrip("\n"))
-                if match:
-                    entries[match.group(1)] = match.group(2)
-    except FileNotFoundError:
-        pass
-    return entries
 
 
 def cmd_cache_var(args: argparse.Namespace) -> None:
@@ -245,6 +241,7 @@ def main() -> None:
     p_conf.add_argument("--build-dir", required=True)
     p_conf.add_argument("--generator", default="Ninja")
     p_conf.add_argument("--build-type", default="Release")
+    p_conf.add_argument("--preset", default="")
     p_conf.add_argument("--testing", action="store_true", default=False)
     p_conf.add_argument("--coverage", action="store_true", default=False)
     p_conf.add_argument("--stable", action="store_true", default=False)
@@ -258,6 +255,8 @@ def main() -> None:
     p_ctest = sub.add_parser("ctest")
     p_ctest.add_argument("--junit-output", required=True)
     p_ctest.add_argument("--ctest-output", required=True)
+    p_ctest.add_argument("--build-type", default="")
+    p_ctest.add_argument("--tests-regex", default="")
     p_ctest.add_argument("--jobs", type=int, required=True)
     p_ctest.add_argument("--include-labels", default="")
     p_ctest.add_argument("--exclude-labels", default="")

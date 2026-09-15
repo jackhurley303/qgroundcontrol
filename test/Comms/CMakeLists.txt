@@ -15,8 +15,6 @@ target_sources(${CMAKE_PROJECT_NAME}
         LogReplayLinkTest.h
         MAVLinkV1TrafficTest.cc
         MAVLinkV1TrafficTest.h
-        QGCSerialPortInfoTest.cc
-        QGCSerialPortInfoTest.h
         ReplaySeekApplierTest.cc
         ReplaySeekApplierTest.h
         SyntheticTlog.cc
@@ -32,5 +30,8 @@ add_qgc_test(LinkManagerTest LABELS Integration Comms SERIAL)
 add_qgc_test(LogReplayLinkControllerTest LABELS Unit Comms)
 add_qgc_test(LogReplayLinkTest LABELS Unit Comms)
 add_qgc_test(MAVLinkV1TrafficTest LABELS Integration Comms)
-add_qgc_test(QGCSerialPortInfoTest LABELS Unit Comms)
 add_qgc_test(ReplaySeekApplierTest LABELS Integration Comms Vehicle RESOURCE_LOCK MockLink)
+
+if(NOT QGC_NO_SERIAL_LINK)
+    add_subdirectory(Serial)
+endif()

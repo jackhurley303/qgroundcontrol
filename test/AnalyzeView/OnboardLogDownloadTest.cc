@@ -1,6 +1,7 @@
 #include "OnboardLogDownloadTest.h"
 
 #include <QtCore/QDir>
+#include <QtCore/QFileInfo>
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QTimeZone>
 #include <QtCore/QTimer>
@@ -80,13 +81,13 @@ void OnboardLogDownloadTest::_downloadTest()
     QCOMPARE(model->count(), 1);
     model->value<QGCOnboardLogEntry*>(0)->setSelected(true);
 
-    const QString downloadTo = QDir::currentPath();
-    QVERIFY(downloadAndWaitForComplete(controller, multiSpy, downloadTo));
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    QVERIFY(downloadAndWaitForComplete(controller, multiSpy, tempDir.path()));
 
-    const QString downloadFile = QDir(downloadTo).filePath("log_0_UnknownDate.ulg");
+    const QString downloadFile = QDir(tempDir.path()).filePath("log_0_UnknownDate.ulg");
     QVERIFY(UnitTest::fileCompare(downloadFile, _mockLink->logDownloadFile()));
     QCOMPARE(model->value<QGCOnboardLogEntry*>(0)->status(), QStringLiteral("Downloaded"));
-    (void)QFile::remove(downloadFile);
 }
 
 void OnboardLogDownloadTest::_selectAllTest()
@@ -129,8 +130,9 @@ void OnboardLogDownloadTest::_cancelDownloadTest()
 
     // download() synchronously creates the local file and requests the first chunk,
     // so canceling immediately exercises the cancel-while-downloading path.
-    const QString downloadTo = QDir::currentPath();
-    controller->download(downloadTo);
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    controller->download(tempDir.path());
     QVERIFY(controller->_getDownloadingLogs());
     controller->cancel();
 
@@ -139,7 +141,46 @@ void OnboardLogDownloadTest::_cancelDownloadTest()
     QCOMPARE(controller->selectedCount(), 0);
 
     // The partially downloaded file must have been removed
-    QVERIFY(!QFile::exists(QDir(downloadTo).filePath("log_0_UnknownDate.ulg")));
+    QVERIFY(!QFile::exists(QDir(tempDir.path()).filePath("log_0_UnknownDate.ulg")));
+}
+
+void OnboardLogDownloadTest::_refreshDuringDownloadTest()
+{
+    // Re-entering the Onboard Logs page triggers a refresh(). While a download is in
+    // progress this must be a no-op: clearing the model would leave the download
+    // referencing deleted entries (issue #14881).
+    OnboardLogController* const controller = new OnboardLogController(this);
+    MultiSignalSpy* multiSpy = new MultiSignalSpy(this);
+    QVERIFY(multiSpy->init(controller));
+
+    QVERIFY(refreshAndWaitForListComplete(controller, multiSpy));
+
+    QmlObjectListModel* const model = controller->_getModel();
+    QVERIFY(model);
+    QCOMPARE(model->count(), 1);
+    model->value<QGCOnboardLogEntry*>(0)->setSelected(true);
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    multiSpy->clearAllSignals();
+    controller->download(tempDir.path());
+    QVERIFY(controller->_getDownloadingLogs());
+
+    controller->refresh();
+
+    QVERIFY(controller->_getDownloadingLogs());
+    QCOMPARE(model->count(), 1);
+
+    // The download must still run to completion
+    multiSpy->clearAllSignals();
+    if (controller->property("downloadingLogs").toBool()) {
+        QVERIFY(multiSpy->waitForSignal("downloadingLogsChanged", TestTimeout::longMs()));
+    }
+    QVERIFY(!controller->_getDownloadingLogs());
+
+    const QString downloadFile = QDir(tempDir.path()).filePath("log_0_UnknownDate.ulg");
+    QVERIFY(UnitTest::fileCompare(downloadFile, _mockLink->logDownloadFile()));
+    QCOMPARE(model->value<QGCOnboardLogEntry*>(0)->status(), QStringLiteral("Downloaded"));
 }
 
 void OnboardLogDownloadTest::_vehicleDisconnectDuringDownloadTest()
@@ -310,6 +351,81 @@ void OnboardLogFtpDownloadTest::_ftpListNoTimeFallbackTest()
     QFile file(QDir(tempDir.path()).filePath(downloadedFiles.first()));
     QVERIFY(file.open(QIODevice::ReadOnly));
     QCOMPARE(file.readAll(), _mockLink->mockLinkFTP()->logFileContents(QStringLiteral("log_2.ulg")));
+}
+
+void OnboardLogFtpDownloadTest::_messagesZeroByteLogTest()
+{
+    _connectMockLink(MAV_AUTOPILOT_PX4, MockConfiguration::FailNone, MockConfiguration::OptionFtpCapability);
+    if (QTest::currentTestFailed()) return;
+
+    // A 0 byte log has nothing to request over the message transport, so it must be
+    // completed immediately and not stall the rest of the queue (issue #15068).
+    const QList<MockLinkFTP::LogFile> logFiles = {
+        { QStringLiteral("log_1.ulg"), 5000, 1700000000 },
+        { QStringLiteral("log_2.ulg"), 0,    1700086400 },
+        { QStringLiteral("log_3.ulg"), 3000, 1700172800 },
+    };
+    _mockLink->mockLinkFTP()->setLogFiles(logFiles);
+    _mockLink->mockLinkFTP()->setListDirectoryWithTimeSupported(false);
+
+    OnboardLogController* const controller = new OnboardLogController(this);
+    MultiSignalSpy* multiSpy = new MultiSignalSpy(this);
+    QVERIFY(multiSpy->init(controller));
+
+    QVERIFY(refreshAndWaitForListComplete(controller, multiSpy));
+    QCOMPARE(controller->transport(), QStringLiteral("messages"));
+
+    QmlObjectListModel* const model = controller->_getModel();
+    QVERIFY(model);
+    QCOMPARE(model->count(), 3);
+
+    QGCOnboardLogEntry* zeroByteEntry = nullptr;
+    for (int i = 0; i < model->count(); i++) {
+        QGCOnboardLogEntry* const entry = model->value<QGCOnboardLogEntry*>(i);
+        QVERIFY(entry);
+        if (entry->size() == 0) {
+            zeroByteEntry = entry;
+        }
+    }
+    QVERIFY(zeroByteEntry);
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QDir downloadDir(tempDir.path());
+
+    // Only the 0 byte log selected: the whole download cycle completes synchronously inside download()
+    zeroByteEntry->setSelected(true);
+    QVERIFY(downloadAndWaitForComplete(controller, multiSpy, tempDir.path()));
+    QCOMPARE(zeroByteEntry->status(), QStringLiteral("Downloaded"));
+    QCOMPARE(controller->selectedCount(), 0);
+    const QStringList zeroByteFiles =
+        downloadDir.entryList({ QStringLiteral("log_%1_*").arg(zeroByteEntry->id()) }, QDir::Files);
+    QCOMPARE(zeroByteFiles.count(), 1);
+    QCOMPARE(QFileInfo(downloadDir.filePath(zeroByteFiles.first())).size(), qint64(0));
+    QVERIFY(QFile::remove(downloadDir.filePath(zeroByteFiles.first())));
+
+    // 0 byte log in the middle of a multi-select must not stall the rest of the queue
+    controller->selectAll(true);
+    QVERIFY(downloadAndWaitForComplete(controller, multiSpy, tempDir.path()));
+
+    QCOMPARE(controller->selectedCount(), 0);
+
+    // Every entry completed and its file holds the exact per-id contents, including an
+    // empty file for the 0 byte log. Filenames embed the local-time formatted log date so
+    // match each entry's file by its "log_<id>_" prefix.
+    QCOMPARE(downloadDir.entryList(QDir::Files).count(), 3);
+    for (int i = 0; i < model->count(); i++) {
+        const QGCOnboardLogEntry* const entry = model->value<const QGCOnboardLogEntry*>(i);
+        QVERIFY(entry);
+        QCOMPARE(entry->status(), QStringLiteral("Downloaded"));
+
+        const QStringList matches =
+            downloadDir.entryList({ QStringLiteral("log_%1_*").arg(entry->id()) }, QDir::Files);
+        QCOMPARE(matches.count(), 1);
+        QFile file(downloadDir.filePath(matches.first()));
+        QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(matches.first()));
+        QCOMPARE(file.readAll(), _mockLink->mockLinkFTP()->logFileContents(logFiles[entry->id()].name));
+    }
 }
 
 void OnboardLogFtpDownloadTest::_ftpCancelListNoFallbackTest()
@@ -527,6 +643,51 @@ void OnboardLogFtpDownloadTest::_ftpCancelDownloadTest()
 
     QVERIFY(!controller->_getDownloadingLogs());
     QCOMPARE(entry->status(), QStringLiteral("Canceled"));
+}
+
+void OnboardLogFtpDownloadTest::_ftpRefreshDuringDownloadTest()
+{
+    _connectMockLink(MAV_AUTOPILOT_PX4, MockConfiguration::FailNone, MockConfiguration::OptionFtpCapability);
+    if (QTest::currentTestFailed()) return;
+
+    // Large enough that the download spans multiple FTP bursts and outlives the refresh() call
+    _mockLink->mockLinkFTP()->setLogFiles({ { QStringLiteral("log_big.ulg"), 1000000, 1700000000 } });
+
+    OnboardLogController* const controller = new OnboardLogController(this);
+    MultiSignalSpy* multiSpy = new MultiSignalSpy(this);
+    QVERIFY(multiSpy->init(controller));
+
+    QVERIFY(refreshAndWaitForListComplete(controller, multiSpy));
+    QmlObjectListModel* const model = controller->_getModel();
+    QCOMPARE(model->count(), 1);
+    QGCOnboardLogEntry* const entry = model->value<QGCOnboardLogEntry*>(0);
+    entry->setSelected(true);
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    multiSpy->clearAllSignals();
+    controller->download(tempDir.path());
+    QVERIFY(controller->_getDownloadingLogs());
+
+    // Re-entering the Onboard Logs page triggers a refresh(). While a download is in
+    // progress this must be a no-op: clearing the model would leave the download
+    // referencing deleted entries (issue #14881).
+    controller->refresh();
+
+    QVERIFY(controller->_getDownloadingLogs());
+    QCOMPARE(model->count(), 1);
+    QCOMPARE(model->value<QGCOnboardLogEntry*>(0), entry);
+
+    // The download must still run to completion
+    multiSpy->clearAllSignals();
+    if (controller->property("downloadingLogs").toBool()) {
+        QVERIFY(multiSpy->waitForSignal("downloadingLogsChanged", TestTimeout::longMs()));
+    }
+    QVERIFY(!controller->_getDownloadingLogs());
+
+    const QString downloadFile = QDir(tempDir.path()).filePath(QStringLiteral("log_big.ulg"));
+    QVERIFY(QFile::exists(downloadFile));
+    QCOMPARE(entry->status(), QStringLiteral("Downloaded"));
 }
 
 void OnboardLogFtpDownloadTest::_ftpEraseSelectedTest()

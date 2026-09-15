@@ -11,7 +11,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <utility>
+
+#ifdef Q_OS_ANDROID
+#include <android/log.h>
+#endif
 
 #include "GeoMapCamera.h"
 #include "GeoScene.h"
@@ -293,6 +298,7 @@ void SurfacePatchModel::_rebuildSurfaceModel()
                                             << (_debugHills ? "debug hills" : (_terrain ? "terrain" : "flat"));
         _heightField = new HeightField(this);
         _heightSource->setHeightField(_heightField);
+        connect(_heightField, &HeightField::regionChanged, this, &SurfacePatchModel::terrainHeightsChanged);
         _surfaceModel = new SurfaceModel(camera, _heightSource, _heightField, this);
         connect(_surfaceModel, &SurfaceModel::patchAdded, this, &SurfacePatchModel::_patchAdded);
         connect(_surfaceModel, &SurfaceModel::patchMeshChanged, this, &SurfacePatchModel::_patchReady);
@@ -306,6 +312,110 @@ void SurfacePatchModel::_rebuildSurfaceModel()
         _surfaceModel->update();
     }
     emit statsChanged();
+    // Field replacement invalidates every previous height answer
+    emit terrainHeightsChanged();
+}
+
+double SurfacePatchModel::terrainHeightAt(const QGeoCoordinate& coordinate) const
+{
+    // Invalid coordinates carry NaN lat/lon, which the height lookup cannot digest
+    if (!_heightField || !coordinate.isValid()) {
+        return 0.0;
+    }
+    return _heightField->heightAt(TileMath::geoToWorld(coordinate));
+}
+
+QGeoCoordinate SurfacePatchModel::surfaceCoordinateAtScreenPoint(const GeoMapCamera* camera, const QPointF& screenPos,
+                                                                 double zScale) const
+{
+    // Negative zScale would invert the terrain band math below
+    if (!camera || !_heightField || (zScale < 0.0)) {
+        return QGeoCoordinate();
+    }
+    const auto rayOpt = camera->pickRayAt(screenPos);
+    if (!rayOpt) {
+        return QGeoCoordinate();
+    }
+    const GeoMapCamera::PickRay& ray = *rayOpt;
+
+    // Signed height of the ray above the rendered surface at parameter t
+    const auto surfaceOffset = [&](double t) {
+        const QPointF ground(ray.originX + (t * ray.dirX), ray.originY + (t * ray.dirY));
+        return (ray.originZ + (t * ray.dirZ)) - (_heightField->heightAt(ground) * zScale);
+    };
+
+    // Earth terrain bounds (Terrarium tiles encode bathymetry, so the floor is
+    // the ocean trenches, not sea level). The ray can only cross the surface
+    // while its z is inside [minZ, maxZ]: march that band only.
+    constexpr double kMinTerrainMeters = -11000.0;
+    constexpr double kMaxTerrainMeters = 9000.0;
+    const double minZ = kMinTerrainMeters * zScale;
+    const double maxZ = kMaxTerrainMeters * zScale;
+
+    double tStart = 0.0;
+    double tEnd = 0.0;
+    if (ray.dirZ < 0.0) {
+        tStart = std::max(0.0, (maxZ - ray.originZ) / ray.dirZ);
+        tEnd = (minZ - ray.originZ) / ray.dirZ;
+    } else if (ray.originZ < maxZ) {
+        // Ascending ray below the terrain ceiling (screen edge above the camera
+        // horizon) can still hit terrain rising in front of the camera
+        tEnd = (ray.dirZ > 0.0) ? ((maxZ - ray.originZ) / ray.dirZ) : std::numeric_limits<double>::infinity();
+    } else {
+        return QGeoCoordinate();
+    }
+
+    // Nothing renders beyond the retained patch range, so a hit past it would
+    // be a hit on invisible terrain; this also bounds the coarse step length
+    const double horizontal = std::hypot(ray.dirX, ray.dirY);
+    if (horizontal > 1e-12) {
+        tEnd = std::min(tEnd, (SurfaceModel::kMaxRangeMultiplier * camera->distance()) / horizontal);
+    }
+    if (!std::isfinite(tEnd) || (tEnd < tStart)) {
+        return QGeoCoordinate();
+    }
+
+    const auto coordinateAt = [&](double t) {
+        return TileMath::worldToGeo(QPointF(ray.originX + (t * ray.dirX), ray.originY + (t * ray.dirY)));
+    };
+
+    if (surfaceOffset(tStart) <= 0.0) {
+        // Already at/below the surface at the band entry (includes the zScale=0
+        // degenerate case, where the band collapses to the z=0 plane hit)
+        return coordinateAt(tStart);
+    }
+
+    // Coarse march to the first above->below crossing (the visible surface),
+    // then bisect the bracket down to sub-meter precision. The step length
+    // scales with camera distance like the rendered LOD does, so a visible
+    // ridge cannot fall between samples; only features narrower than
+    // ~distance/64 can be stepped over. With the range capped at
+    // kMaxRangeMultiplier distances this bounds the march at a few thousand
+    // heightAt lookups, fine for a one-shot click.
+    constexpr double kStepsPerCameraDistance = 64.0;
+    constexpr int kBisectSteps = 24;
+    const double stepMeters = std::max(camera->distance() / kStepsPerCameraDistance, 1.0);
+    const double groundRange = (tEnd - tStart) * horizontal;
+    const int coarseSteps = std::max(1, static_cast<int>(std::ceil(groundRange / stepMeters)));
+    double prevT = tStart;
+    for (int i = 1; i <= coarseSteps; i++) {
+        const double t = tStart + (((tEnd - tStart) * i) / coarseSteps);
+        if (surfaceOffset(t) <= 0.0) {
+            double lo = prevT;
+            double hi = t;
+            for (int j = 0; j < kBisectSteps; j++) {
+                const double mid = (lo + hi) / 2.0;
+                if (surfaceOffset(mid) <= 0.0) {
+                    hi = mid;
+                } else {
+                    lo = mid;
+                }
+            }
+            return coordinateAt(hi);
+        }
+        prevT = t;
+    }
+    return QGeoCoordinate();  // sky: no crossing within the rendered range
 }
 
 int SurfacePatchModel::gridSize() const
@@ -332,6 +442,7 @@ int SurfacePatchModel::maxZoomLevel() const
     return maxZoom;
 }
 
+// GCOVR_EXCL_START — perf-stats/capture/diagnostics instrumentation, not shipping behavior
 void SurfacePatchModel::_startStatsSampling()
 {
     if (!_statsTimer) {
@@ -375,6 +486,8 @@ void SurfacePatchModel::_statsTick()
         _surfaceModel ? _surfaceModel->takeUpdateStats() : SurfaceModel::UpdateStats{};
     const double avgMs = stats.updates ? (stats.totalUs / 1000.0) / stats.updates : 0.0;
     const double maxMs = stats.maxUs / 1000.0;
+    const double addAvgMs = stats.updates ? (stats.addTotalUs / 1000.0) / stats.updates : 0.0;
+    const double addMaxMs = stats.addMaxUs / 1000.0;
     _statsText = QStringLiteral("upd/s %1  avg %2 ms  max %3 ms  |  patch +%4 -%5 /s  comp/s %6")
                      .arg(stats.updates)
                      .arg(avgMs, 0, 'f', 2)
@@ -386,11 +499,13 @@ void SurfacePatchModel::_statsTick()
         _captureWorstMaxMs = std::max(_captureWorstMaxMs, maxMs);
         _captureWorstAvgMs = std::max(_captureWorstAvgMs, avgMs);
         GeoMapCamera* const camera = _camera();
-        _captureRows.append(QStringLiteral("%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12")
+        _captureRows.append(QStringLiteral("%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13,%14")
                                 .arg(_captureClock.elapsed() / 1000.0, 0, 'f', 1)
                                 .arg(stats.updates)
                                 .arg(avgMs, 0, 'f', 3)
                                 .arg(maxMs, 0, 'f', 3)
+                                .arg(addAvgMs, 0, 'f', 3)
+                                .arg(addMaxMs, 0, 'f', 3)
                                 .arg(_statAdds)
                                 .arg(_statRemoves)
                                 .arg(_statComposites)
@@ -418,8 +533,8 @@ void SurfacePatchModel::startCapture()
     _captureWorstMaxMs = 0.0;
     _captureWorstAvgMs = 0.0;
     _captureRows.append(
-        QStringLiteral("time_s,updates,avg_ms,max_ms,patch_adds,patch_removes,composites,patches,pending,max_zoom,cam_"
-                       "dist_m,cam_tilt_deg"));
+        QStringLiteral("time_s,updates,avg_ms,max_ms,add_avg_ms,add_max_ms,patch_adds,patch_removes,composites,"
+                       "patches,pending,max_zoom,cam_dist_m,cam_tilt_deg"));
     _captureClock.start();
     // Run the sampler directly rather than via statsEnabled: that property is
     // QML-bound to the overlay toggle, and writing it here would fight the
@@ -459,6 +574,16 @@ QString SurfacePatchModel::stopCapture()
         emit statsTextChanged();
         return QString();
     }
+
+#ifdef Q_OS_ANDROID
+    // Non-debuggable release builds hide the app cache from adb; dump the CSV
+    // to logcat so it can be pulled with: adb logcat -d -s GeoMapCapture
+    for (const QByteArray& line : data.split('\n')) {
+        if (!line.isEmpty()) {
+            __android_log_print(ANDROID_LOG_WARN, "GeoMapCapture", "%s", line.constData());
+        }
+    }
+#endif
 
     // No log output on success: the overlay shows the path, and UI tests run
     // with strict log checking. The worst-case summary makes the overlay a
@@ -504,7 +629,8 @@ void SurfacePatchModel::analyzeSurface() const
     // flattened, so comparing against real heights would be wrong)
     if (_scene && (camera->tilt() > 0.0)) {
         view.cameraGround = camera->cameraGroundPosition();
-        view.cameraHeight = camera->distance() * std::cos(qDegreesToRadians(camera->tilt()));
+        view.cameraHeight =
+            camera->centerElevation() + (camera->distance() * std::cos(qDegreesToRadians(camera->tilt())));
         view.heightScale = _scene->verticalScale();
     }
 
@@ -512,6 +638,8 @@ void SurfacePatchModel::analyzeSurface() const
         SurfaceAnalysis::analyze(_surfaceModel->patches(), SurfaceModel::kGridSize, view);
     qDebug().noquote() << report.text();  // user-triggered diagnostic: always emitted
 }
+
+// GCOVR_EXCL_STOP
 
 int SurfacePatchModel::rowCount(const QModelIndex& parent) const
 {
@@ -595,6 +723,16 @@ bool SurfacePatchModel::_fallbackAvailable(const TileMath::TileKey& key) const
 QImage SurfacePatchModel::_fallbackImage(const TileMath::TileKey& key) const
 {
     // Sharper first: composite direct children (LOD coarsening keeps their detail)
+    QImage image = _compositeFromChildren(key);
+    if (image.isNull()) {
+        // Blurrier: crop the covering region out of the nearest available ancestor
+        image = _cropFromAncestor(key);
+    }
+    return image;
+}
+
+QImage SurfacePatchModel::_compositeFromChildren(const TileMath::TileKey& key) const
+{
     bool anyChild = false;
     for (int childY = 0; (childY < 2) && !anyChild; childY++) {
         for (int childX = 0; (childX < 2) && !anyChild; childX++) {
@@ -602,27 +740,30 @@ QImage SurfacePatchModel::_fallbackImage(const TileMath::TileKey& key) const
                 _tileImages.contains(TileMath::TileKey{(key.x * 2) + childX, (key.y * 2) + childY, key.zoom + 1});
         }
     }
-    if (anyChild) {
-        constexpr int kCanvas = 256;
-        _statComposites++;
-        QImage canvas(kCanvas, kCanvas, QImage::Format_RGBA8888);
-        canvas.fill(QColor(0x3a, 0x40, 0x48));  // missing quadrants stay neutral
-        QPainter painter(&canvas);
-        for (int childY = 0; childY < 2; childY++) {
-            for (int childX = 0; childX < 2; childX++) {
-                const QImage child =
-                    _tileImages.value(TileMath::TileKey{(key.x * 2) + childX, (key.y * 2) + childY, key.zoom + 1});
-                if (!child.isNull()) {
-                    // Tile y grows south and image row 0 is north, so child y maps to top half directly
-                    painter.drawImage(QRect((childX * kCanvas) / 2, (childY * kCanvas) / 2, kCanvas / 2, kCanvas / 2),
-                                      child);
-                }
+    if (!anyChild) {
+        return {};
+    }
+    constexpr int kCanvas = 256;
+    _statComposites++;
+    QImage canvas(kCanvas, kCanvas, QImage::Format_RGBA8888);
+    canvas.fill(QColor(0x3a, 0x40, 0x48));  // missing quadrants stay neutral
+    QPainter painter(&canvas);
+    for (int childY = 0; childY < 2; childY++) {
+        for (int childX = 0; childX < 2; childX++) {
+            const QImage child =
+                _tileImages.value(TileMath::TileKey{(key.x * 2) + childX, (key.y * 2) + childY, key.zoom + 1});
+            if (!child.isNull()) {
+                // Tile y grows south and image row 0 is north, so child y maps to top half directly
+                painter.drawImage(QRect((childX * kCanvas) / 2, (childY * kCanvas) / 2, kCanvas / 2, kCanvas / 2),
+                                  child);
             }
         }
-        return canvas;
     }
+    return canvas;
+}
 
-    // Blurrier: crop the covering region out of the nearest available ancestor
+QImage SurfacePatchModel::_cropFromAncestor(const TileMath::TileKey& key) const
+{
     for (int up = 1; (up <= kMaxAncestorFallbackLevels) && ((key.zoom - up) >= 0); up++) {
         const TileMath::TileKey ancestor{key.x >> up, key.y >> up, key.zoom - up};
         const QImage image = _tileImages.value(ancestor);

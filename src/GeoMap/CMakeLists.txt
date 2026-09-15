@@ -5,12 +5,15 @@
 
 target_sources(${CMAKE_PROJECT_NAME}
     PRIVATE
+        BilinearUV.h
         ElevationTilePyramid.cc
         ElevationTilePyramid.h
         HeightField.cc
         HeightField.h
         HeightSource.cc
         HeightSource.h
+        PatchSampler.cc
+        PatchSampler.h
         SurfaceAnalysis.cc
         SurfaceAnalysis.h
         SurfaceModel.cc
@@ -35,13 +38,26 @@ qt_add_qml_module(GeoMapModule
         QtQuick
         QtQuick3D
         QtQuick3D.Helpers
+        QtQuick.Shapes
     SOURCES
         CheckerboardTextureData.cc
         CheckerboardTextureData.h
+        FenceWallGeometry.cc
+        FenceWallGeometry.h
+        FlightPathGeometry.cc
+        FlightPathGeometry.h
         GeoScene.cc
         GeoScene.h
         GeoMapCamera.cc
         GeoMapCamera.h
+        GeoMapItem.cc
+        GeoMapItem.h
+        GeoMapProjectedPath.cc
+        GeoMapProjectedPath.h
+        GeoMapSpriteLayer.cc
+        GeoMapSpriteLayer.h
+        PaperPlaneGeometry.cc
+        PaperPlaneGeometry.h
         PatchGeometry.cc
         PatchGeometry.h
         PatchTextureData.cc
@@ -50,6 +66,30 @@ qt_add_qml_module(GeoMapModule
         SurfacePatchModel.h
     QML_FILES
         GeoMap.qml
+        GeoMapADSBVehicleItem.qml
+        GeoMapCircle.qml
+        GeoMapDropLine.qml
+        GeoMapDropShadow.qml
+        GeoMapFenceWall.qml
+        GeoMapFlightPath.qml
+        GeoMapFWLandingPatternVisual.qml
+        GeoMapGeoFenceVisuals.qml
+        GeoMapLandingPatternVisuals.qml
+        GeoMapMissionArrow.qml
+        GeoMapMissionDirectionArrows.qml
+        GeoMapMissionHeightBadge.qml
+        GeoMapMissionItems.qml
+        GeoMapMissionLabel.qml
+        GeoMapMissionPath.qml
+        GeoMapPin.qml
+        GeoMapPolygon.qml
+        GeoMapSegmentArrow.qml
+        GeoMapVehicleItem.qml
+        GeoMapVTOLLandingPatternVisual.qml
+        GeoMapWaypointItem.qml
+    RESOURCES
+        shaders/flightpath.frag
+        shaders/flightpath.vert
 )
 
 target_link_libraries(GeoMapModule
@@ -58,6 +98,7 @@ target_link_libraries(GeoMapModule
         Qt6::Gui
         Qt6::Positioning
         Qt6::Qml
+        Qt6::Quick
         Qt6::Quick3D
     PRIVATE
         QGCLogging

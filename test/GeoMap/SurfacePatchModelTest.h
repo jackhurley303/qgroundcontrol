@@ -17,4 +17,10 @@ private slots:
     void _rowsAlwaysMeshedDuringLodChurn();
     void _edgeLodDeltasRoleStitchesLodRings();
     void _tileKeyAndHeightFieldExposedToDelegates();
+    void _terrainHeightAt();
+    void _surfacePickFlatMatchesPlanePick();
+    void _surfacePickLandsOnPlateau();
+    void _surfacePickOccludesGroundBehindRidge();
+    void _surfacePickSkyInvalid();
+    void _surfacePickZeroZScaleMatchesPlanePick();
 };
