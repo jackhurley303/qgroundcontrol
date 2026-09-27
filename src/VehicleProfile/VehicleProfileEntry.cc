@@ -13,7 +13,8 @@ namespace {
 
 constexpr const char* kSensorTypeKey = "type";
 constexpr const char* kSensorModelKey = "model";
-constexpr const char* kSensorNotesKey = "notes";
+constexpr const char* kBatteryCellCountKey = "cellCount";
+constexpr const char* kBatteryCapacityMahKey = "capacityMah";
 
 }  // namespace
 
@@ -69,6 +70,15 @@ QString VehicleProfileEntry::fileName() const
     return QFileInfo(_filePath).fileName();
 }
 
+QString VehicleProfileEntry::imageDataUrl() const
+{
+    const VehicleProfile::Image image = _profile.image();
+    if (!image.isValid()) {
+        return QString();
+    }
+    return QStringLiteral("data:%1;base64,%2").arg(image.mimeType, QString::fromLatin1(image.data.toBase64()));
+}
+
 void VehicleProfileEntry::setName(const QString& name)
 {
     if (name == _profile.name()) {
@@ -78,46 +88,121 @@ void VehicleProfileEntry::setName(const QString& name)
     emit profileChanged();
 }
 
-void VehicleProfileEntry::setVehicleClass(int vehicleClass)
+void VehicleProfileEntry::setManufacturer(const QString& manufacturer)
 {
-    if (vehicleClass == _profile.vehicleClass()) {
+    if (manufacturer == _profile.manufacturer()) {
         return;
     }
-    // A class outside this list would save as "Unknown", which the file format cannot load.
-    if (!VehicleProfile::vehicleClasses().contains(vehicleClass)) {
-        qCWarning(VehicleProfileEntryLog) << "Unsupported vehicle class" << vehicleClass;
-        return;
-    }
-    _profile.setVehicleClass(vehicleClass);
+    _profile.setManufacturer(manufacturer);
     emit profileChanged();
 }
 
-void VehicleProfileEntry::setLengthM(double lengthM)
+void VehicleProfileEntry::setModel(const QString& model)
 {
-    VehicleProfile::Airframe airframe = _profile.airframe();
-    airframe.lengthM = lengthM;
-    _setAirframe(airframe);
+    if (model == _profile.model()) {
+        return;
+    }
+    _profile.setModel(model);
+    emit profileChanged();
 }
 
-void VehicleProfileEntry::setWidthM(double widthM)
+void VehicleProfileEntry::setActive(bool active)
 {
-    VehicleProfile::Airframe airframe = _profile.airframe();
-    airframe.widthM = widthM;
-    _setAirframe(airframe);
+    if (active == _profile.active()) {
+        return;
+    }
+    _profile.setActive(active);
+    emit profileChanged();
 }
 
-void VehicleProfileEntry::setHeightM(double heightM)
+void VehicleProfileEntry::setMavType(int mavType)
 {
-    VehicleProfile::Airframe airframe = _profile.airframe();
-    airframe.heightM = heightM;
-    _setAirframe(airframe);
+    if (mavType == _profile.mavType()) {
+        return;
+    }
+    // A type outside this list would save with no enum name, which the file format cannot
+    // load back.
+    if (!VehicleProfile::allowedMavTypes().contains(mavType)) {
+        qCWarning(VehicleProfileEntryLog) << "Unsupported mavType" << mavType;
+        return;
+    }
+    _profile.setMavType(mavType);
+    emit profileChanged();
 }
 
 void VehicleProfileEntry::setWeightKg(double weightKg)
 {
-    VehicleProfile::Airframe airframe = _profile.airframe();
-    airframe.weightKg = weightKg;
-    _setAirframe(airframe);
+    if (weightKg == _profile.weightKg()) {
+        return;
+    }
+    _profile.setWeightKg(weightKg);
+    emit profileChanged();
+}
+
+void VehicleProfileEntry::setMaxPayloadKg(double maxPayloadKg)
+{
+    if (maxPayloadKg == _profile.maxPayloadKg()) {
+        return;
+    }
+    _profile.setMaxPayloadKg(maxPayloadKg);
+    emit profileChanged();
+}
+
+void VehicleProfileEntry::setMaxFlightTimeMinutes(int maxFlightTimeMinutes)
+{
+    if (maxFlightTimeMinutes == _profile.maxFlightTimeMinutes()) {
+        return;
+    }
+    _profile.setMaxFlightTimeMinutes(maxFlightTimeMinutes);
+    emit profileChanged();
+}
+
+void VehicleProfileEntry::setRegistrationNumber(const QString& registrationNumber)
+{
+    if (registrationNumber == _profile.registrationNumber()) {
+        return;
+    }
+    _profile.setRegistrationNumber(registrationNumber);
+    emit profileChanged();
+}
+
+void VehicleProfileEntry::setSerialNumber(const QString& serialNumber)
+{
+    if (serialNumber == _profile.serialNumber()) {
+        return;
+    }
+    _profile.setSerialNumber(serialNumber);
+    emit profileChanged();
+}
+
+QVariantList VehicleProfileEntry::batteries() const
+{
+    QVariantList batteries;
+    for (const VehicleProfile::Battery& battery : _profile.batteries()) {
+        QVariantMap batteryMap;
+        batteryMap[kBatteryCellCountKey] = battery.cellCount;
+        batteryMap[kBatteryCapacityMahKey] = battery.capacityMah;
+        batteries.append(batteryMap);
+    }
+    return batteries;
+}
+
+void VehicleProfileEntry::setBatteries(const QVariantList& batteries)
+{
+    QList<VehicleProfile::Battery> newBatteries;
+    newBatteries.reserve(batteries.size());
+    for (const QVariant& batteryVariant : batteries) {
+        const QVariantMap batteryMap = batteryVariant.toMap();
+        VehicleProfile::Battery battery;
+        battery.cellCount = batteryMap.value(kBatteryCellCountKey).toInt();
+        battery.capacityMah = batteryMap.value(kBatteryCapacityMahKey).toInt();
+        newBatteries.append(battery);
+    }
+    if (newBatteries == _profile.batteries()) {
+        return;
+    }
+    _profile.setBatteries(newBatteries);
+    emit profileChanged();
 }
 
 QVariantList VehicleProfileEntry::sensors() const
@@ -127,7 +212,6 @@ QVariantList VehicleProfileEntry::sensors() const
         QVariantMap sensorMap;
         sensorMap[kSensorTypeKey] = sensor.type;
         sensorMap[kSensorModelKey] = sensor.model;
-        sensorMap[kSensorNotesKey] = sensor.notes;
         sensors.append(sensorMap);
     }
     return sensors;
@@ -142,7 +226,6 @@ void VehicleProfileEntry::setSensors(const QVariantList& sensors)
         VehicleProfile::Sensor sensor;
         sensor.type = sensorMap.value(kSensorTypeKey).toString();
         sensor.model = sensorMap.value(kSensorModelKey).toString();
-        sensor.notes = sensorMap.value(kSensorNotesKey).toString();
         newSensors.append(sensor);
     }
     if (newSensors == _profile.sensors()) {
@@ -159,8 +242,17 @@ void VehicleProfileEntry::setFlightControllerHardware(const QString& hardware)
     _setFlightController(flightController);
 }
 
-void VehicleProfileEntry::setFlightControllerFirmware(const QString& firmware)
+void VehicleProfileEntry::setFlightControllerFirmware(int firmware)
 {
+    if (firmware == _profile.flightController().firmware) {
+        return;
+    }
+    // A value outside this list would save with no enum name, which the file format cannot
+    // load back.
+    if (!VehicleProfile::allowedFirmwareTypes().contains(firmware)) {
+        qCWarning(VehicleProfileEntryLog) << "Unsupported flightController.firmware" << firmware;
+        return;
+    }
     VehicleProfile::FlightController flightController = _profile.flightController();
     flightController.firmware = firmware;
     _setFlightController(flightController);
@@ -179,17 +271,6 @@ void VehicleProfileEntry::setNotes(const QString& notes)
         return;
     }
     _profile.setNotes(notes);
-    emit profileChanged();
-}
-
-void VehicleProfileEntry::_setAirframe(const VehicleProfile::Airframe& airframe)
-{
-    const VehicleProfile::Airframe current = _profile.airframe();
-    if (airframe.lengthM == current.lengthM && airframe.widthM == current.widthM &&
-        airframe.heightM == current.heightM && airframe.weightKg == current.weightKg) {
-        return;
-    }
-    _profile.setAirframe(airframe);
     emit profileChanged();
 }
 

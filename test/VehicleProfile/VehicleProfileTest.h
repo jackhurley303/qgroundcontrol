@@ -19,8 +19,14 @@ private slots:
     void _loadRejectsUnsupportedVersion();
     void _loadRejectsMissingRequiredField();
     void _loadAcceptsMissingOptionalField();
-    void _loadRejectsUnknownVehicleClass();
-    void _vehicleClassRoundTripsEveryClass();
+    void _loadRejectsUnknownMavType();
+    void _loadRejectsNonVehicleMavType();
+    void _mavTypeRoundTripsEveryAllowedType();
+    void _loadRejectsUnknownStatus();
+    void _loadRejectsUnknownFirmware();
+    void _firmwareRoundTripsEveryAllowedType();
+    void _dualBatteryRoundTrips();
+    void _sensorWithoutModelRoundTrips();
     void _importImageKeepsSmallImageByteForByte();
     void _importImageScalesLargeImageToLongEdge();
     void _importImageScaledWithTransparencySavesAsPng();

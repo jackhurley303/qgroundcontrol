@@ -9,11 +9,13 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QRegularExpression>
 #include <QtCore/QSaveFile>
+#include <QtCore/QVariantMap>
 #include <QtQml/QJSEngine>
 
 #include "AppSettings.h"
 #include "QGCFileWatcher.h"
 #include "QGCLoggingCategory.h"
+#include "QGCMAVLink.h"
 #include "QmlObjectListModel.h"
 #include "SettingsManager.h"
 #include "VehicleProfile.h"
@@ -203,6 +205,30 @@ bool VehicleProfileManager::deleteVehicle(VehicleProfileEntry* entry)
     _watcher->unwatchFile(filePath);
     _removeEntry(entry);
     return true;
+}
+
+QVariantList VehicleProfileManager::mavTypes()
+{
+    QVariantList types;
+    for (const QGCMAVLinkTypes::VehicleClass_t mavType : VehicleProfile::allowedMavTypes()) {
+        QVariantMap entry;
+        entry[QStringLiteral("value")] = mavType;
+        entry[QStringLiteral("text")] = QGCMAVLink::mavTypeToString(static_cast<MAV_TYPE>(mavType));
+        types.append(entry);
+    }
+    return types;
+}
+
+QVariantList VehicleProfileManager::firmwareTypes()
+{
+    QVariantList types;
+    for (const QGCMAVLinkTypes::FirmwareClass_t firmware : VehicleProfile::allowedFirmwareTypes()) {
+        QVariantMap entry;
+        entry[QStringLiteral("value")] = firmware;
+        entry[QStringLiteral("text")] = QGCMAVLink::firmwareClassToString(firmware);
+        types.append(entry);
+    }
+    return types;
 }
 
 VehicleProfileEntry* VehicleProfileManager::vehicleById(const QString& id) const

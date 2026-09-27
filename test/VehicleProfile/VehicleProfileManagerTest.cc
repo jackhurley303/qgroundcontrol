@@ -72,8 +72,7 @@ QByteArray VehicleProfileManagerTest::_vehicleJson(const QString& id, const QStr
     json["version"] = 1;
     json["id"] = id;
     json["name"] = name;
-    json["vehicleClass"] = "MultiRotor";
-    json["airframe"] = QJsonObject();
+    json["mavType"] = "MAV_TYPE_QUADROTOR";
     return QJsonDocument(json).toJson(QJsonDocument::Compact);
 }
 
@@ -196,14 +195,14 @@ void VehicleProfileManagerTest::_editSavesToOwnFile()
         QVERIFY(entry);
         id = entry->id();
 
-        entry->setVehicleClass(QGCMAVLink::VehicleClassFixedWing);
-        entry->setLengthM(1.2);
-        entry->setWidthM(2.4);
-        entry->setHeightM(0.3);
+        entry->setMavType(MAV_TYPE_FIXED_WING);
         entry->setWeightKg(3.5);
-        entry->setSensors({QVariantMap{{"type", "camera"}, {"model", "RX1"}, {"notes", "nadir"}}});
+        entry->setMaxPayloadKg(0.8);
+        entry->setMaxFlightTimeMinutes(45);
+        entry->setBatteries({QVariantMap{{"cellCount", 6}, {"capacityMah", 10000}}});
+        entry->setSensors({QVariantMap{{"type", "camera"}, {"model", "RX1"}}});
         entry->setFlightControllerHardware(QStringLiteral("Pixhawk 6C"));
-        entry->setFlightControllerFirmware(QStringLiteral("ArduPilot"));
+        entry->setFlightControllerFirmware(QGCMAVLink::FirmwareClassArduPilot);
         entry->setFlightControllerFirmwareVersion(QStringLiteral("4.5.0"));
         entry->setNotes(QStringLiteral("Spare props in the case"));
         QVERIFY(manager.saveVehicle(entry));
@@ -217,15 +216,17 @@ void VehicleProfileManagerTest::_editSavesToOwnFile()
     QCOMPARE(reloaded.vehicles()->count(), 1);
     const VehicleProfileEntry* const entry = entryAt(reloaded, 0);
     QCOMPARE(entry->id(), id);
-    QCOMPARE(entry->vehicleClass(), QGCMAVLink::VehicleClassFixedWing);
-    QCOMPARE(entry->lengthM(), 1.2);
-    QCOMPARE(entry->widthM(), 2.4);
-    QCOMPARE(entry->heightM(), 0.3);
+    QCOMPARE(entry->mavType(), static_cast<int>(MAV_TYPE_FIXED_WING));
     QCOMPARE(entry->weightKg(), 3.5);
+    QCOMPARE(entry->maxPayloadKg(), 0.8);
+    QCOMPARE(entry->maxFlightTimeMinutes(), 45);
+    QCOMPARE(entry->batteries().size(), 1);
+    QCOMPARE(entry->batteries().first().toMap().value("cellCount").toInt(), 6);
+    QCOMPARE(entry->batteries().first().toMap().value("capacityMah").toInt(), 10000);
     QCOMPARE(entry->sensors().size(), 1);
     QCOMPARE(entry->sensors().first().toMap().value("model").toString(), QStringLiteral("RX1"));
     QCOMPARE(entry->flightControllerHardware(), QStringLiteral("Pixhawk 6C"));
-    QCOMPARE(entry->flightControllerFirmware(), QStringLiteral("ArduPilot"));
+    QCOMPARE(entry->flightControllerFirmware(), static_cast<int>(QGCMAVLink::FirmwareClassArduPilot));
     QCOMPARE(entry->flightControllerFirmwareVersion(), QStringLiteral("4.5.0"));
     QCOMPARE(entry->notes(), QStringLiteral("Spare props in the case"));
 }

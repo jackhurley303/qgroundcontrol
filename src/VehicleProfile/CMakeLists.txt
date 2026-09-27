@@ -1,6 +1,6 @@
 # ============================================================================
 # Vehicle Profile Module
-# The .vehicle file format: one vehicle's saved profile (name, airframe, sensors,
+# The .vehicle file format: one vehicle's saved profile (name, mavType, batteries, sensors,
 # flight controller, image), read from and written to JSON, and the manager that
 # keeps the list of saved vehicles in the Vehicles folder.
 # ============================================================================

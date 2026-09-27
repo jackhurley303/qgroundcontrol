@@ -28,24 +28,32 @@ void VehicleProfileTest::_fullRoundTrip()
 {
     VehicleProfile profile;
     profile.setName(QStringLiteral("Survey Quad"));
-    profile.setVehicleClass(QGCMAVLink::VehicleClassMultiRotor);
+    profile.setManufacturer(QStringLiteral("DJI"));
+    profile.setModel(QStringLiteral("Matrice 350 RTK"));
+    profile.setActive(false);
+    profile.setMavType(MAV_TYPE_QUADROTOR);
+    profile.setWeightKg(1.4);
+    profile.setMaxPayloadKg(0.3);
+    profile.setMaxFlightTimeMinutes(32);
+    profile.setRegistrationNumber(QStringLiteral("N12345"));
+    profile.setSerialNumber(QStringLiteral("SN-0042"));
 
-    VehicleProfile::Airframe airframe;
-    airframe.lengthM = 0.45;
-    airframe.widthM = 0.45;
-    airframe.heightM = 0.2;
-    airframe.weightKg = 1.4;
-    profile.setAirframe(airframe);
+    VehicleProfile::Battery batteryA;
+    batteryA.cellCount = 6;
+    batteryA.capacityMah = 10000;
+    VehicleProfile::Battery batteryB;
+    batteryB.cellCount = 4;
+    batteryB.capacityMah = 5000;
+    profile.setBatteries({batteryA, batteryB});
 
     VehicleProfile::Sensor sensor;
     sensor.type = QStringLiteral("camera");
     sensor.model = QStringLiteral("Sony RX1");
-    sensor.notes = QStringLiteral("Gimbal-mounted");
     profile.setSensors({sensor});
 
     VehicleProfile::FlightController flightController;
     flightController.hardware = QStringLiteral("Pixhawk 6C");
-    flightController.firmware = QStringLiteral("PX4");
+    flightController.firmware = QGCMAVLink::FirmwareClassPX4;
     flightController.firmwareVersion = QStringLiteral("1.15.0");
     profile.setFlightController(flightController);
 
@@ -63,17 +71,25 @@ void VehicleProfileTest::_fullRoundTrip()
 
     QCOMPARE(loaded.id(), profile.id());
     QCOMPARE(loaded.name(), profile.name());
-    QCOMPARE(loaded.vehicleClass(), profile.vehicleClass());
+    QCOMPARE(loaded.manufacturer(), profile.manufacturer());
+    QCOMPARE(loaded.model(), profile.model());
+    QCOMPARE(loaded.active(), profile.active());
+    QCOMPARE(loaded.mavType(), profile.mavType());
+    QCOMPARE(loaded.weightKg(), profile.weightKg());
+    QCOMPARE(loaded.maxPayloadKg(), profile.maxPayloadKg());
+    QCOMPARE(loaded.maxFlightTimeMinutes(), profile.maxFlightTimeMinutes());
+    QCOMPARE(loaded.registrationNumber(), profile.registrationNumber());
+    QCOMPARE(loaded.serialNumber(), profile.serialNumber());
 
-    QCOMPARE(loaded.airframe().lengthM, profile.airframe().lengthM);
-    QCOMPARE(loaded.airframe().widthM, profile.airframe().widthM);
-    QCOMPARE(loaded.airframe().heightM, profile.airframe().heightM);
-    QCOMPARE(loaded.airframe().weightKg, profile.airframe().weightKg);
+    QCOMPARE(loaded.batteries().size(), 2);
+    QCOMPARE(loaded.batteries().at(0).cellCount, batteryA.cellCount);
+    QCOMPARE(loaded.batteries().at(0).capacityMah, batteryA.capacityMah);
+    QCOMPARE(loaded.batteries().at(1).cellCount, batteryB.cellCount);
+    QCOMPARE(loaded.batteries().at(1).capacityMah, batteryB.capacityMah);
 
     QCOMPARE(loaded.sensors().size(), profile.sensors().size());
     QCOMPARE(loaded.sensors().first().type, profile.sensors().first().type);
     QCOMPARE(loaded.sensors().first().model, profile.sensors().first().model);
-    QCOMPARE(loaded.sensors().first().notes, profile.sensors().first().notes);
 
     QCOMPARE(loaded.flightController().hardware, profile.flightController().hardware);
     QCOMPARE(loaded.flightController().firmware, profile.flightController().firmware);
@@ -102,8 +118,7 @@ void VehicleProfileTest::_loadRejectsWrongFileType()
     json["version"] = 1;
     json["id"] = "8f0c2d4e-0000-0000-0000-000000000000";
     json["name"] = "Test";
-    json["vehicleClass"] = "MultiRotor";
-    json["airframe"] = QJsonObject();
+    json["mavType"] = "MAV_TYPE_QUADROTOR";
 
     VehicleProfile profile;
     QString errorString;
@@ -119,8 +134,7 @@ void VehicleProfileTest::_loadRejectsUnsupportedVersion()
     json["version"] = 2;
     json["id"] = "8f0c2d4e-0000-0000-0000-000000000000";
     json["name"] = "Test";
-    json["vehicleClass"] = "MultiRotor";
-    json["airframe"] = QJsonObject();
+    json["mavType"] = "MAV_TYPE_QUADROTOR";
 
     VehicleProfile profile;
     QString errorString;
@@ -136,8 +150,7 @@ void VehicleProfileTest::_loadRejectsMissingRequiredField()
     json["version"] = 1;
     json["id"] = "8f0c2d4e-0000-0000-0000-000000000000";
     // "name" is deliberately omitted - it is required.
-    json["vehicleClass"] = "MultiRotor";
-    json["airframe"] = QJsonObject();
+    json["mavType"] = "MAV_TYPE_QUADROTOR";
 
     VehicleProfile profile;
     QString errorString;
@@ -153,9 +166,10 @@ void VehicleProfileTest::_loadAcceptsMissingOptionalField()
     json["version"] = 1;
     json["id"] = "8f0c2d4e-0000-0000-0000-000000000000";
     json["name"] = "Test";
-    json["vehicleClass"] = "MultiRotor";
-    json["airframe"] = QJsonObject();
-    // "sensors", "flightController", "notes" and "image" are all optional and deliberately
+    json["mavType"] = "MAV_TYPE_QUADROTOR";
+    // "manufacturer", "model", "status", "weightKg", "maxPayloadKg",
+    // "maxFlightTimeMinutes", "registrationNumber", "serialNumber", "batteries",
+    // "flightController", "sensors", "notes" and "image" are all optional and deliberately
     // omitted here.
 
     VehicleProfile profile;
@@ -163,20 +177,24 @@ void VehicleProfileTest::_loadAcceptsMissingOptionalField()
     QVERIFY2(profile.loadJson(QJsonDocument(json).toJson(QJsonDocument::Compact), errorString),
              qPrintable(errorString));
 
+    QVERIFY(profile.manufacturer().isEmpty());
+    QVERIFY(profile.model().isEmpty());
+    QCOMPARE(profile.active(), true);  // missing status reads as "active"
+    QCOMPARE(profile.weightKg(), 0.0);
+    QCOMPARE(profile.maxPayloadKg(), 0.0);
+    QCOMPARE(profile.maxFlightTimeMinutes(), 0);
+    QVERIFY(profile.registrationNumber().isEmpty());
+    QVERIFY(profile.serialNumber().isEmpty());
+    QVERIFY(profile.batteries().isEmpty());
     QVERIFY(profile.sensors().isEmpty());
     QVERIFY(profile.flightController().hardware.isEmpty());
-    QVERIFY(profile.flightController().firmware.isEmpty());
+    QCOMPARE(profile.flightController().firmware, QGCMAVLink::FirmwareClassGeneric);
+    QVERIFY(profile.flightController().firmwareVersion.isEmpty());
     QVERIFY(profile.notes().isEmpty());
     QVERIFY(!profile.image().isValid());
-
-    // The airframe object itself is required, but every field inside it is optional.
-    QCOMPARE(profile.airframe().lengthM, 0.0);
-    QCOMPARE(profile.airframe().widthM, 0.0);
-    QCOMPARE(profile.airframe().heightM, 0.0);
-    QCOMPARE(profile.airframe().weightKg, 0.0);
 }
 
-void VehicleProfileTest::_loadRejectsUnknownVehicleClass()
+void VehicleProfileTest::_loadRejectsUnknownMavType()
 {
     QJsonObject json;
     json["groundStation"] = "QGroundControl";
@@ -184,8 +202,7 @@ void VehicleProfileTest::_loadRejectsUnknownVehicleClass()
     json["version"] = 1;
     json["id"] = "8f0c2d4e-0000-0000-0000-000000000000";
     json["name"] = "Test";
-    json["vehicleClass"] = "Teleporter";
-    json["airframe"] = QJsonObject();
+    json["mavType"] = "MAV_TYPE_TELEPORTER";
 
     VehicleProfile profile;
     QString errorString;
@@ -193,33 +210,136 @@ void VehicleProfileTest::_loadRejectsUnknownVehicleClass()
     QVERIFY(!errorString.isEmpty());
 }
 
-void VehicleProfileTest::_vehicleClassRoundTripsEveryClass()
+void VehicleProfileTest::_loadRejectsNonVehicleMavType()
 {
-    // All eight classes vehicleClassToInternalString() names, not just the six
-    // allVehicleClasses() offers a user in the vehicle-setup UI - Airship and Spacecraft are
-    // deliberately included since they are the two a prior bug left unable to reload.
-    const QList<QGCMAVLink::VehicleClass_t> allClasses = {
-        QGCMAVLink::VehicleClassAirship, QGCMAVLink::VehicleClassFixedWing,  QGCMAVLink::VehicleClassRoverBoat,
-        QGCMAVLink::VehicleClassSub,     QGCMAVLink::VehicleClassSpacecraft, QGCMAVLink::VehicleClassMultiRotor,
-        QGCMAVLink::VehicleClassVTOL,    QGCMAVLink::VehicleClassGeneric,
-    };
+    // MAV_TYPE_GCS is a real MAV_TYPE, but not a vehicle - the file format must reject it the
+    // same way it rejects a made-up string.
+    QJsonObject json;
+    json["groundStation"] = "QGroundControl";
+    json["fileType"] = "Vehicle";
+    json["version"] = 1;
+    json["id"] = "8f0c2d4e-0000-0000-0000-000000000000";
+    json["name"] = "Test";
+    json["mavType"] = "MAV_TYPE_GCS";
 
-    for (QGCMAVLink::VehicleClass_t vehicleClass : allClasses) {
+    VehicleProfile profile;
+    QString errorString;
+    QVERIFY(!profile.loadJson(QJsonDocument(json).toJson(QJsonDocument::Compact), errorString));
+    QVERIFY(!errorString.isEmpty());
+}
+
+void VehicleProfileTest::_mavTypeRoundTripsEveryAllowedType()
+{
+    for (QGCMAVLinkTypes::VehicleClass_t mavType : VehicleProfile::allowedMavTypes()) {
         VehicleProfile profile;
-        profile.setName(QStringLiteral("Class Round Trip"));
-        profile.setVehicleClass(vehicleClass);
-
-        VehicleProfile::Airframe airframe;
-        profile.setAirframe(airframe);
+        profile.setName(QStringLiteral("MavType Round Trip"));
+        profile.setMavType(mavType);
 
         const QByteArray bytes = profile.toJson();
 
         VehicleProfile loaded;
         QString errorString;
         QVERIFY2(loaded.loadJson(bytes, errorString),
-                 qPrintable(QStringLiteral("class %1: %2").arg(vehicleClass).arg(errorString)));
-        QCOMPARE(loaded.vehicleClass(), vehicleClass);
+                 qPrintable(QStringLiteral("mavType %1: %2").arg(mavType).arg(errorString)));
+        QCOMPARE(loaded.mavType(), mavType);
     }
+}
+
+void VehicleProfileTest::_loadRejectsUnknownStatus()
+{
+    QJsonObject json;
+    json["groundStation"] = "QGroundControl";
+    json["fileType"] = "Vehicle";
+    json["version"] = 1;
+    json["id"] = "8f0c2d4e-0000-0000-0000-000000000000";
+    json["name"] = "Test";
+    json["mavType"] = "MAV_TYPE_QUADROTOR";
+    json["status"] = "retired";
+
+    VehicleProfile profile;
+    QString errorString;
+    QVERIFY(!profile.loadJson(QJsonDocument(json).toJson(QJsonDocument::Compact), errorString));
+    QVERIFY(!errorString.isEmpty());
+}
+
+void VehicleProfileTest::_loadRejectsUnknownFirmware()
+{
+    QJsonObject json;
+    json["groundStation"] = "QGroundControl";
+    json["fileType"] = "Vehicle";
+    json["version"] = 1;
+    json["id"] = "8f0c2d4e-0000-0000-0000-000000000000";
+    json["name"] = "Test";
+    json["mavType"] = "MAV_TYPE_QUADROTOR";
+    QJsonObject flightController;
+    flightController["firmware"] = "MAV_AUTOPILOT_INVENTED";
+    json["flightController"] = flightController;
+
+    VehicleProfile profile;
+    QString errorString;
+    QVERIFY(!profile.loadJson(QJsonDocument(json).toJson(QJsonDocument::Compact), errorString));
+    QVERIFY(!errorString.isEmpty());
+}
+
+void VehicleProfileTest::_firmwareRoundTripsEveryAllowedType()
+{
+    for (QGCMAVLinkTypes::FirmwareClass_t firmware : VehicleProfile::allowedFirmwareTypes()) {
+        VehicleProfile profile;
+        profile.setName(QStringLiteral("Firmware Round Trip"));
+        profile.setMavType(MAV_TYPE_QUADROTOR);
+
+        VehicleProfile::FlightController flightController;
+        flightController.firmware = firmware;
+        profile.setFlightController(flightController);
+
+        const QByteArray bytes = profile.toJson();
+
+        VehicleProfile loaded;
+        QString errorString;
+        QVERIFY2(loaded.loadJson(bytes, errorString),
+                 qPrintable(QStringLiteral("firmware %1: %2").arg(firmware).arg(errorString)));
+        QCOMPARE(loaded.flightController().firmware, firmware);
+    }
+}
+
+void VehicleProfileTest::_dualBatteryRoundTrips()
+{
+    VehicleProfile profile;
+    profile.setName(QStringLiteral("Dual Battery"));
+    profile.setMavType(MAV_TYPE_HEXAROTOR);
+
+    VehicleProfile::Battery first;
+    first.cellCount = 6;
+    first.capacityMah = 10000;
+    VehicleProfile::Battery second;
+    second.cellCount = 6;
+    second.capacityMah = 10000;
+    profile.setBatteries({first, second});
+
+    VehicleProfile loaded;
+    QString errorString;
+    QVERIFY2(loaded.loadJson(profile.toJson(), errorString), qPrintable(errorString));
+    QCOMPARE(loaded.batteries().size(), 2);
+    QCOMPARE(loaded.batteries(), profile.batteries());
+}
+
+void VehicleProfileTest::_sensorWithoutModelRoundTrips()
+{
+    VehicleProfile profile;
+    profile.setName(QStringLiteral("Bare Sensor"));
+    profile.setMavType(MAV_TYPE_QUADROTOR);
+
+    VehicleProfile::Sensor sensor;
+    sensor.type = QStringLiteral("gps");
+    // "model" is deliberately left empty - it is optional.
+    profile.setSensors({sensor});
+
+    VehicleProfile loaded;
+    QString errorString;
+    QVERIFY2(loaded.loadJson(profile.toJson(), errorString), qPrintable(errorString));
+    QCOMPARE(loaded.sensors().size(), 1);
+    QCOMPARE(loaded.sensors().first().type, QStringLiteral("gps"));
+    QVERIFY(loaded.sensors().first().model.isEmpty());
 }
 
 void VehicleProfileTest::_importImageKeepsSmallImageByteForByte()

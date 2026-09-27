@@ -7,6 +7,7 @@
 #include <QtCore/QObject>
 #include <QtCore/QSet>
 #include <QtCore/QString>
+#include <QtCore/QVariantList>
 #include <QtQmlIntegration/QtQmlIntegration>
 
 Q_DECLARE_LOGGING_CATEGORY(VehicleProfileManagerLog)
@@ -62,6 +63,18 @@ public:
 
     /// Returns the entry with this id, or nullptr.
     Q_INVOKABLE VehicleProfileEntry* vehicleById(const QString& id) const;
+
+    /// Every `mavType` the file format allows, as `{value, text}` maps for a combo box:
+    /// `value` is the QGCMAVLinkTypes::VehicleClass_t to write back with
+    /// VehicleProfileEntry::setMavType(), `text` is QGCMAVLink::mavTypeToString() for that
+    /// value.
+    Q_INVOKABLE static QVariantList mavTypes();
+
+    /// The three firmware values `flightController.firmware` can hold, as `{value, text}`
+    /// maps for a combo box: `value` is the QGCMAVLinkTypes::FirmwareClass_t to write back
+    /// with VehicleProfileEntry::setFlightControllerFirmware(), `text` is
+    /// QGCMAVLink::firmwareClassToString() for that value.
+    Q_INVOKABLE static QVariantList firmwareTypes();
 
     QmlObjectListModel* vehicles() const { return _vehicles; }
 
