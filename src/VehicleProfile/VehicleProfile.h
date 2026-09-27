@@ -42,6 +42,8 @@ public:
         QString type;   ///< required, e.g. "camera"
         QString model;  ///< optional
         QString notes;  ///< optional
+
+        bool operator==(const Sensor&) const = default;
     };
 
     /// The `airframe` object: size and weight, SI units. Every field is optional and
@@ -93,8 +95,12 @@ public:
     /// Removes the image, if any.
     void clearImage() { _image = Image(); }
 
-    /// Stable identifier set at construction and never changed by this class. QDrive's
-    /// snapshot model depends on it staying the same across a vehicle's lifetime.
+    /// Every vehicle class the file format can store: the eight classes
+    /// QGCMAVLink::vehicleClassToInternalString() names.
+    static const QList<QGCMAVLinkTypes::VehicleClass_t>& vehicleClasses();
+
+    /// Stable identifier set at construction and never changed by this class. External tools
+    /// that link a vehicle across devices depend on it staying the same for its lifetime.
     QString id() const { return _id; }
 
     QString name() const { return _name; }

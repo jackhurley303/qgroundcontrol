@@ -39,20 +39,9 @@ constexpr const char* kImageMimeTypeKey = "mimeType";
 constexpr const char* kImageDataKey = "data";
 
 /// QGCMAVLink has vehicleClassToInternalString() but no inverse - this is that inverse.
-/// QGCMAVLink::allVehicleClasses() is not the right source list here: it holds only the six
-/// classes QGC's vehicle-setup UI offers a user to pick from, and omits VehicleClassAirship
-/// and VehicleClassSpacecraft. vehicleClassToInternalString() names all eight, so a profile
-/// saved with either omitted class would write correctly and then fail to load. This list is
-/// instead every class that function names, in the same order as its switch statement, so a
-/// reader can compare the two by eye.
 bool vehicleClassFromInternalString(const QString& value, QGCMAVLinkTypes::VehicleClass_t& vehicleClass)
 {
-    static const QList<QGCMAVLink::VehicleClass_t> candidates = {
-        QGCMAVLink::VehicleClassAirship, QGCMAVLink::VehicleClassFixedWing,  QGCMAVLink::VehicleClassRoverBoat,
-        QGCMAVLink::VehicleClassSub,     QGCMAVLink::VehicleClassSpacecraft, QGCMAVLink::VehicleClassMultiRotor,
-        QGCMAVLink::VehicleClassVTOL,    QGCMAVLink::VehicleClassGeneric,
-    };
-    for (QGCMAVLink::VehicleClass_t candidate : candidates) {
+    for (QGCMAVLink::VehicleClass_t candidate : VehicleProfile::vehicleClasses()) {
         if (QGCMAVLink::vehicleClassToInternalString(candidate) == value) {
             vehicleClass = candidate;
             return true;
@@ -88,6 +77,22 @@ QString mimeTypeForImageReaderFormat(const QByteArray& format)
 VehicleProfile::VehicleProfile()
     : _id(QUuid::createUuid().toString(QUuid::WithoutBraces))
 {}
+
+/// QGCMAVLink::allVehicleClasses() is not the right source list here: it holds only the six
+/// classes QGC's vehicle-setup UI offers a user to pick from, and omits VehicleClassAirship
+/// and VehicleClassSpacecraft. vehicleClassToInternalString() names all eight, so a profile
+/// saved with either omitted class would write correctly and then fail to load. This list is
+/// instead every class that function names, in the same order as its switch statement, so a
+/// reader can compare the two by eye.
+const QList<QGCMAVLinkTypes::VehicleClass_t>& VehicleProfile::vehicleClasses()
+{
+    static const QList<QGCMAVLinkTypes::VehicleClass_t> classes = {
+        QGCMAVLink::VehicleClassAirship, QGCMAVLink::VehicleClassFixedWing,  QGCMAVLink::VehicleClassRoverBoat,
+        QGCMAVLink::VehicleClassSub,     QGCMAVLink::VehicleClassSpacecraft, QGCMAVLink::VehicleClassMultiRotor,
+        QGCMAVLink::VehicleClassVTOL,    QGCMAVLink::VehicleClassGeneric,
+    };
+    return classes;
+}
 
 bool VehicleProfile::loadJson(const QByteArray& bytes, QString& errorString)
 {
