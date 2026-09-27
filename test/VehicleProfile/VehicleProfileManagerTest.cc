@@ -1,5 +1,6 @@
 #include "VehicleProfileManagerTest.h"
 
+#include <QtCore/QDateTime>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
@@ -274,6 +275,106 @@ void VehicleProfileManagerTest::_deleteRemovesFile()
     // The watcher reports the manager's own delete; the list must not change again.
     QSignalSpy countSpy(manager.vehicles(), &QmlObjectListModel::countChanged);
     QVERIFY_NO_SIGNAL_WAIT(countSpy, TestTimeout::shortMs());
+    QCOMPARE(manager.vehicles()->count(), 1);
+}
+
+void VehicleProfileManagerTest::_revertVehicleDiscardsUnsavedEdits()
+{
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    VehicleProfileManager manager(tempDir.path());
+
+    VehicleProfileEntry* const entry = manager.createVehicle(QStringLiteral("Reverter"));
+    QVERIFY(entry);
+    entry->setNotes(QStringLiteral("saved note"));
+    entry->setWeightKg(3.0);
+    QVERIFY(manager.saveVehicle(entry));
+
+    // Edit in memory without saving - the same shape as the Settings page staging an edit
+    // onto the entry and then failing partway through Save.
+    entry->setNotes(QStringLiteral("unsaved note"));
+    entry->setWeightKg(9.0);
+    QCOMPARE(entry->notes(), QStringLiteral("unsaved note"));
+
+    QSignalSpy revertSpy(entry, &VehicleProfileEntry::profileChanged);
+    QVERIFY(manager.revertVehicle(entry));
+    QCOMPARE(revertSpy.count(), 1);
+    QCOMPARE(entry->notes(), QStringLiteral("saved note"));
+    QCOMPARE(entry->weightKg(), 3.0);
+    QCOMPARE(manager.vehicles()->count(), 1);
+
+    // The revert only read the file back - it must not change what the manager knows of the
+    // file, or the next rescan treats the file as an outside change and reloads it. A new
+    // modification time with the same bytes makes the rescan read the file and compare hashes.
+    QFile file(entry->filePath());
+    QVERIFY(file.open(QIODevice::ReadWrite));
+    const QDateTime touched = QFileInfo(file).lastModified().addSecs(60);
+    QVERIFY(file.setFileTime(touched, QFileDevice::FileModificationTime));
+    file.close();
+    QCOMPARE(QFileInfo(entry->filePath()).lastModified().toSecsSinceEpoch(), touched.toSecsSinceEpoch());
+
+    QSignalSpy rescanSpy(entry, &VehicleProfileEntry::profileChanged);
+    manager.setFolder(manager.folder());
+    QCOMPARE(rescanSpy.count(), 0);
+    QCOMPARE(entry->notes(), QStringLiteral("saved note"));
+}
+
+void VehicleProfileManagerTest::_revertVehicleRejectsEntryNotInList()
+{
+    QTemporaryDir otherDir;
+    QVERIFY(otherDir.isValid());
+    VehicleProfileManager otherManager(otherDir.path());
+    VehicleProfileEntry* const foreignEntry = otherManager.createVehicle(QStringLiteral("Foreign"));
+    QVERIFY(foreignEntry);
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    VehicleProfileManager manager(tempDir.path());
+
+    expectLogMessage(kManagerLogCategory, QtWarningMsg,
+                     QRegularExpression(QStringLiteral("Not a vehicle in this list")));
+    QVERIFY(!manager.revertVehicle(foreignEntry));
+    verifyExpectedLogMessage();
+
+    expectLogMessage(kManagerLogCategory, QtWarningMsg,
+                     QRegularExpression(QStringLiteral("Not a vehicle in this list")));
+    QVERIFY(!manager.revertVehicle(nullptr));
+    verifyExpectedLogMessage();
+}
+
+void VehicleProfileManagerTest::_revertVehicleFailsWhenFileUnreadable()
+{
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    VehicleProfileManager manager(tempDir.path());
+
+    VehicleProfileEntry* const entry = manager.createVehicle(QStringLiteral("Unreadable"));
+    QVERIFY(entry);
+    entry->setNotes(QStringLiteral("saved note"));
+    entry->setWeightKg(3.0);
+    QVERIFY(manager.saveVehicle(entry));
+
+    entry->setNotes(QStringLiteral("unsaved note"));
+    entry->setWeightKg(9.0);
+    QSignalSpy profileSpy(entry, &VehicleProfileEntry::profileChanged);
+
+    // A file that no longer parses.
+    QVERIFY(_writeInPlace(entry->filePath(), QByteArrayLiteral("{ this is not json")));
+    expectLogMessage(kManagerLogCategory, QtWarningMsg, QRegularExpression(QStringLiteral("Unable to revert")));
+    QVERIFY(!manager.revertVehicle(entry));
+    verifyExpectedLogMessage();
+    QCOMPARE(profileSpy.count(), 0);
+    QCOMPARE(entry->notes(), QStringLiteral("unsaved note"));
+    QCOMPARE(entry->weightKg(), 9.0);
+
+    // A file that is gone. The manager has not rescanned yet, so the entry is still listed.
+    QVERIFY(QFile::remove(entry->filePath()));
+    expectLogMessage(kManagerLogCategory, QtWarningMsg, QRegularExpression(QStringLiteral("Unable to revert")));
+    QVERIFY(!manager.revertVehicle(entry));
+    verifyExpectedLogMessage();
+    QCOMPARE(profileSpy.count(), 0);
+    QCOMPARE(entry->notes(), QStringLiteral("unsaved note"));
+    QCOMPARE(entry->weightKg(), 9.0);
     QCOMPARE(manager.vehicles()->count(), 1);
 }
 

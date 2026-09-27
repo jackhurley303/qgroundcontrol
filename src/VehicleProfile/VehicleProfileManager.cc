@@ -207,6 +207,28 @@ bool VehicleProfileManager::deleteVehicle(VehicleProfileEntry* entry)
     return true;
 }
 
+bool VehicleProfileManager::revertVehicle(VehicleProfileEntry* entry)
+{
+    if (!entry || !_vehicles->contains(entry)) {
+        qCWarning(VehicleProfileManagerLog) << "Not a vehicle in this list:" << entry;
+        return false;
+    }
+
+    // Read-only, deliberately: entry's file already holds what _knownFiles last saw (nothing
+    // wrote to it since), so this must not insert into _knownFiles - there is nothing to
+    // update, and doing so anyway would be the only way this could make a later rescan see a
+    // spurious outside change.
+    VehicleProfile profile;
+    FileState state;
+    QString errorString;
+    if (!_readFile(entry->filePath(), profile, state, errorString)) {
+        qCWarning(VehicleProfileManagerLog) << "Unable to revert" << entry->filePath() << "-" << errorString;
+        return false;
+    }
+
+    return entry->replaceProfile(profile);
+}
+
 QVariantList VehicleProfileManager::mavTypes()
 {
     QVariantList types;

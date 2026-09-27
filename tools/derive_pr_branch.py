@@ -612,6 +612,12 @@ VEHICLE_PROFILES = PRSpec(
         "test/VehicleProfile/CMakeLists.txt",
         "src/CMakeLists.txt",
         "test/CMakeLists.txt",
+        # V4: the Settings -> Vehicles page. SettingsPages.json and src/AppSettings/CMakeLists.txt
+        # are also in PLUGIN_SDK's include_paths (not stacked with this spec) - flagged for V5,
+        # same as the src/CMakeLists.txt / test/CMakeLists.txt overlap above.
+        "src/AppSettings/VehicleProfileSettings.qml",
+        "src/AppSettings/pages/SettingsPages.json",
+        "src/AppSettings/CMakeLists.txt",
     ),
 )
 

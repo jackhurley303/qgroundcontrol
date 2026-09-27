@@ -61,6 +61,14 @@ public:
     /// on failure.
     Q_INVOKABLE bool deleteVehicle(VehicleProfileEntry* entry);
 
+    /// Discards every unsaved edit on `entry` by reading its own file back from disk, the way
+    /// a rescan reloads a file changed outside QGC. Used to undo a partly-applied edit (for
+    /// example a Save that wrote its staged fields to the entry, then failed to write the file)
+    /// when the user cancels instead of retrying. Returns false and logs a warning, changing
+    /// nothing, if `entry` is not in this list or its file cannot be read. Read-only: never
+    /// touches the file, so it never changes what the next rescan sees.
+    Q_INVOKABLE bool revertVehicle(VehicleProfileEntry* entry);
+
     /// Returns the entry with this id, or nullptr.
     Q_INVOKABLE VehicleProfileEntry* vehicleById(const QString& id) const;
 

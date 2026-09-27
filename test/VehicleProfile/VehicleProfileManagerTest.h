@@ -21,6 +21,9 @@ private slots:
     void _editSavesToOwnFile();
     void _renameKeepsFileName();
     void _deleteRemovesFile();
+    void _revertVehicleDiscardsUnsavedEdits();
+    void _revertVehicleRejectsEntryNotInList();
+    void _revertVehicleFailsWhenFileUnreadable();
     void _ownSaveIsNotAnOutsideChange();
     void _brokenFileSkippedWithWarning();
     void _outsideAddAppears();

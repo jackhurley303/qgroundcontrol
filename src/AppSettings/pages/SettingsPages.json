@@ -21,6 +21,11 @@
             "pageDefinition": "PlanView.SettingsUI.json"
         },
         {
+            "name": "Vehicles",
+            "qml": "VehicleProfileSettings.qml",
+            "icon": "qrc:/InstrumentValueIcons/drone.svg"
+        },
+        {
             "divider": true
         },
         {
