@@ -61,6 +61,7 @@ public:
     static constexpr const char *clearSettingsNextBootKey = "clearSettingsNextBoot";
 
     Q_PROPERTY(QString missionSavePath          READ missionSavePath            NOTIFY savePathsChanged)
+    Q_PROPERTY(QString vehicleSavePath READ vehicleSavePath NOTIFY savePathsChanged)
     Q_PROPERTY(QString parameterSavePath        READ parameterSavePath          NOTIFY savePathsChanged)
     Q_PROPERTY(QString telemetrySavePath        READ telemetrySavePath          NOTIFY savePathsChanged)
     Q_PROPERTY(QString logSavePath              READ logSavePath                NOTIFY savePathsChanged)
@@ -82,6 +83,7 @@ public:
 
 
     QString missionSavePath       ();
+    QString vehicleSavePath();
     QString parameterSavePath     ();
     QString telemetrySavePath     ();
     QString logSavePath           ();
@@ -111,6 +113,7 @@ public:
     static constexpr const char* parameterDirectory =       QT_TRANSLATE_NOOP("AppSettings", "Parameters");
     static constexpr const char* telemetryDirectory =       QT_TRANSLATE_NOOP("AppSettings", "Telemetry");
     static constexpr const char* missionDirectory =         QT_TRANSLATE_NOOP("AppSettings", "Missions");
+    static constexpr const char* vehicleDirectory = QT_TRANSLATE_NOOP("AppSettings", "Vehicles");
     static constexpr const char* logDirectory =             QT_TRANSLATE_NOOP("AppSettings", "Logs");
     static constexpr const char* videoDirectory =           QT_TRANSLATE_NOOP("AppSettings", "Video");
     static constexpr const char* photoDirectory =           QT_TRANSLATE_NOOP("AppSettings", "Photo");

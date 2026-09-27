@@ -1,5 +1,9 @@
 #include "AppSettingsTest.h"
 
+#include <QtCore/QDir>
+#include <QtCore/QScopeGuard>
+#include <QtCore/QTemporaryDir>
+
 #include "AppSettings.h"
 #include "FirmwarePluginManager.h"
 #include "QGCMAVLink.h"
@@ -15,6 +19,40 @@ void AppSettingsTest::_preferredFirmwareClassEnumFiltered()
 void AppSettingsTest::_offlineEditingFirmwareClassEnumFiltered()
 {
     _verifyFirmwareClassEnumFiltered(SettingsManager::instance()->appSettings()->offlineEditingFirmwareClass());
+}
+
+void AppSettingsTest::_vehicleSaveFolderExistsOnStart()
+{
+    // The running instance already applied its boot-time save path before this test function
+    // runs, so the Vehicles folder must already exist under it - this is what "on start" means.
+    AppSettings* const appSettings = SettingsManager::instance()->appSettings();
+    QVERIFY(appSettings);
+
+    const QString vehicleSavePath = appSettings->vehicleSavePath();
+    QVERIFY(!vehicleSavePath.isEmpty());
+    QVERIFY2(QDir(vehicleSavePath).exists(), qPrintable(vehicleSavePath));
+}
+
+void AppSettingsTest::_vehicleSaveFolderCreatedAfterSavePathChange()
+{
+    AppSettings* const appSettings = SettingsManager::instance()->appSettings();
+    QVERIFY(appSettings);
+
+    // QTemporaryDir both creates the directory and removes it (and everything under it,
+    // including the Vehicles folder this test verifies) when it goes out of scope.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    Fact* const savePathFact = appSettings->savePath();
+    QVERIFY(savePathFact);
+    const QVariant originalSavePath = savePathFact->rawValue();
+    const auto guard = qScopeGuard([savePathFact, originalSavePath] { savePathFact->setRawValue(originalSavePath); });
+
+    savePathFact->setRawValue(tempDir.path());
+
+    const QString vehicleSavePath = appSettings->vehicleSavePath();
+    QVERIFY(!vehicleSavePath.isEmpty());
+    QVERIFY2(QDir(vehicleSavePath).exists(), qPrintable(vehicleSavePath));
 }
 
 void AppSettingsTest::_verifyFirmwareClassEnumFiltered(Fact *fact)

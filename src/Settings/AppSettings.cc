@@ -287,6 +287,7 @@ void AppSettings::_checkSavePathDirectories(void)
         QGCFileHelper::ensureDirectoryExists(QGCFileHelper::joinPath(savePath, parameterDirectory));
         QGCFileHelper::ensureDirectoryExists(QGCFileHelper::joinPath(savePath, telemetryDirectory));
         QGCFileHelper::ensureDirectoryExists(QGCFileHelper::joinPath(savePath, missionDirectory));
+        QGCFileHelper::ensureDirectoryExists(QGCFileHelper::joinPath(savePath, vehicleDirectory));
         QGCFileHelper::ensureDirectoryExists(QGCFileHelper::joinPath(savePath, logDirectory));
         QGCFileHelper::ensureDirectoryExists(QGCFileHelper::joinPath(savePath, videoDirectory));
         QGCFileHelper::ensureDirectoryExists(QGCFileHelper::joinPath(savePath, photoDirectory));
@@ -319,6 +320,11 @@ void AppSettings::_indoorPaletteChanged(void)
 QString AppSettings::missionSavePath(void)
 {
     return _childSavePath(missionDirectory);
+}
+
+QString AppSettings::vehicleSavePath(void)
+{
+    return _childSavePath(vehicleDirectory);
 }
 
 QString AppSettings::parameterSavePath(void)

@@ -576,6 +576,24 @@ MOCKLINK_BYTESSENT = PRSpec(
     include_paths=("src/Comms/MockLink/MockLink.cc",),
 )
 
+# Stock QGC gains a vehicle library (name, image, airframe, sensors, flight controller, notes),
+# one `.vehicle` JSON file per vehicle under a new `Vehicles` save folder — routing rule 1, a
+# stock-QGC capability with no plugin loaded. Builds up over several units
+# (~/.claude/local/qgroundcontrol/plans/vehicles.md); V1 only adds the save folder itself,
+# mirroring the existing `missionDirectory` entries. Shares no file with any other spec.
+VEHICLE_PROFILES = PRSpec(
+    branch="upstream-pr-vehicle-profiles",
+    source_ref="upstream/master",
+    mainline_ref="plugin-infrastructure-with-qdrive",
+    commit_subject="feat(Settings): add a Vehicles save folder",
+    include_paths=(
+        "src/Settings/AppSettings.h",
+        "src/Settings/AppSettings.cc",
+        "test/Settings/AppSettingsTest.h",
+        "test/Settings/AppSettingsTest.cc",
+    ),
+)
+
 SPECS: dict[str, PRSpec] = {
     "plugin-sdk": PLUGIN_SDK,
     "replay-fidelity": REPLAY_FIDELITY,
@@ -583,6 +601,7 @@ SPECS: dict[str, PRSpec] = {
     "media-backend": MEDIA_BACKEND,
     "initial-connect-skip": INITIAL_CONNECT_SKIP,
     "mocklink-bytessent": MOCKLINK_BYTESSENT,
+    "vehicle-profiles": VEHICLE_PROFILES,
 }
 
 
