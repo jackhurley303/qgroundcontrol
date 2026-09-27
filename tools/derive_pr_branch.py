@@ -580,7 +580,14 @@ MOCKLINK_BYTESSENT = PRSpec(
 # one `.vehicle` JSON file per vehicle under a new `Vehicles` save folder — routing rule 1, a
 # stock-QGC capability with no plugin loaded. Builds up over several units
 # (~/.claude/local/qgroundcontrol/plans/vehicles.md); V1 only adds the save folder itself,
-# mirroring the existing `missionDirectory` entries. Shares no file with any other spec.
+# mirroring the existing `missionDirectory` entries.
+#
+# V2 adds `src/CMakeLists.txt` and `test/CMakeLists.txt` to register the new VehicleProfile
+# module and its test — the one file this spec is not free of: both are also in PLUGIN_SDK's
+# include_paths (not stacked with this spec). A wholesale checkout of either file pulls in
+# every fork addition to it, not just this spec's one `add_subdirectory` line each. Flagged
+# for V5 (derive + verify) rather than resolved here, per that unit's "fixes only if the
+# derive finds a gap" scope.
 VEHICLE_PROFILES = PRSpec(
     branch="upstream-pr-vehicle-profiles",
     source_ref="upstream/master",
@@ -591,6 +598,14 @@ VEHICLE_PROFILES = PRSpec(
         "src/Settings/AppSettings.cc",
         "test/Settings/AppSettingsTest.h",
         "test/Settings/AppSettingsTest.cc",
+        "src/VehicleProfile/VehicleProfile.h",
+        "src/VehicleProfile/VehicleProfile.cc",
+        "src/VehicleProfile/CMakeLists.txt",
+        "test/VehicleProfile/VehicleProfileTest.h",
+        "test/VehicleProfile/VehicleProfileTest.cc",
+        "test/VehicleProfile/CMakeLists.txt",
+        "src/CMakeLists.txt",
+        "test/CMakeLists.txt",
     ),
 )
 
