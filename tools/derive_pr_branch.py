@@ -585,14 +585,13 @@ MOCKLINK_BYTESSENT = PRSpec(
 # V2 adds `src/CMakeLists.txt` and `test/CMakeLists.txt` to register the new VehicleProfile
 # module and its test — the one file this spec is not free of: both are also in PLUGIN_SDK's
 # include_paths (not stacked with this spec). A wholesale checkout of either file pulls in
-# every fork addition to it, not just this spec's one `add_subdirectory` line each. Flagged
-# for V5 (derive + verify) rather than resolved here, per that unit's "fixes only if the
-# derive finds a gap" scope.
+# every fork addition to it, not just this spec's one `add_subdirectory` line each. Resolved
+# at submission, before the first derive — a human decision, not something a derive discovers.
 VEHICLE_PROFILES = PRSpec(
     branch="upstream-pr-vehicle-profiles",
     source_ref="upstream/master",
     mainline_ref="plugin-infrastructure-with-qdrive",
-    commit_subject="feat(Settings): add a Vehicles save folder",
+    commit_subject="feat(VehicleProfile): add a vehicle library and Settings page",
     include_paths=(
         "src/Settings/AppSettings.h",
         "src/Settings/AppSettings.cc",
@@ -613,8 +612,8 @@ VEHICLE_PROFILES = PRSpec(
         "src/CMakeLists.txt",
         "test/CMakeLists.txt",
         # V4: the Settings -> Vehicles page. SettingsPages.json and src/AppSettings/CMakeLists.txt
-        # are also in PLUGIN_SDK's include_paths (not stacked with this spec) - flagged for V5,
-        # same as the src/CMakeLists.txt / test/CMakeLists.txt overlap above.
+        # are also in PLUGIN_SDK's include_paths (not stacked with this spec) - resolved at
+        # submission, before the first derive, same as the overlap above.
         "src/AppSettings/VehicleProfileSettings.qml",
         "src/AppSettings/pages/SettingsPages.json",
         "src/AppSettings/CMakeLists.txt",
