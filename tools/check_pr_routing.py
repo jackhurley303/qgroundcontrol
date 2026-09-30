@@ -8,7 +8,7 @@ tree blocks). This script checks the same failure classes without touching the w
 tree or switching branches at all, so it is safe to run anytime, including with an
 uncommitted edit to `derive_pr_branch.py` itself sitting in the tree.
 
-Five checks, all on by default:
+Six checks, all on by default:
 
   1. **Routing coverage** — base-app paths changed since `--since` (default: the fork's
      merge-base with `upstream/master`, i.e. every fork commit) that no spec's
@@ -25,7 +25,11 @@ Five checks, all on by default:
   4. **Seam consumers** — delegated straight to `derive_pr_branch.check_seam_consumers`,
      which already greps `mainline_ref` and so needs no branch either. Guards the worst
      failure mode: a branch that compiles, tests green, and does nothing.
-  5. **Style** — clang-format drift in routed files the fork authored, advisory only.
+  5. **Shared paths** — a path two specs both take whole, where neither is stacked on the
+     other. Each derived branch then carries the other spec's lines in that file, and an
+     `add_subdirectory` of a folder the branch lacks fails configure. Passes once every
+     spec sharing the path strips the other's lines with `doc_rewrites`.
+  6. **Style** — clang-format drift in routed files the fork authored, advisory only.
 
 Not covered here: `check_source_reverts` (staleness vs `upstream/master`). That one is
 inherently about the derived branch's base, is expected to be dirty mid-stream, and is
@@ -35,7 +39,7 @@ are derived ones whose subjects come from each spec's `commit_subject`/`commit_g
 asserted at import in `derive_pr_branch`. A mainline commit is not in a PR — only its
 content is, re-committed under the spec's subject — so mainline subjects are unconstrained.
 
-Exit 0 if all five are clean; exit 1 and print every finding otherwise. Advisory by
+Exit 0 if all six are clean; exit 1 and print every finding otherwise. Advisory by
 design — like `check_source_reverts`, this is a pre-flight, not a submission gate.
 
 Usage:
@@ -119,6 +123,20 @@ _MAINLINE_ONLY = (
 # open questions with a recorded answer, so they stay visible: the audit prints them every
 # run and only stops counting them as failures.
 _DEFERRED_ROUTING: dict[str, str] = {}
+
+# Shared by specs that are not stacked, with the split decided but not yet written. Like
+# _DEFERRED_ROUTING, the audit prints these every run and only stops counting them as
+# failures, so a known gap does not block every base-app commit's routing pre-flight.
+_SPLIT_AFTER_SYNC = (
+    "plugin-sdk and vehicle-profiles each add lines here. Strip the other spec's lines with "
+    "doc_rewrites in both before the next derive of either"
+)
+_SHARED_BY_DECISION: dict[str, str] = {
+    "src/CMakeLists.txt": _SPLIT_AFTER_SYNC,
+    "test/CMakeLists.txt": _SPLIT_AFTER_SYNC,
+    "src/AppSettings/CMakeLists.txt": _SPLIT_AFTER_SYNC,
+    "src/AppSettings/pages/SettingsPages.json": _SPLIT_AFTER_SYNC,
+}
 
 
 def check_routing_coverage(mainline_ref: str, since: str, repo_root: Path) -> bool:
@@ -228,6 +246,78 @@ def check_doc_rewrites(mainline_ref: str, repo_root: Path) -> bool:
 
     if ok:
         log_ok("every doc_rewrite still matches its target file")
+    return ok
+
+
+def _stack(name: str, specs: dict[str, PRSpec]) -> set[str]:
+    """The spec plus every spec beneath it, following `source_ref` down the stack."""
+    by_branch = {spec.branch: spec_name for spec_name, spec in specs.items()}
+    stack = {name}
+    while (base := by_branch.get(specs[name].source_ref)) and base not in stack:
+        stack.add(base)
+        name = base
+    return stack
+
+
+def unstacked_shared_paths(specs: dict[str, PRSpec]) -> dict[str, tuple[str, ...]]:
+    """Each path two unstacked specs both cover, mapped to the specs that cover it.
+
+    A directory in one spec and a file under it in another share the file, so the more
+    specific of the two paths is the one reported.
+    """
+    shared: dict[str, set[str]] = {}
+    names = sorted(specs)
+    for i, a in enumerate(names):
+        for b in names[i + 1 :]:
+            if a in _stack(b, specs) or b in _stack(a, specs):
+                continue
+            paths_a = specs[a].include_paths + specs[a].patch_paths
+            paths_b = specs[b].include_paths + specs[b].patch_paths
+            for pa in paths_a:
+                for pb in paths_b:
+                    if _is_covered(pa, (pb,)) or _is_covered(pb, (pa,)):
+                        shared.setdefault(max(pa, pb, key=len), set()).update((a, b))
+    return {path: tuple(sorted(owners)) for path, owners in shared.items()}
+
+
+def check_shared_paths(
+    specs: dict[str, PRSpec] = SPECS, decided: dict[str, str] = _SHARED_BY_DECISION
+) -> bool:
+    """Flag a file two unstacked specs both carry, so each branch gets both specs' lines.
+
+    Stacking makes sharing sound: the upper branch is meant to hold both specs' lines. Two
+    siblings cut from `upstream_ref` have no such branch. An include_paths entry takes the
+    file whole, and a patch_paths entry applies the fork's whole delta on it, so either way
+    each sibling gets the other's lines. The check accepts a doc_rewrites entry for the path
+    in every spec sharing it as the split. Whether the rewrite removes the right lines is
+    proved only by building the derived branch.
+
+    doc_rewrites are keyed by file, so a directory both specs take can never pass that way.
+    Stack those specs instead.
+    """
+    log_step("paths shared by specs that are not stacked")
+    ok = True
+    split = 0
+    deferred = 0
+    for path, owners in sorted(unstacked_shared_paths(specs).items()):
+        if all(rewrites_for(specs[name], path) for name in owners):
+            split += 1
+            continue
+        if path in decided:
+            deferred += 1
+            log_info(f"deferred: {path} ({', '.join(owners)}) — {decided[path]}")
+            continue
+        ok = False
+        log_error(
+            f"{path} is carried by {', '.join(owners)}, which are not stacked — each derived "
+            f"branch gets the other's lines. Stack the specs, split each file with doc_rewrites, "
+            f"or record a decision"
+        )
+
+    if ok:
+        log_ok(
+            f"no unsplit shared paths ({split} split by doc_rewrites, {deferred} deferred by decision)"
+        )
     return ok
 
 
@@ -421,6 +511,7 @@ def main() -> int:
         check_forbidden_terms(mainline_ref, repo_root),
         check_doc_rewrites(mainline_ref, repo_root),
         check_seams(repo_root),
+        check_shared_paths(),
         check_style(mainline_ref, repo_root),
     ]
 

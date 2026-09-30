@@ -11,11 +11,14 @@ from check_pr_routing import (
     _DEFERRED_ROUTING,
     _MAINLINE_ONLY,
     _ROUTING_EXEMPT,
+    _SHARED_BY_DECISION,
     _is_covered,
     _mainline_covered_paths,
     apply_doc_rewrites,
+    check_shared_paths,
     check_worktree,
     rewrites_for,
+    unstacked_shared_paths,
 )
 from derive_pr_branch import (
     CONVENTIONAL_SUBJECT,
@@ -436,3 +439,112 @@ class TestCheckWorktree:
 
     def test_a_missing_file_is_not_a_failure(self, tmp_path):
         assert check_worktree(["src/DeletedSinceEdit.h"], tmp_path) is True
+
+
+class TestSharedPaths:
+    """Two sibling specs taking one file whole each get the other's lines in it.
+
+    The 2026-09-30 defect: vehicle-profiles and plugin-sdk both took `src/CMakeLists.txt`,
+    so each derived branch would `add_subdirectory` a folder it does not carry, and the
+    audit still reported clean.
+    """
+
+    @staticmethod
+    def _spec(branch, source_ref, paths, rewrites=()):
+        return PRSpec(
+            branch=branch,
+            source_ref=source_ref,
+            mainline_ref="mainline",
+            include_paths=paths,
+            commit_subject="fix: scratch",
+            doc_rewrites=rewrites,
+        )
+
+    def test_real_specs_share_exactly_the_recorded_files(self):
+        shared = unstacked_shared_paths(SPECS)
+        assert sorted(shared) == sorted(_SHARED_BY_DECISION)
+        for owners in shared.values():
+            assert owners == ("plugin-sdk", "vehicle-profiles")
+
+    def test_real_specs_fail_without_the_recorded_decision(self):
+        assert check_shared_paths(SPECS, decided={}) is False
+
+    def test_real_specs_pass_with_the_recorded_decision(self):
+        assert check_shared_paths(SPECS) is True
+
+    def test_stacked_specs_may_share_a_file(self):
+        """plugin-sdk sits on replay-fidelity; their 16 shared files are sound by design."""
+        shared = unstacked_shared_paths(SPECS)
+        assert "src/Comms/LogReplayLink.h" not in shared
+
+    def test_siblings_sharing_a_file_fail(self):
+        specs = {
+            "a": self._spec("upstream-pr-a", "upstream/master", ("src/CMakeLists.txt",)),
+            "b": self._spec("upstream-pr-b", "upstream/master", ("src/CMakeLists.txt",)),
+        }
+        assert unstacked_shared_paths(specs) == {"src/CMakeLists.txt": ("a", "b")}
+        assert check_shared_paths(specs, decided={}) is False
+
+    def test_a_directory_and_a_file_under_it_share_the_file(self):
+        specs = {
+            "a": self._spec("upstream-pr-a", "upstream/master", ("src/Thing",)),
+            "b": self._spec("upstream-pr-b", "upstream/master", ("src/Thing/Thing.cc",)),
+        }
+        assert unstacked_shared_paths(specs) == {"src/Thing/Thing.cc": ("a", "b")}
+
+    def test_a_spec_stacked_on_another_may_share_its_file(self):
+        specs = {
+            "low": self._spec("upstream-pr-low", "upstream/master", ("src/CMakeLists.txt",)),
+            "top": self._spec("upstream-pr-top", "upstream-pr-low", ("src/CMakeLists.txt",)),
+        }
+        assert unstacked_shared_paths(specs) == {}
+
+    def test_patch_paths_count_as_sharing(self):
+        """A sibling's patch is the fork's whole delta on the file, the other spec's included."""
+        specs = {
+            "a": self._spec("upstream-pr-a", "upstream/master", ("src/Other.cc",)),
+            "b": self._spec("upstream-pr-b", "upstream/master", ("src/Else.cc",)),
+        }
+        specs["a"] = dataclasses.replace(specs["a"], patch_paths=("src/CMakeLists.txt",))
+        specs["b"] = dataclasses.replace(specs["b"], patch_paths=("src/CMakeLists.txt",))
+        assert unstacked_shared_paths(specs) == {"src/CMakeLists.txt": ("a", "b")}
+
+    def test_stacking_through_a_middle_spec_counts(self):
+        specs = {
+            "low": self._spec("upstream-pr-low", "upstream/master", ("src/CMakeLists.txt",)),
+            "mid": self._spec("upstream-pr-mid", "upstream-pr-low", ("src/Other.cc",)),
+            "top": self._spec("upstream-pr-top", "upstream-pr-mid", ("src/CMakeLists.txt",)),
+        }
+        assert unstacked_shared_paths(specs) == {}
+
+    PATH = "src/CMakeLists.txt"
+    DROP_B = ((PATH, (("add_subdirectory(B)\n", ""),)),)
+    DROP_A = ((PATH, (("add_subdirectory(A)\n", ""),)),)
+
+    def test_rewrites_in_every_sharing_spec_count_as_the_split(self):
+        specs = {
+            "a": self._spec("upstream-pr-a", "upstream/master", (self.PATH,), self.DROP_B),
+            "b": self._spec("upstream-pr-b", "upstream/master", (self.PATH,), self.DROP_A),
+        }
+        assert rewrites_for(specs["a"], self.PATH) == (("add_subdirectory(B)\n", ""),)
+        assert check_shared_paths(specs, decided={}) is True
+
+    def test_a_rewrite_in_only_one_spec_still_fails(self):
+        specs = {
+            "a": self._spec("upstream-pr-a", "upstream/master", (self.PATH,), self.DROP_B),
+            "b": self._spec("upstream-pr-b", "upstream/master", (self.PATH,)),
+        }
+        assert check_shared_paths(specs, decided={}) is False
+
+    def test_every_decision_records_a_reason(self):
+        for path, reason in _SHARED_BY_DECISION.items():
+            assert reason.strip(), f"{path} is deferred with no recorded reason"
+
+    def test_no_decision_outlives_its_split(self):
+        """Once every sharing spec has its rewrites, the deferral is stale — delete it."""
+        shared = unstacked_shared_paths(SPECS)
+        for path in _SHARED_BY_DECISION:
+            assert path in shared, f"{path} is no longer shared; remove it from _SHARED_BY_DECISION"
+            assert not all(rewrites_for(SPECS[name], path) for name in shared[path]), (
+                f"{path} is split by doc_rewrites; remove it from _SHARED_BY_DECISION"
+            )
