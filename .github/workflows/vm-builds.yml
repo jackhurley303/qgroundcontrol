@@ -42,9 +42,8 @@ jobs:
     # store, image mirrors); informational only, never gate the PR on it.
     continue-on-error: true
     # Keep 16 GiB for the 12 GiB guest plus host overhead, with nested-virt (/dev/kvm).
-    # Public-repo runner definitions come from master; PRs validate on the hosted KVM runner.
     runs-on: >-
-      ${{ github.repository_owner == 'mavlink' && github.event_name != 'pull_request' &&
+      ${{ github.repository_owner == 'mavlink' &&
           format('runs-on={0}/runner=linux-x64-vm-builder', github.run_id) || 'ubuntu-latest' }}
     timeout-minutes: 120
     steps:
@@ -112,7 +111,7 @@ jobs:
     # informational only, never gate the PR on it.
     continue-on-error: true
     runs-on: >-
-      ${{ github.repository_owner == 'mavlink' && github.event_name != 'pull_request' &&
+      ${{ github.repository_owner == 'mavlink' &&
           format('runs-on={0}/runner=linux-x64-vm-builder', github.run_id) || 'ubuntu-latest' }}
     timeout-minutes: 180
     steps:
@@ -143,9 +142,13 @@ jobs:
 
       - name: Install Vagrant + libvirt
         run: |
+          set -o pipefail
           # Ubuntu 24.04 (noble) dropped the `vagrant` package from its repos, so
           # pull it from HashiCorp's official apt repo (which publishes for noble).
-          wget -qO- https://apt.releases.hashicorp.com/gpg \
+          curl --fail --show-error --silent --location \
+            --retry 5 --retry-delay 2 --retry-max-time 120 \
+            --connect-timeout 10 --max-time 30 \
+            https://apt.releases.hashicorp.com/gpg \
             | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" \
             | sudo tee /etc/apt/sources.list.d/hashicorp.list
@@ -164,6 +167,7 @@ jobs:
         run: vagrant validate --ignore-provider
 
       - name: Build QGC in Vagrant VM
+        id: build
         working-directory: deploy/vagrant
         env:
           QGC_CI: '1'
@@ -192,6 +196,6 @@ jobs:
           if-no-files-found: error
 
       - name: Destroy VM
-        if: always()
+        if: ${{ always() && steps.build.outcome != 'skipped' && steps.build.outcome != '' }}
         working-directory: deploy/vagrant
-        run: sg libvirt -c 'vagrant destroy -f' || true
+        run: sg libvirt -c 'vagrant destroy -f'

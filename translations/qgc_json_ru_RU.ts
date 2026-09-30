@@ -4680,128 +4680,128 @@
       <extracomment>.QGC.MetaData.Facts[calibrated].shortDesc, .QGC.MetaData.Facts[calibrated].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Joystick calibrated</source>
-      <translation type="unfinished">Joystick calibrated</translation>
+      <translation>Джойстик откалиброван</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[circleCorrection].shortDesc, .QGC.MetaData.Facts[circleCorrection].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Enable circle correction for joystick input</source>
-      <translation type="unfinished">Enable circle correction for joystick input</translation>
+      <translation>Включить круговую коррекцию для ввода с джойстика</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[useDeadband].shortDesc, .QGC.MetaData.Facts[useDeadband].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Use deadband for joystick input</source>
-      <translation type="unfinished">Use deadband for joystick input</translation>
+      <translation>Использовать мёртвую зону для ввода с джойстика</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[negativeThrust].shortDesc, .QGC.MetaData.Facts[negativeThrust].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Enable negative thrust (reverse) on throttle axis</source>
-      <translation type="unfinished">Enable negative thrust (reverse) on throttle axis</translation>
+      <translation>Включить отрицательную тягу (реверс) на оси газа</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[throttleSmoothing].shortDesc, .QGC.MetaData.Facts[throttleSmoothing].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Enable throttle accumulator mode</source>
-      <translation type="unfinished">Enable throttle accumulator mode</translation>
+      <translation>Включить режим накопления газа</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[axisFrequencyHz].shortDesc, .QGC.MetaData.Facts[axisFrequencyHz].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Axis Update Frequency</source>
-      <translation type="unfinished">Axis Update Frequency</translation>
+      <translation>Частота обновления осей</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[buttonFrequencyHz].shortDesc, .QGC.MetaData.Facts[buttonFrequencyHz].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Button Repeat Frequency</source>
-      <translation type="unfinished">Button Repeat Frequency</translation>
+      <translation>Частота повтора кнопок</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[throttleModeCenterZero].shortDesc, .QGC.MetaData.Facts[throttleModeCenterZero].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Enable center zero throttle mode</source>
-      <translation type="unfinished">Enable center zero throttle mode</translation>
+      <translation>Включить режим нулевого газа в центре</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[transmitterMode].shortDesc, .QGC.MetaData.Facts[transmitterMode].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Transmitter mode (1-4)</source>
-      <translation type="unfinished">Transmitter mode (1-4)</translation>
+      <translation>Режим передатчика (1–4)</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[exponentialPct].shortDesc, .QGC.MetaData.Facts[exponentialPct].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Stick Exponential</source>
-      <translation type="unfinished">Stick Exponential</translation>
+      <translation>Экспонента стика</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[enableManualControlPitchExtension].shortDesc, .QGC.MetaData.Facts[enableManualControlPitchExtension].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Enable manual control pitch extension</source>
-      <translation type="unfinished">Enable manual control pitch extension</translation>
+      <translation>Включить расширение ручного управления по тангажу</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[enableManualControlRollExtension].shortDesc, .QGC.MetaData.Facts[enableManualControlRollExtension].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Enable manual control roll extension</source>
-      <translation type="unfinished">Enable manual control roll extension</translation>
+      <translation>Включить расширение ручного управления по крену</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[additionalAxesFunction].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Function for additional axes (manual control or RC override)</source>
-      <translation type="unfinished">Function for additional axes (manual control or RC override)</translation>
+      <translation>Функция для дополнительных осей (ручное управление или переопределение каналов RC)</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[additionalAxesFunction].enumStrings</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>MANUAL_CONTROL,RC_CHANNELS_OVERRIDE</source>
-      <translation type="unfinished">MANUAL_CONTROL,RC_CHANNELS_OVERRIDE</translation>
+      <translation>MANUAL_CONTROL,RC_CHANNELS_OVERRIDE</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[additionalAxesFunction].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Function for additional axes</source>
-      <translation type="unfinished">Function for additional axes</translation>
+      <translation>Функция для дополнительных осей</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[enableAdditionalAxis1].shortDesc, .QGC.MetaData.Facts[enableAdditionalAxis1].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Enable additional axis 1</source>
-      <translation type="unfinished">Enable additional axis 1</translation>
+      <translation>Включить дополнительную ось 1</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[enableAdditionalAxis2].shortDesc, .QGC.MetaData.Facts[enableAdditionalAxis2].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Enable additional axis 2</source>
-      <translation type="unfinished">Enable additional axis 2</translation>
+      <translation>Включить дополнительную ось 2</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[enableAdditionalAxis3].shortDesc, .QGC.MetaData.Facts[enableAdditionalAxis3].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Enable additional axis 3</source>
-      <translation type="unfinished">Enable additional axis 3</translation>
+      <translation>Включить дополнительную ось 3</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[enableAdditionalAxis4].shortDesc, .QGC.MetaData.Facts[enableAdditionalAxis4].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Enable additional axis 4</source>
-      <translation type="unfinished">Enable additional axis 4</translation>
+      <translation>Включить дополнительную ось 4</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[enableAdditionalAxis5].shortDesc, .QGC.MetaData.Facts[enableAdditionalAxis5].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Enable additional axis 5</source>
-      <translation type="unfinished">Enable additional axis 5</translation>
+      <translation>Включить дополнительную ось 5</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[enableAdditionalAxis6].shortDesc, .QGC.MetaData.Facts[enableAdditionalAxis6].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Joystick.SettingsGroup.json"/>
       <source>Enable additional axis 6</source>
-      <translation type="unfinished">Enable additional axis 6</translation>
+      <translation>Включить дополнительную ось 6</translation>
     </message>
   </context>
   <context>
@@ -4910,32 +4910,32 @@
       <extracomment>.QGC.MetaData.Facts[videoSource].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Source for video stream (UDP, TCP, RTSP, or connected USB camera).</source>
-      <translation type="unfinished">Source for video stream (UDP, TCP, RTSP, or connected USB camera).</translation>
+      <translation>Источник видеопотока (UDP, TCP, RTSP или подключённая USB-камера).</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[videoSource].longDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Source for video. UDP, TCP, RTSP and UVC Cameras may be supported depending on Vehicle and ground station version.</source>
-      <translation type="unfinished">Source for video. UDP, TCP, RTSP and UVC Cameras may be supported depending on Vehicle and ground station version.</translation>
+      <translation>Источник видео. В зависимости от версии борта и наземной станции могут поддерживаться камеры UDP, TCP, RTSP и UVC.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[videoSource].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Source</source>
-      <translation type="unfinished">Source</translation>
+      <translation>Источник</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[videoSource].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>video source,camera,stream</source>
-      <translation type="unfinished">video source,camera,stream</translation>
+      <translation>video source,camera,stream</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[udpUrl].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Network address and port for UDP video stream (e.g. 0.0.0.0:5600).</source>
-      <translation type="unfinished">Network address and port for UDP video stream (e.g. 0.0.0.0:5600).</translation>
+      <translation>Сетевой адрес и порт для UDP-видеопотока (например, 0.0.0.0:5600).</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[udpUrl].longDesc</extracomment>
@@ -4947,20 +4947,20 @@
       <extracomment>.QGC.MetaData.Facts[udpUrl].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>UDP URL</source>
-      <translation type="unfinished">UDP URL</translation>
+      <translation>UDP URL</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[udpUrl].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>udp,mpegts,video url,stream url</source>
-      <translation type="unfinished">udp,mpegts,video url,stream url</translation>
+      <translation>udp,mpegts,video url,stream url</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[rtspUrl].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Network address for RTSP video stream (e.g. rtsp://192.168.42.1:554/live).</source>
-      <translation type="unfinished">Network address for RTSP video stream (e.g. rtsp://192.168.42.1:554/live).</translation>
+      <translation>Сетевой адрес RTSP-видеопотока (например, rtsp://192.168.42.1:554/live).</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[rtspUrl].longDesc</extracomment>
@@ -4972,20 +4972,20 @@
       <extracomment>.QGC.MetaData.Facts[rtspUrl].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>RTSP URL</source>
-      <translation type="unfinished">RTSP URL</translation>
+      <translation>RTSP URL</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[rtspUrl].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>rtsp,video url,stream url</source>
-      <translation type="unfinished">rtsp,video url,stream url</translation>
+      <translation>rtsp,video url,stream url</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[tcpUrl].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Network address and port for TCP video stream (e.g. 192.168.143.200:3001).</source>
-      <translation type="unfinished">Network address and port for TCP video stream (e.g. 192.168.143.200:3001).</translation>
+      <translation>Сетевой адрес и порт для TCP-видеопотока (например, 192.168.143.200:3001).</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[tcpUrl].longDesc</extracomment>
@@ -4997,14 +4997,14 @@
       <extracomment>.QGC.MetaData.Facts[tcpUrl].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>TCP URL</source>
-      <translation type="unfinished">TCP URL</translation>
+      <translation>TCP URL</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[tcpUrl].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>tcp,video url,stream url</source>
-      <translation type="unfinished">tcp,video url,stream url</translation>
+      <translation>tcp,video url,stream url</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[videoSavePath].shortDesc, .QGC.MetaData.Facts[videoSavePath].label</extracomment>
@@ -5022,26 +5022,26 @@
       <extracomment>.QGC.MetaData.Facts[aspectRatio].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Video frame aspect ratio as width divided by height. Use 0 to auto-detect.</source>
-      <translation type="unfinished">Video frame aspect ratio as width divided by height. Use 0 to auto-detect.</translation>
+      <translation>Соотношение сторон видеокадра (ширина, делённая на высоту). Укажите 0 для автоопределения.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[aspectRatio].longDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Video Aspect Ratio (width / height). Use 0.0 to ignore it.</source>
-      <translation type="unfinished">Video Aspect Ratio (width / height). Use 0.0 to ignore it.</translation>
+      <translation>Соотношение сторон видео (ширина/высота). Используйте 0.0 для автоопределения.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[aspectRatio].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Aspect Ratio</source>
-      <translation type="unfinished">Aspect Ratio</translation>
+      <translation>Соотношение сторон</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[aspectRatio].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>aspect ratio</source>
-      <translation type="unfinished">aspect ratio</translation>
+      <translation>соотношение сторон</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[gridLines].shortDesc, .QGC.MetaData.Facts[gridLines].label</extracomment>
@@ -5065,14 +5065,14 @@
       <extracomment>.QGC.MetaData.Facts[videoFit].longDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Handle Video Aspect Ratio.</source>
-      <translation type="unfinished">Handle Video Aspect Ratio.</translation>
+      <translation>Обрабатывать соотношение сторон видео.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[videoFit].enumStrings</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Fit Width,Fit Height,Fill,No Crop</source>
-      <translation type="unfinished">Fit Width,Fit Height,Fill,No Crop</translation>
+      <translation>По ширине,По высоте,Заполнить,Без обрезки</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[showRecControl].shortDesc, .QGC.MetaData.Facts[showRecControl].label</extracomment>
@@ -5090,7 +5090,7 @@
       <extracomment>.QGC.MetaData.Facts[recordingFormat].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>File format for saved video recordings.</source>
-      <translation type="unfinished">File format for saved video recordings.</translation>
+      <translation>Формат файла для сохранённых видеозаписей.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[recordingFormat].longDesc</extracomment>
@@ -5103,26 +5103,26 @@
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>mp4,mov,mkv</source>
-      <translation type="unfinished">mp4,mov,mkv</translation>
+      <translation>mp4,mov,mkv</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[recordingFormat].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Record File Format</source>
-      <translation type="unfinished">Record File Format</translation>
+      <translation>Формат файла записи</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[recordingFormat].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>record,recording format,mp4,mkv</source>
-      <translation type="unfinished">record,recording format,mp4,mkv</translation>
+      <translation>запись,формат записи,mp4,mkv</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[maxVideoSize].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Maximum disk space available for video recording storage.</source>
-      <translation type="unfinished">Maximum disk space available for video recording storage.</translation>
+      <translation>Максимальный объём дискового пространства для хранения видеозаписей.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[maxVideoSize].longDesc</extracomment>
@@ -5134,20 +5134,20 @@
       <extracomment>.QGC.MetaData.Facts[maxVideoSize].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Max Storage Usage</source>
-      <translation type="unfinished">Max Storage Usage</translation>
+      <translation>Макс. использование хранилища</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[maxVideoSize].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>storage limit,video file</source>
-      <translation type="unfinished">storage limit,video file</translation>
+      <translation>лимит хранилища,видеофайл</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[enableStorageLimit].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Automatically delete oldest recordings when the storage limit is exceeded.</source>
-      <translation type="unfinished">Automatically delete oldest recordings when the storage limit is exceeded.</translation>
+      <translation>Автоматически удалять самые старые записи при превышении лимита хранилища.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[enableStorageLimit].longDesc</extracomment>
@@ -5159,14 +5159,14 @@
       <extracomment>.QGC.MetaData.Facts[enableStorageLimit].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Auto-Delete Saved Recordings</source>
-      <translation type="unfinished">Auto-Delete Saved Recordings</translation>
+      <translation>Автоудаление сохранённых записей</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[enableStorageLimit].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>storage limit</source>
-      <translation type="unfinished">storage limit</translation>
+      <translation>предел объёма хранилища</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[rtspTimeout].shortDesc, .QGC.MetaData.Facts[rtspTimeout].label</extracomment>
@@ -5184,44 +5184,44 @@
       <extracomment>.QGC.MetaData.Facts[streamEnabled].shortDesc, .QGC.MetaData.Facts[streamEnabled].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Video Stream Enabled</source>
-      <translation type="unfinished">Video Stream Enabled</translation>
+      <translation>Видеопоток включён</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[streamEnabled].longDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Start/Stop Video Stream.</source>
-      <translation type="unfinished">Start/Stop Video Stream.</translation>
+      <translation>Запуск/остановка видеопотока.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[disableWhenDisarmed].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Disables the video stream when the vehicle is disarmed to save bandwidth.</source>
-      <translation type="unfinished">Disables the video stream when the vehicle is disarmed to save bandwidth.</translation>
+      <translation>Отключает видеопоток при Disarm борта для экономии трафика.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[disableWhenDisarmed].longDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Disable Video Stream when disarmed.</source>
-      <translation type="unfinished">Disable Video Stream when disarmed.</translation>
+      <translation>Отключает видеопоток при переходе борта в состояние Disarm.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[disableWhenDisarmed].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Stop recording when disarmed</source>
-      <translation type="unfinished">Stop recording when disarmed</translation>
+      <translation>Останавливать запись при Disarm</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[disableWhenDisarmed].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>disable when disarmed</source>
-      <translation type="unfinished">disable when disarmed</translation>
+      <translation>отключить при disarm</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[lowLatencyMode].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Reduce video latency by approximately 200ms using optimized streaming settings.</source>
-      <translation type="unfinished">Reduce video latency by approximately 200ms using optimized streaming settings.</translation>
+      <translation>Уменьшает задержку видео примерно на 200 мс за счёт оптимизированных настроек трансляции.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[lowLatencyMode].longDesc</extracomment>
@@ -5233,20 +5233,20 @@
       <extracomment>.QGC.MetaData.Facts[lowLatencyMode].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Low Latency Mode</source>
-      <translation type="unfinished">Low Latency Mode</translation>
+      <translation>Режим низкой задержки</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[lowLatencyMode].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>low latency</source>
-      <translation type="unfinished">low latency</translation>
+      <translation>низкая задержка</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[forceVideoDecoder].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Override automatic video decoder selection to force a specific decoding method.</source>
-      <translation type="unfinished">Override automatic video decoder selection to force a specific decoding method.</translation>
+      <translation>Отключает автоматический выбор видеодекодера и принудительно задаёт конкретный метод декодирования.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[forceVideoDecoder].longDesc</extracomment>
@@ -5259,70 +5259,70 @@
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Default,Force software decoder,Force hardware decoder,Force NVIDIA decoder,Force VA-API decoder,Force DirectX3D 11 decoder,Force VideoToolbox decoder,Force Intel decoder,Force Vulkan decoder</source>
-      <translation type="unfinished">Default,Force software decoder,Force hardware decoder,Force NVIDIA decoder,Force VA-API decoder,Force DirectX3D 11 decoder,Force VideoToolbox decoder,Force Intel decoder,Force Vulkan decoder</translation>
+      <translation>По умолчанию,Программный декодер,Аппаратный декодер,Декодер NVIDIA,Декодер VA-API,Декодер DirectX3D 11,Декодер VideoToolbox,Декодер Intel,Декодер Vulkan</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[forceVideoDecoder].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Force video decoder priority</source>
-      <translation type="unfinished">Force video decoder priority</translation>
+      <translation>Приоритет видеодекодера</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[forceVideoDecoder].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>decoder,hardware decode</source>
-      <translation type="unfinished">decoder,hardware decode</translation>
+      <translation>декодер,аппаратное декодирование</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[forceCpuVideoPath].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Force the video pipeline to copy frames through CPU instead of importing GPU memory directly.</source>
-      <translation type="unfinished">Force the video pipeline to copy frames through CPU instead of importing GPU memory directly.</translation>
+      <translation>Принудительно передавать кадры видео через ЦП вместо прямого импорта из памяти GPU.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[forceCpuVideoPath].longDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>By default, when a hardware decoder produces GPU-backed frames (DMABuf, GLMemory, D3D11, IOSurface, AHardwareBuffer), the pipeline imports them directly into Qt's render thread to avoid a per-frame CPU copy. The pipeline already falls back to the CPU path automatically when a GPU import fails, so this option is only needed for debugging or to work around a broken driver.</source>
-      <translation type="unfinished">By default, when a hardware decoder produces GPU-backed frames (DMABuf, GLMemory, D3D11, IOSurface, AHardwareBuffer), the pipeline imports them directly into Qt's render thread to avoid a per-frame CPU copy. The pipeline already falls back to the CPU path automatically when a GPU import fails, so this option is only needed for debugging or to work around a broken driver.</translation>
+      <translation>По умолчанию, когда аппаратный декодер выдаёт кадры в памяти GPU (DMABuf, GLMemory, D3D11, IOSurface, AHardwareBuffer), конвейер импортирует их напрямую в поток рендеринга Qt, чтобы избежать копирования каждого кадра через ЦП. При сбое импорта из GPU конвейер уже автоматически переключается на путь через ЦП, поэтому эта опция нужна только для отладки или обхода проблем с неисправным драйвером.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[forceCpuVideoPath].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Force CPU video path</source>
-      <translation type="unfinished">Force CPU video path</translation>
+      <translation>Принудительный путь через ЦП</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[forceCpuVideoPath].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>gpu,zero-copy,dmabuf,cpu,performance,force</source>
-      <translation type="unfinished">gpu,zero-copy,dmabuf,cpu,performance,force</translation>
+      <translation>gpu,zero-copy,dmabuf,cpu,производительность,принудительно</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[videoConversionElement].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Override the GStreamer color-conversion element used in the CPU video sink path.</source>
-      <translation type="unfinished">Override the GStreamer color-conversion element used in the CPU video sink path.</translation>
+      <translation>Переопределяет элемент цветового преобразования GStreamer, используемый в пути вывода видео через ЦП.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[videoConversionElement].longDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Leave blank to auto-probe (SoC-native imxvideoconvert_g2d / nvvidconv when present, otherwise videoconvert). Set to a specific GStreamer factory name to force that element. Used as a workaround when an SoC's preferred element has a defect; takes effect on next stream restart.</source>
-      <translation type="unfinished">Leave blank to auto-probe (SoC-native imxvideoconvert_g2d / nvvidconv when present, otherwise videoconvert). Set to a specific GStreamer factory name to force that element. Used as a workaround when an SoC's preferred element has a defect; takes effect on next stream restart.</translation>
+      <translation>Оставьте пустым для автоопределения (родные для SoC imxvideoconvert_g2d / nvvidconv при наличии, иначе videoconvert). Укажите конкретное имя фабрики GStreamer, чтобы принудительно использовать этот элемент. Применяется как обходное решение, если у предпочтительного для SoC элемента есть дефект; вступает в силу при следующем перезапуске потока.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[videoConversionElement].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>Video conversion element override</source>
-      <translation type="unfinished">Video conversion element override</translation>
+      <translation>Переопределение элемента преобразования видео</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[videoConversionElement].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>videoconvert,nvvidconv,imxvideoconvert,gstreamer,advanced</source>
-      <translation type="unfinished">videoconvert,nvvidconv,imxvideoconvert,gstreamer,advanced</translation>
+      <translation>videoconvert,nvvidconv,imxvideoconvert,gstreamer,дополнительно</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[disablePixelAspectRatio].shortDesc</extracomment>
@@ -5347,7 +5347,7 @@
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>pixel aspect ratio,capsfilter,v4l2,workaround,advanced</source>
-      <translation type="unfinished">pixel aspect ratio,capsfilter,v4l2,workaround,advanced</translation>
+      <translation>соотношение сторон пикселя,capsfilter,v4l2,обходное решение,дополнительно</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[frameSmoothingEnabled].shortDesc</extracomment>
@@ -5372,7 +5372,7 @@
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Video.SettingsGroup.json"/>
       <source>smoothing,jitter,pacing,latency,obs</source>
-      <translation type="unfinished">smoothing,jitter,pacing,latency,obs</translation>
+      <translation>сглаживание,джиттер,темп кадров,задержка,obs</translation>
     </message>
   </context>
   <context>
@@ -6099,57 +6099,57 @@
       <extracomment>.QGC.MetaData.Facts[telemetrySave].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>Automatically save a telemetry log file after each flight completes.</source>
-      <translation type="unfinished">Automatically save a telemetry log file after each flight completes.</translation>
+      <translation>Автоматически сохранять файл лога телеметрии после каждого полёта.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[telemetrySave].longDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>If this option is enabled a telemetry will be saved after each flight completes.</source>
-      <translation type="unfinished">If this option is enabled a telemetry will be saved after each flight completes.</translation>
+      <translation>Если эта опция включена, телеметрия будет сохраняться после завершения каждого полета.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[telemetrySave].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>Save log after each flight</source>
-      <translation type="unfinished">Save log after each flight</translation>
+      <translation>Сохранять лог после каждого полёта</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[telemetrySave].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>telemetry log,tlog,save log,recording</source>
-      <translation type="unfinished">telemetry log,tlog,save log,recording</translation>
+      <translation>лог телеметрии,tlog,сохранить лог,запись</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[telemetrySaveNotArmed].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>Also save telemetry logs from sessions where the vehicle was never armed.</source>
-      <translation type="unfinished">Also save telemetry logs from sessions where the vehicle was never armed.</translation>
+      <translation>Также сохранять логи телеметрии для сессий, где борт ни разу не был переведён в состояние Arm.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[telemetrySaveNotArmed].longDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>If this option is enabled a telemtry log will be saved even if vehicle was never armed.</source>
-      <translation type="unfinished">If this option is enabled a telemtry log will be saved even if vehicle was never armed.</translation>
+      <translation>Если эта опция включена, лог телеметрии будет сохраняться, даже если борт ни разу не был переведён в состояние Arm.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[telemetrySaveNotArmed].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>Save logs even if vehicle was not armed</source>
-      <translation type="unfinished">Save logs even if vehicle was not armed</translation>
+      <translation>Сохранять логи, даже если борт не был переведён в состояние Arm</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[telemetrySaveNotArmed].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>telemetry log,tlog</source>
-      <translation type="unfinished">telemetry log,tlog</translation>
+      <translation>лог телеметрии,tlog</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[apmStartMavlinkStreams].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>Request ArduPilot to begin sending MAVLink telemetry streams on connect.</source>
-      <translation type="unfinished">Request ArduPilot to begin sending MAVLink telemetry streams on connect.</translation>
+      <translation>Запрашивать у ArduPilot начало передачи потоков телеметрии MAVLink при подключении.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[apmStartMavlinkStreams].label</extracomment>
@@ -6162,13 +6162,13 @@
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>stream rate,ardupilot,apm</source>
-      <translation type="unfinished">stream rate,ardupilot,apm</translation>
+      <translation>частота потока,ardupilot,apm</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[saveCsvTelemetry].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>Save all vehicle parameters to CSV files at 1 Hz during flight.</source>
-      <translation type="unfinished">Save all vehicle parameters to CSV files at 1 Hz during flight.</translation>
+      <translation>Сохранять все параметры борта в CSV-файлы с частотой 1 Гц во время полёта.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[saveCsvTelemetry].longDesc</extracomment>
@@ -6180,20 +6180,20 @@
       <extracomment>.QGC.MetaData.Facts[saveCsvTelemetry].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>Save CSV log of telemetry data</source>
-      <translation type="unfinished">Save CSV log of telemetry data</translation>
+      <translation>Сохранять CSV-лог данных телеметрии</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[saveCsvTelemetry].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>csv,save log</source>
-      <translation type="unfinished">csv,save log</translation>
+      <translation>csv,сохранить лог</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[forwardMavlink].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>Forward all MAVLink messages to an external address for other ground stations.</source>
-      <translation type="unfinished">Forward all MAVLink messages to an external address for other ground stations.</translation>
+      <translation>Пересылать все сообщения MAVLink на внешний адрес для других наземных станций.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[forwardMavlink].longDesc</extracomment>
@@ -6205,20 +6205,20 @@
       <extracomment>.QGC.MetaData.Facts[forwardMavlink].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>Enable</source>
-      <translation type="unfinished">Enable</translation>
+      <translation>Включить</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[forwardMavlink].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>forward,relay,mavlink forward</source>
-      <translation type="unfinished">forward,relay,mavlink forward</translation>
+      <translation>переадресация,ретрансляция,переадресация mavlink</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[forwardMavlinkHostName].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>Network address and port to forward MAVLink messages to (e.g. localhost:14445).</source>
-      <translation type="unfinished">Network address and port to forward MAVLink messages to (e.g. localhost:14445).</translation>
+      <translation>Сетевой адрес и порт для пересылки сообщений MAVLink (например, localhost:14445).</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[forwardMavlinkHostName].longDesc</extracomment>
@@ -6237,7 +6237,7 @@
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>forward,host,mavlink forward</source>
-      <translation type="unfinished">forward,host,mavlink forward</translation>
+      <translation>переадресация,хост,переадресация mavlink</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[forwardMavlinkAPMSupportHostName].shortDesc, .QGC.MetaData.Facts[forwardMavlinkAPMSupportHostName].label</extracomment>
@@ -6255,64 +6255,64 @@
       <extracomment>.QGC.MetaData.Facts[sendGCSHeartbeat].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>Periodically transmit heartbeat messages to inform vehicles that QGC is connected.</source>
-      <translation type="unfinished">Periodically transmit heartbeat messages to inform vehicles that QGC is connected.</translation>
+      <translation>Периодически отправлять heartbeat-сообщения, чтобы борты знали о подключении QGC.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[sendGCSHeartbeat].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>Emit heartbeat</source>
-      <translation type="unfinished">Emit heartbeat</translation>
+      <translation>Отправлять heartbeat</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[sendGCSHeartbeat].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>heartbeat</source>
-      <translation type="unfinished">heartbeat</translation>
+      <translation>heartbeat</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[gcsMavlinkSystemID].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>MAVLink system identifier (1-255) for this ground station.</source>
-      <translation type="unfinished">MAVLink system identifier (1-255) for this ground station.</translation>
+      <translation>Идентификатор системы MAVLink (1–255) для этой наземной станции.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[gcsMavlinkSystemID].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>MAVLink System ID</source>
-      <translation type="unfinished">MAVLink System ID</translation>
+      <translation>ID системы MAVLink</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[gcsMavlinkSystemID].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>system id,mavlink id</source>
-      <translation type="unfinished">system id,mavlink id</translation>
+      <translation>id системы,id mavlink</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[noInitialDownloadWhenFlying].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>Skip downloading parameters and missions when connecting to a vehicle already in flight.</source>
-      <translation type="unfinished">Skip downloading parameters and missions when connecting to a vehicle already in flight.</translation>
+      <translation>Пропускать загрузку параметров и полётных заданий при подключении к борту, который уже находится в полёте.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[noInitialDownloadWhenFlying].longDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>When enabled, parameter and mission plan downloads are skipped when connecting to a vehicle that is already flying. This prevents bandwidth-heavy transfers from disrupting an active flight.</source>
-      <translation type="unfinished">When enabled, parameter and mission plan downloads are skipped when connecting to a vehicle that is already flying. This prevents bandwidth-heavy transfers from disrupting an active flight.</translation>
+      <translation>Если эта опция включена, загрузка параметров и плана полётного задания пропускается при подключении к борту, который уже находится в полёте. Это предотвращает нарушение активного полёта из-за передачи большого объёма данных.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[noInitialDownloadWhenFlying].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>Skip param/plan download if flying on connect</source>
-      <translation type="unfinished">Skip param/plan download if flying on connect</translation>
+      <translation>Не загружать параметры/план при подключении в полёте</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[noInitialDownloadWhenFlying].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/Mavlink.SettingsGroup.json"/>
       <source>initial download</source>
-      <translation type="unfinished">initial download</translation>
+      <translation>первоначальная загрузка</translation>
     </message>
   </context>
   <context>
@@ -6321,190 +6321,224 @@
       <extracomment>.QGC.MetaData.Facts[ntripServerConnectEnabled].shortDesc, .QGC.MetaData.Facts[ntripServerConnectEnabled].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>Connect to NTRIP server</source>
-      <translation type="unfinished">Connect to NTRIP server</translation>
+      <translation>Подключаться к серверу NTRIP</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripServerConnectEnabled].longDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>Connect to NTRIP server using specified address/port</source>
-      <translation type="unfinished">Connect to NTRIP server using specified address/port</translation>
+      <translation>Подключаться к серверу NTRIP по указанному адресу/порту</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripServerHostAddress].shortDesc, .QGC.MetaData.Facts[ntripServerHostAddress].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>Host address</source>
-      <translation type="unfinished">Host address</translation>
+      <translation>Адрес хоста</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripServerPort].shortDesc, .QGC.MetaData.Facts[ntripServerPort].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>Server port</source>
-      <translation type="unfinished">Server port</translation>
+      <translation>Порт сервера</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripUsername].shortDesc, .QGC.MetaData.Facts[ntripUsername].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>Username</source>
-      <translation type="unfinished">Username</translation>
+      <translation>Имя пользователя</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripPassword].shortDesc, .QGC.MetaData.Facts[ntripPassword].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>Password</source>
-      <translation type="unfinished">Password</translation>
+      <translation>Пароль</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripMountpoint].shortDesc, .QGC.MetaData.Facts[ntripMountpoint].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>Mount Point</source>
-      <translation type="unfinished">Mount Point</translation>
+      <translation>Mount Point</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripMountpoint].longDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>NTRIP mount point. Leave blank for RTCM over TCP</source>
-      <translation type="unfinished">NTRIP mount point. Leave blank for RTCM over TCP</translation>
+      <translation>Mount point NTRIP. Оставьте пустым для RTCM поверх TCP</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripWhitelist].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>Comma-separated RTCM message IDs to forward. Leave blank for all messages.</source>
-      <translation type="unfinished">Comma-separated RTCM message IDs to forward. Leave blank for all messages.</translation>
+      <translation>ID сообщений RTCM для пересылки, через запятую. Оставьте пустым для пересылки всех сообщений.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripWhitelist].longDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>Comma-separated RTCM message IDs to forward (e.g. 1005,1077,1087). Leave blank for all messages.</source>
-      <translation type="unfinished">Comma-separated RTCM message IDs to forward (e.g. 1005,1077,1087). Leave blank for all messages.</translation>
+      <translation>ID сообщений RTCM для пересылки, через запятую (например, 1005,1077,1087). Оставьте пустым для пересылки всех сообщений.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripWhitelist].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>RTCM Message Filter</source>
-      <translation type="unfinished">RTCM Message Filter</translation>
+      <translation>Фильтр сообщений RTCM</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripWhitelist].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>whitelist,message filter</source>
-      <translation type="unfinished">whitelist,message filter</translation>
+      <translation>белый список,фильтр сообщений</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripUseTls].shortDesc, .QGC.MetaData.Facts[ntripUseTls].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>Use TLS encryption</source>
-      <translation type="unfinished">Use TLS encryption</translation>
+      <translation>Использовать шифрование TLS</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripUseTls].longDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>Connect using TLS/SSL encryption (required for some SPARTN casters on port 2102)</source>
-      <translation type="unfinished">Connect using TLS/SSL encryption (required for some SPARTN casters on port 2102)</translation>
+      <translation>Подключаться с использованием шифрования TLS/SSL (требуется для некоторых SPARTN-серверов (caster) на порту 2102)</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripUdpForwardEnabled].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>Forward received RTCM correction data to another application via UDP.</source>
-      <translation type="unfinished">Forward received RTCM correction data to another application via UDP.</translation>
+      <translation>Пересылать полученные поправки RTCM в другое приложение по UDP.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripUdpForwardEnabled].longDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>Forward received RTCM correction data via UDP to the specified address and port</source>
-      <translation type="unfinished">Forward received RTCM correction data via UDP to the specified address and port</translation>
+      <translation>Пересылать полученные поправки RTCM по UDP на указанный адрес и порт</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripUdpForwardEnabled].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>UDP forward RTCM data</source>
-      <translation type="unfinished">UDP forward RTCM data</translation>
+      <translation>Пересылка данных RTCM по UDP</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripUdpForwardEnabled].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>udp forward,relay,corrections forward</source>
-      <translation type="unfinished">udp forward,relay,corrections forward</translation>
+      <translation>пересылка udp,ретрансляция,пересылка поправок</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripUdpTargetAddress].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>IP address to forward RTCM correction data to.</source>
-      <translation type="unfinished">IP address to forward RTCM correction data to.</translation>
+      <translation>IP-адрес для пересылки поправок RTCM.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripUdpTargetAddress].longDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>IP address to forward RTCM data to via UDP</source>
-      <translation type="unfinished">IP address to forward RTCM data to via UDP</translation>
+      <translation>IP-адрес для пересылки данных RTCM по UDP</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripUdpTargetAddress].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>UDP target address</source>
-      <translation type="unfinished">UDP target address</translation>
+      <translation>Целевой адрес UDP</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripUdpTargetAddress].keywords, .QGC.MetaData.Facts[ntripUdpTargetPort].keywords</extracomment>
       <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>udp forward,relay</source>
-      <translation type="unfinished">udp forward,relay</translation>
+      <translation>пересылка udp,ретрансляция</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripUdpTargetPort].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>Port number for forwarding RTCM correction data via UDP.</source>
-      <translation type="unfinished">Port number for forwarding RTCM correction data via UDP.</translation>
+      <translation>Номер порта для пересылки поправок RTCM по UDP.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripUdpTargetPort].longDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>Port to forward RTCM data to via UDP</source>
-      <translation type="unfinished">Port to forward RTCM data to via UDP</translation>
+      <translation>Порт для пересылки данных RTCM по UDP</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[ntripUdpTargetPort].label</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
       <source>UDP target port</source>
-      <translation type="unfinished">UDP target port</translation>
+      <translation>Целевой порт UDP</translation>
     </message>
+  </context>
+  <context>
+    <name>GPSCorrection.SettingsGroup.json</name>
     <message>
       <extracomment>.QGC.MetaData.Facts[rtcmUdpInputEnabled].shortDesc, .QGC.MetaData.Facts[rtcmUdpInputEnabled].label</extracomment>
-      <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
+      <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/GPSCorrection.SettingsGroup.json"/>
       <source>Enable UDP RTCM input</source>
       <translation type="unfinished">Enable UDP RTCM input</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[rtcmUdpInputEnabled].longDesc</extracomment>
-      <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
+      <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/GPSCorrection.SettingsGroup.json"/>
       <source>Listen on a UDP port for incoming RTCM3 correction data and forward it to connected vehicles via MAVLink GPS_RTCM_DATA.</source>
       <translation type="unfinished">Listen on a UDP port for incoming RTCM3 correction data and forward it to connected vehicles via MAVLink GPS_RTCM_DATA.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[rtcmUdpInputPort].shortDesc, .QGC.MetaData.Facts[rtcmUdpInputPort].label</extracomment>
-      <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
+      <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/GPSCorrection.SettingsGroup.json"/>
       <source>UDP RTCM input port</source>
       <translation type="unfinished">UDP RTCM input port</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[rtcmUdpInputPort].longDesc</extracomment>
-      <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
+      <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/GPSCorrection.SettingsGroup.json"/>
       <source>UDP port to listen on for incoming RTCM3 correction data.</source>
       <translation type="unfinished">UDP port to listen on for incoming RTCM3 correction data.</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[rtcmUdpValidate].shortDesc, .QGC.MetaData.Facts[rtcmUdpValidate].label</extracomment>
-      <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
+      <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/GPSCorrection.SettingsGroup.json"/>
       <source>UDP RTCM enable validation</source>
       <translation type="unfinished">UDP RTCM enable validation</translation>
     </message>
     <message>
       <extracomment>.QGC.MetaData.Facts[rtcmUdpValidate].longDesc</extracomment>
-      <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/NTRIP.SettingsGroup.json"/>
+      <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/GPSCorrection.SettingsGroup.json"/>
       <source>Enable validation of incoming data as RTCM and drop garbage (improves security).</source>
       <translation type="unfinished">Enable validation of incoming data as RTCM and drop garbage (improves security).</translation>
+    </message>
+    <message>
+      <extracomment>.QGC.MetaData.Facts[correctionSource].enumStrings</extracomment>
+      <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
+      <location filename="../src/Settings/GPSCorrection.SettingsGroup.json"/>
+      <source>Automatic,Local base station,NTRIP,UDP,All sources</source>
+      <translation type="unfinished">Automatic,Local base station,NTRIP,UDP,All sources</translation>
+    </message>
+    <message>
+      <extracomment>.QGC.MetaData.Facts[correctionSourceInstance].shortDesc, .QGC.MetaData.Facts[correctionSourceInstance].label</extracomment>
+      <location filename="../src/Settings/GPSCorrection.SettingsGroup.json"/>
+      <source>Correction stream</source>
+      <translation type="unfinished">Correction stream</translation>
+    </message>
+    <message>
+      <extracomment>.QGC.MetaData.Facts[correctionSource].shortDesc, .QGC.MetaData.Facts[correctionSource].label</extracomment>
+      <location filename="../src/Settings/GPSCorrection.SettingsGroup.json"/>
+      <source>Vehicle correction source</source>
+      <translation type="unfinished">Vehicle correction source</translation>
+    </message>
+    <message>
+      <extracomment>.QGC.MetaData.Facts[correctionSource].longDesc</extracomment>
+      <location filename="../src/Settings/GPSCorrection.SettingsGroup.json"/>
+      <source>Automatic selects one fresh stream for vehicles, preferring the local base station, then NTRIP, then UDP. Manual selection never falls back to another source category. All forwards every fresh stream and may mix base stations. NTRIP UDP forwarding is independent.</source>
+      <translation type="unfinished">Automatic selects one fresh stream for vehicles, preferring the local base station, then NTRIP, then UDP. Manual selection never falls back to another source category. All forwards every fresh stream and may mix base stations. NTRIP UDP forwarding is independent.</translation>
+    </message>
+    <message>
+      <extracomment>.QGC.MetaData.Facts[correctionSourceInstance].longDesc</extracomment>
+      <location filename="../src/Settings/GPSCorrection.SettingsGroup.json"/>
+      <source>Leave empty to choose a fresh stream within the selected source category. A specific endpoint remains pinned when unavailable, without fallback to another stream.</source>
+      <translation type="unfinished">Leave empty to choose a fresh stream within the selected source category. A specific endpoint remains pinned when unavailable, without fallback to another stream.</translation>
     </message>
   </context>
   <context>
@@ -10021,109 +10055,109 @@
       <extracomment>.pages[General].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>General</source>
-      <translation type="unfinished">General</translation>
+      <translation>Общие</translation>
     </message>
     <message>
       <extracomment>.pages[Fly View].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>Fly View</source>
-      <translation type="unfinished">Fly View</translation>
+      <translation>Экран полёта</translation>
     </message>
     <message>
       <extracomment>.pages[3D View].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>3D View</source>
-      <translation type="unfinished">3D View</translation>
+      <translation>Экран 3D</translation>
     </message>
     <message>
       <extracomment>.pages[Plan View].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>Plan View</source>
-      <translation type="unfinished">Plan View</translation>
+      <translation>Просмотр плана</translation>
     </message>
     <message>
       <extracomment>.pages[ADSB Server].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>ADSB Server</source>
-      <translation type="unfinished">ADSB Server</translation>
+      <translation>Сервер ADSB</translation>
     </message>
     <message>
       <extracomment>.pages[Comm Links].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>Comm Links</source>
-      <translation type="unfinished">Comm Links</translation>
+      <translation>Соединения</translation>
     </message>
     <message>
       <extracomment>.pages[App Logging].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>App Logging</source>
-      <translation type="unfinished">App Logging</translation>
+      <translation>Логи приложения</translation>
     </message>
     <message>
       <extracomment>.pages[App Log Viewer].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>App Log Viewer</source>
-      <translation type="unfinished">App Log Viewer</translation>
+      <translation>Просмотр логов приложения</translation>
     </message>
     <message>
       <extracomment>.pages[Maps].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>Maps</source>
-      <translation type="unfinished">Maps</translation>
+      <translation>Карты</translation>
     </message>
     <message>
       <extracomment>.pages[NTRIP/RTK].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>NTRIP/RTK</source>
-      <translation type="unfinished">NTRIP/RTK</translation>
+      <translation>NTRIP/RTK</translation>
     </message>
     <message>
       <extracomment>.pages[PX4 Log Transfer].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>PX4 Log Transfer</source>
-      <translation type="unfinished">PX4 Log Transfer</translation>
+      <translation>Передача логов PX4</translation>
     </message>
     <message>
       <extracomment>.pages[Remote ID].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>Remote ID</source>
-      <translation type="unfinished">Remote ID</translation>
+      <translation>Remote ID</translation>
     </message>
     <message>
       <extracomment>.pages[Telemetry].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>Telemetry</source>
-      <translation type="unfinished">Telemetry</translation>
+      <translation>Телеметрия</translation>
     </message>
     <message>
       <extracomment>.pages[Video].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>Video</source>
-      <translation type="unfinished">Video</translation>
+      <translation>Видео</translation>
     </message>
     <message>
       <extracomment>.pages[Help].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>Help</source>
-      <translation type="unfinished">Help</translation>
+      <translation>Справка</translation>
     </message>
     <message>
       <extracomment>.pages[Mock Link].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>Mock Link</source>
-      <translation type="unfinished">Mock Link</translation>
+      <translation>Тестовое соединение</translation>
     </message>
     <message>
       <extracomment>.pages[Debug].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>Debug</source>
-      <translation type="unfinished">Debug</translation>
+      <translation>Отладка</translation>
     </message>
     <message>
       <extracomment>.pages[Palette Test].name</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/SettingsPages.json"/>
       <source>Palette Test</source>
-      <translation type="unfinished">Palette Test</translation>
+      <translation>Тест палитры</translation>
     </message>
   </context>
   <context>
@@ -10201,115 +10235,115 @@
       <extracomment>.groups[Save To Disk].heading, .groups[Save To Disk].sectionName</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>Save To Disk</source>
-      <translation type="unfinished">Save To Disk</translation>
+      <translation>Сохранение на диск</translation>
     </message>
     <message>
       <extracomment>.groups[Save To Disk].keywords[0]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>disk</source>
-      <translation type="unfinished">disk</translation>
+      <translation>диск</translation>
     </message>
     <message>
       <extracomment>.groups[Save To Disk].keywords[1]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>logging</source>
-      <translation type="unfinished">logging</translation>
+      <translation>логи</translation>
     </message>
     <message>
       <extracomment>.groups[Save To Disk].keywords[2]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>file</source>
-      <translation type="unfinished">file</translation>
+      <translation>файл</translation>
     </message>
     <message>
       <extracomment>.groups[Save To Disk].keywords[3]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>flush</source>
-      <translation type="unfinished">flush</translation>
+      <translation>сброс</translation>
     </message>
     <message>
       <extracomment>.groups[Save To Disk].keywords[4]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>save</source>
-      <translation type="unfinished">save</translation>
+      <translation>сохранить</translation>
     </message>
     <message>
       <extracomment>.groups[Save To Disk].keywords[5]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>path</source>
-      <translation type="unfinished">path</translation>
+      <translation>путь</translation>
     </message>
     <message>
       <extracomment>.groups[Save To Disk].keywords[6]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>compression</source>
-      <translation type="unfinished">compression</translation>
+      <translation>сжатие</translation>
     </message>
     <message>
       <extracomment>.groups[Save To Disk].keywords[7]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>rotation</source>
-      <translation type="unfinished">rotation</translation>
+      <translation>ротация</translation>
     </message>
     <message>
       <extracomment>.groups[Save To Disk].keywords[8]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>backup</source>
-      <translation type="unfinished">backup</translation>
+      <translation>резервная копия</translation>
     </message>
     <message>
       <extracomment>.groups[Log Viewer].heading, .groups[Log Viewer].sectionName</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>Log Viewer</source>
-      <translation type="unfinished">Log Viewer</translation>
+      <translation>Просмотр логов</translation>
     </message>
     <message>
       <extracomment>.groups[Log Viewer].keywords[0]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>console</source>
-      <translation type="unfinished">console</translation>
+      <translation>консоль</translation>
     </message>
     <message>
       <extracomment>.groups[Log Viewer].keywords[1]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>buffer</source>
-      <translation type="unfinished">buffer</translation>
+      <translation>буфер</translation>
     </message>
     <message>
       <extracomment>.groups[Log Viewer].keywords[2]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>entries</source>
-      <translation type="unfinished">entries</translation>
+      <translation>записи</translation>
     </message>
     <message>
       <extracomment>.groups[Log Viewer].keywords[3]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>elapsed</source>
-      <translation type="unfinished">elapsed</translation>
+      <translation>прошедшее время</translation>
     </message>
     <message>
       <extracomment>.groups[Log Viewer].keywords[4]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>timestamp</source>
-      <translation type="unfinished">timestamp</translation>
+      <translation>временная метка</translation>
     </message>
     <message>
       <extracomment>.groups[Log Viewer].keywords[5]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>time</source>
-      <translation type="unfinished">time</translation>
+      <translation>время</translation>
     </message>
     <message>
       <extracomment>.groups[Log Viewer].keywords[6]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>gstreamer</source>
-      <translation type="unfinished">gstreamer</translation>
+      <translation>gstreamer</translation>
     </message>
     <message>
       <extracomment>.groups[Log Viewer].keywords[7]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Logging.SettingsUI.json"/>
       <source>debug</source>
-      <translation type="unfinished">debug</translation>
+      <translation>отладка</translation>
     </message>
   </context>
   <context>
@@ -10567,163 +10601,235 @@
       <extracomment>.groups[Connection Status].sectionName</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>Connection Status</source>
-      <translation type="unfinished">Connection Status</translation>
+      <translation>Статус соединения</translation>
     </message>
     <message>
       <extracomment>.groups[Connection Status].keywords[0], .groups[Options].keywords[3]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>ntrip</source>
-      <translation type="unfinished">ntrip</translation>
+      <translation>ntrip</translation>
     </message>
     <message>
       <extracomment>.groups[Connection Status].keywords[1], .groups[Server Settings].keywords[1]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>rtk</source>
-      <translation type="unfinished">rtk</translation>
+      <translation>rtk</translation>
     </message>
     <message>
       <extracomment>.groups[Connection Status].keywords[2]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>connection status</source>
-      <translation type="unfinished">connection status</translation>
+      <translation>статус соединения</translation>
     </message>
     <message>
       <extracomment>.groups[Connection Status].keywords[3]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>corrections</source>
-      <translation type="unfinished">corrections</translation>
+      <translation>поправки</translation>
     </message>
     <message>
       <extracomment>.groups[Server Settings].sectionName</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>Server Settings</source>
-      <translation type="unfinished">Server Settings</translation>
+      <translation>Настройки сервера</translation>
     </message>
     <message>
       <extracomment>.groups[Server Settings].keywords[0]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>ntrip server</source>
-      <translation type="unfinished">ntrip server</translation>
+      <translation>сервер ntrip</translation>
     </message>
     <message>
       <extracomment>.groups[Server Settings].keywords[2]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>caster</source>
-      <translation type="unfinished">caster</translation>
+      <translation>caster</translation>
     </message>
     <message>
       <extracomment>.groups[Server Settings].keywords[3]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>host</source>
-      <translation type="unfinished">host</translation>
+      <translation>хост</translation>
     </message>
     <message>
       <extracomment>.groups[Server Settings].keywords[4]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>port</source>
-      <translation type="unfinished">port</translation>
+      <translation>порт</translation>
     </message>
     <message>
       <extracomment>.groups[Server Settings].keywords[5]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>username</source>
-      <translation type="unfinished">username</translation>
+      <translation>имя пользователя</translation>
     </message>
     <message>
       <extracomment>.groups[Server Settings].keywords[6]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>password</source>
-      <translation type="unfinished">password</translation>
+      <translation>пароль</translation>
     </message>
     <message>
       <extracomment>.groups[Server Settings].keywords[7], .groups[Mountpoint Browser].keywords[0]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>mountpoint</source>
-      <translation type="unfinished">mountpoint</translation>
+      <translation>mountpoint</translation>
     </message>
     <message>
       <extracomment>.groups[Mountpoint Browser].sectionName</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>Mountpoint Browser</source>
-      <translation type="unfinished">Mountpoint Browser</translation>
+      <translation>Браузер mountpoint</translation>
     </message>
     <message>
       <extracomment>.groups[Mountpoint Browser].keywords[1]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>browse</source>
-      <translation type="unfinished">browse</translation>
+      <translation>обзор</translation>
     </message>
     <message>
       <extracomment>.groups[Mountpoint Browser].keywords[2]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>stream</source>
-      <translation type="unfinished">stream</translation>
+      <translation>поток</translation>
     </message>
     <message>
       <extracomment>.groups[Options].heading</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>Options</source>
-      <translation type="unfinished">Options</translation>
+      <translation>Параметры</translation>
     </message>
     <message>
       <extracomment>.groups[Options].keywords[0], .groups[UDP Forwarding].keywords[3]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>rtcm</source>
-      <translation type="unfinished">rtcm</translation>
+      <translation>rtcm</translation>
     </message>
     <message>
       <extracomment>.groups[Options].keywords[1]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>whitelist</source>
-      <translation type="unfinished">whitelist</translation>
+      <translation>белый список</translation>
     </message>
     <message>
       <extracomment>.groups[Options].keywords[2]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>message filter</source>
-      <translation type="unfinished">message filter</translation>
+      <translation>фильтр сообщений</translation>
     </message>
     <message>
       <extracomment>.groups[Options].controls[0].placeholder</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>e.g. 1005,1077,1087</source>
-      <translation type="unfinished">e.g. 1005,1077,1087</translation>
+      <translation>напр. 1005,1077,1087</translation>
     </message>
     <message>
       <extracomment>.groups[UDP Forwarding].heading</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>UDP Forwarding</source>
-      <translation type="unfinished">UDP Forwarding</translation>
+      <translation>UDP Перенаправление</translation>
     </message>
     <message>
       <extracomment>.groups[UDP Forwarding].keywords[0]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>udp forward</source>
-      <translation type="unfinished">udp forward</translation>
+      <translation>пересылка udp</translation>
     </message>
     <message>
       <extracomment>.groups[UDP Forwarding].keywords[1]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>relay</source>
-      <translation type="unfinished">relay</translation>
+      <translation>ретрансляция</translation>
     </message>
     <message>
       <extracomment>.groups[UDP Forwarding].keywords[2]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>corrections forward</source>
-      <translation type="unfinished">corrections forward</translation>
+      <translation>пересылка поправок</translation>
     </message>
     <message>
       <extracomment>.groups[UDP RTCM Input].heading</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>UDP RTCM Input</source>
-      <translation type="unfinished">UDP RTCM Input</translation>
+      <translation>Приём RTCM по UDP</translation>
     </message>
     <message>
       <extracomment>.groups[UDP RTCM Input].keywords[0]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/NTRIP.SettingsUI.json"/>
       <source>udp rtcm</source>
-      <translation type="unfinished">udp rtcm</translation>
+      <translation>udp rtcm</translation>
+    </message>
+    <message>
+      <extracomment>.groups[Correction Routing].sectionName</extracomment>
+      <location filename="../src/AppSettings/pages/NTRIP.SettingsUI.json"/>
+      <source>Correction Routing</source>
+      <translation type="unfinished">Correction Routing</translation>
+    </message>
+    <message>
+      <extracomment>.groups[Correction Routing].keywords[2]</extracomment>
+      <location filename="../src/AppSettings/pages/NTRIP.SettingsUI.json"/>
+      <source>source</source>
+      <translation type="unfinished">source</translation>
+    </message>
+    <message>
+      <extracomment>.groups[Correction Routing].keywords[4]</extracomment>
+      <location filename="../src/AppSettings/pages/NTRIP.SettingsUI.json"/>
+      <source>routing</source>
+      <translation type="unfinished">routing</translation>
+    </message>
+    <message>
+      <extracomment>.groups[Correction Routing].keywords[5]</extracomment>
+      <location filename="../src/AppSettings/pages/NTRIP.SettingsUI.json"/>
+      <source>automatic</source>
+      <translation type="unfinished">automatic</translation>
+    </message>
+    <message>
+      <extracomment>.groups[Correction Diagnostics].sectionName</extracomment>
+      <location filename="../src/AppSettings/pages/NTRIP.SettingsUI.json"/>
+      <source>Correction Diagnostics</source>
+      <translation type="unfinished">Correction Diagnostics</translation>
+    </message>
+    <message>
+      <extracomment>.groups[Correction Diagnostics].keywords[2]</extracomment>
+      <location filename="../src/AppSettings/pages/NTRIP.SettingsUI.json"/>
+      <source>diagnostics</source>
+      <translation type="unfinished">diagnostics</translation>
+    </message>
+    <message>
+      <extracomment>.groups[Correction Diagnostics].keywords[3]</extracomment>
+      <location filename="../src/AppSettings/pages/NTRIP.SettingsUI.json"/>
+      <source>events</source>
+      <translation type="unfinished">events</translation>
+    </message>
+    <message>
+      <extracomment>.groups[Correction Diagnostics].keywords[4]</extracomment>
+      <location filename="../src/AppSettings/pages/NTRIP.SettingsUI.json"/>
+      <source>queued</source>
+      <translation type="unfinished">queued</translation>
+    </message>
+    <message>
+      <extracomment>.groups[Correction Diagnostics].keywords[5]</extracomment>
+      <location filename="../src/AppSettings/pages/NTRIP.SettingsUI.json"/>
+      <source>written</source>
+      <translation type="unfinished">written</translation>
+    </message>
+    <message>
+      <extracomment>.groups[Correction Diagnostics].keywords[6]</extracomment>
+      <location filename="../src/AppSettings/pages/NTRIP.SettingsUI.json"/>
+      <source>unconfirmed</source>
+      <translation type="unfinished">unconfirmed</translation>
+    </message>
+    <message>
+      <extracomment>.groups[Correction Diagnostics].keywords[7]</extracomment>
+      <location filename="../src/AppSettings/pages/NTRIP.SettingsUI.json"/>
+      <source>dropped</source>
+      <translation type="unfinished">dropped</translation>
+    </message>
+    <message>
+      <extracomment>.groups[NTRIP UDP Forwarding].heading</extracomment>
+      <location filename="../src/AppSettings/pages/NTRIP.SettingsUI.json"/>
+      <source>NTRIP UDP Forwarding</source>
+      <translation type="unfinished">NTRIP UDP Forwarding</translation>
     </message>
   </context>
   <context>
@@ -10906,157 +11012,157 @@
       <extracomment>.groups[Video Source].heading</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>Video Source</source>
-      <translation type="unfinished">Video Source</translation>
+      <translation>Источник видео</translation>
     </message>
     <message>
       <extracomment>.groups[Video Source].keywords[0]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>video source</source>
-      <translation type="unfinished">video source</translation>
+      <translation>источник видео</translation>
     </message>
     <message>
       <extracomment>.groups[Video Source].keywords[1]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>camera</source>
-      <translation type="unfinished">camera</translation>
+      <translation>камера</translation>
     </message>
     <message>
       <extracomment>.groups[Video Source].keywords[2]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>stream</source>
-      <translation type="unfinished">stream</translation>
+      <translation>поток</translation>
     </message>
     <message>
       <extracomment>.groups[Connection].heading</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>Connection</source>
-      <translation type="unfinished">Connection</translation>
+      <translation>Соединение</translation>
     </message>
     <message>
       <extracomment>.groups[Connection].keywords[0]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>rtsp</source>
-      <translation type="unfinished">rtsp</translation>
+      <translation>rtsp</translation>
     </message>
     <message>
       <extracomment>.groups[Connection].keywords[1]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>tcp</source>
-      <translation type="unfinished">tcp</translation>
+      <translation>tcp</translation>
     </message>
     <message>
       <extracomment>.groups[Connection].keywords[2]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>udp</source>
-      <translation type="unfinished">udp</translation>
+      <translation>udp</translation>
     </message>
     <message>
       <extracomment>.groups[Connection].keywords[3]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>mpegts</source>
-      <translation type="unfinished">mpegts</translation>
+      <translation>mpegts</translation>
     </message>
     <message>
       <extracomment>.groups[Connection].keywords[4]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>video url</source>
-      <translation type="unfinished">video url</translation>
+      <translation>URL видео</translation>
     </message>
     <message>
       <extracomment>.groups[Connection].keywords[5]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>stream url</source>
-      <translation type="unfinished">stream url</translation>
+      <translation>URL потока</translation>
     </message>
     <message>
       <extracomment>.groups[Settings].heading</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>Settings</source>
-      <translation type="unfinished">Settings</translation>
+      <translation>Настройки</translation>
     </message>
     <message>
       <extracomment>.groups[Settings].keywords[0]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>aspect ratio</source>
-      <translation type="unfinished">aspect ratio</translation>
+      <translation>соотношение сторон</translation>
     </message>
     <message>
       <extracomment>.groups[Settings].keywords[1]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>low latency</source>
-      <translation type="unfinished">low latency</translation>
+      <translation>низкая задержка</translation>
     </message>
     <message>
       <extracomment>.groups[Settings].keywords[2]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>decoder</source>
-      <translation type="unfinished">decoder</translation>
+      <translation>декодер</translation>
     </message>
     <message>
       <extracomment>.groups[Settings].keywords[3]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>hardware decode</source>
-      <translation type="unfinished">hardware decode</translation>
+      <translation>аппаратное декодирование</translation>
     </message>
     <message>
       <extracomment>.groups[Settings].keywords[4]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>disable when disarmed</source>
-      <translation type="unfinished">disable when disarmed</translation>
+      <translation>отключить при disarm</translation>
     </message>
     <message>
       <extracomment>.groups[Settings].keywords[5]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>gpu</source>
-      <translation type="unfinished">gpu</translation>
+      <translation>gpu</translation>
     </message>
     <message>
       <extracomment>.groups[Settings].keywords[6]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>zero-copy</source>
-      <translation type="unfinished">zero-copy</translation>
+      <translation>zero-copy</translation>
     </message>
     <message>
       <extracomment>.groups[Local Video Storage].heading</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>Local Video Storage</source>
-      <translation type="unfinished">Local Video Storage</translation>
+      <translation>Локальное хранилище видео</translation>
     </message>
     <message>
       <extracomment>.groups[Local Video Storage].keywords[0]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>record</source>
-      <translation type="unfinished">record</translation>
+      <translation>запись</translation>
     </message>
     <message>
       <extracomment>.groups[Local Video Storage].keywords[1]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>recording format</source>
-      <translation type="unfinished">recording format</translation>
+      <translation>формат записи</translation>
     </message>
     <message>
       <extracomment>.groups[Local Video Storage].keywords[2]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>mp4</source>
-      <translation type="unfinished">mp4</translation>
+      <translation>mp4</translation>
     </message>
     <message>
       <extracomment>.groups[Local Video Storage].keywords[3]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>mkv</source>
-      <translation type="unfinished">mkv</translation>
+      <translation>mkv</translation>
     </message>
     <message>
       <extracomment>.groups[Local Video Storage].keywords[4]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>storage limit</source>
-      <translation type="unfinished">storage limit</translation>
+      <translation>лимит хранилища</translation>
     </message>
     <message>
       <extracomment>.groups[Local Video Storage].keywords[5]</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/AppSettings/pages/Video.SettingsUI.json"/>
       <source>video file</source>
-      <translation type="unfinished">video file</translation>
+      <translation>видеофайл</translation>
     </message>
   </context>
   <context>

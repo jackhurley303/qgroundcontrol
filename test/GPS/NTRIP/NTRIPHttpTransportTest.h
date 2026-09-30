@@ -7,26 +7,21 @@ class NTRIPHttpTransportTest : public UnitTest
     Q_OBJECT
 
 private slots:
-    // HTTP status line parsing
-    void _testParseHttpStatus200();
-    void _testParseHttpStatusICY();
-    void _testParseHttpStatus401();
-    void _testParseHttpStatus404();
-    void _testParseHttpStatusInvalid();
-    void _testParseHttpStatus201();
-    void _testParseHttpStatus500();
-    void _testParseHttpStatusNoReason();
-
     // Whitelist parsing
-    void _testWhitelistEmpty();
-    void _testWhitelistSingle();
-    void _testWhitelistMultiple();
-    void _testWhitelistInvalidEntries();
+    void _testWhitelist_data();
+    void _testWhitelist();
+
+    void _testParseHttpStatus_data();
+    void _testParseHttpStatus();
+    void _testHttpDecoderReset();
 
     // RTCM filtering
     void _testFilterNoWhitelist();
     void _testFilterWithWhitelist();
-    void _testFilterRejectsBadCrc();
+    void _testFilterRejectsInvalidFrame_data();
+    void _testFilterRejectsInvalidFrame();
+    void _testFrameCallbackRetiresTransport_data();
+    void _testFrameCallbackRetiresTransport();
 
     // Transport config validation
     void testConfigValidEmpty();
@@ -34,8 +29,7 @@ private slots:
     void testConfigValidBadPort();
     void testConfigRejectsColonUsername();
     void testConfigRejectsControlChars();
-    void testConfigDiffClassifiersCoverIndependentFields();
-    void testConfigCasterIdentityExcludesMountpointAndSinks();
+    void testConfigurationDomainsCompareIndependently();
 
     // Live TLS error path
     void testTlsFatalErrorEmitsSingleError();
@@ -48,4 +42,8 @@ private slots:
     void _testBuildRequestPlaintextCredentialsWarns();
     void _testBuildRequestTlsCredentialsNoWarn();
     void _testBuildRequestNoCredentialsNoWarn();
+    void _testBuildRequestPreservesValues_data();
+    void _testBuildRequestPreservesValues();
+    void _testBuildRequestRejectsInvalidConfig_data();
+    void _testBuildRequestRejectsInvalidConfig();
 };

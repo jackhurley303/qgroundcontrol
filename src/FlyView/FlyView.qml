@@ -127,6 +127,7 @@ Item {
 
         PipView {
             id:                     _pipView
+            objectName:             "flyViewPipView"
             anchors.left:           parent.left
             anchors.bottom:         parent.bottom
             anchors.margins:        _toolsMargin

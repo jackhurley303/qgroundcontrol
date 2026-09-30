@@ -19,8 +19,9 @@ container-local dependency paths resolve to the correct repositories.
 
 Docker's BuildKit cache uses `type=gha,version=2`, scoped by variant and target. On RunsOn,
 `runs-on/action@v2` initializes [Magic Cache](https://runs-on.com/docs/performance/caching/docker/)
-before Buildx to store layers in S3. Only non-PR jobs export caches. Fork PRs use GitHub-hosted
-runners and the ordinary GHA cache backend, without access to the private S3 cache.
+before Buildx to store layers in S3. Only non-PR jobs export caches. Upstream builds, including
+PRs from forks, use RunsOn and Magic Cache. Workflows running in independent forks retain
+GitHub-hosted runners and the ordinary GHA cache backend.
 
 ClusterFuzzLite PR runs use the bundled seed corpus without querying historical GitHub artifacts
 (`NO_CLUSTERFUZZ_DEPLOYMENT=true`). This also disables previous-build crash comparison: reproducible
@@ -103,10 +104,23 @@ The managed image and Windows warm-pool routes are opt-in repository settings. W
 standard RunsOn runner. See the [runner image guide](runner-images/README.md) for AWS prerequisites,
 activation, rebuild cadence, and the organization-level warm-pool example.
 
+### Release tags
+
+Platform workflows trigger on `push` of tags matching `v[0-9]+.[0-9]+.[0-9]+` only. Release tags
+are cut on `Stable_V*` branches. `_detect-changes.yml` sets `should_build=false` for any tag ref
+that is not an exact `vX.Y.Z` name reachable from an `origin/Stable*` branch (the name check also
+covers `workflow_dispatch` on a tag, which bypasses the `push.tags` glob); every platform and
+Docker build job gates on that output, so nothing is built, signed, or pushed (TestFlight,
+Play Store, Docker Hub). `aws-upload` independently refuses to publish such a tag to the S3
+`latest/` folder or invalidate CloudFront. Both checks run `release_tag_check.py`, which fails the
+job if git cannot answer.
+Version-marker tags on `master` (e.g. `v5.2.0-dev`, consumed by `git describe` for daily-build
+version numbers) do not match the trigger glob and never start a build.
+
 ### TestFlight releases
 
 `ios.yml` builds a Release device bundle and a Debug x86_64 simulator bundle. Pull-request and
-branch builds remain unsigned. A `v*` tag selects the Xcode App Store preset, imports an Apple
+branch builds remain unsigned. A release tag selects the Xcode App Store preset, imports an Apple
 Distribution certificate and provisioning profile, verifies the signed bundle, packages an IPA,
 and uploads it to TestFlight.
 
@@ -175,7 +189,7 @@ Python helpers in `.github/scripts/` invoked by workflows and composite actions.
 | `android_boot_test.py` | Android emulator boot smoke test |
 | `android_build_retry.py` | Retry an Android build after a known intermittent Qt deployment-settings failure |
 | `android_collect_diagnostics.py` | Collect emulator failure diagnostics (build, adb dumps, GStreamer error grep, AVD logs) |
-| `android_sdk_helper.py` | Android SDK/NDK setup helpers |
+| `android_sdk_helper.py` | Retry Android SDK/NDK package installation and configure tool paths |
 | `attest_helper.py` | Gate SBOM signing and resolve artifact paths |
 | `aws_upload.py` | Validate and upload artifacts to AWS S3 |
 | `cache_policy.py` | Resolve the cache save policy for the current workflow event |
@@ -207,6 +221,7 @@ Python helpers in `.github/scripts/` invoked by workflows and composite actions.
 | `report_context.py` | Reject stale PR/default-branch reporting contexts |
 | `resolve_gstreamer_config.py` | Pick the platform-specific GStreamer version from build-config outputs |
 | `size_analysis.py` | Analyze binary size changes |
+| `release_tag_check.py` | Report whether the current tag is a `vX.Y.Z` release tag reachable from a `Stable*` branch |
 | `test_duration_report.py` | Generate test-duration reports and regressions |
 | `verify_coverage_thresholds.py` | Verify `coverage.xml` meets line and branch coverage thresholds |
 | `verify_executable.py` | Verify the QGroundControl executable with a boot test |
@@ -313,7 +328,8 @@ Gradle, Flatpak, iOS target Qt SDK, and GitHub-hosted uv/Python caching remain d
   use Python entrypoints. Shell remains for installing Python itself and loading container
   login profiles. Docker Qt installation uses `tools/setup/install_qt.py install --from-config`
   and the shared Python retry policy. Native package smoke-test failures still uninstall
-  the package, and VM cleanup only deletes successfully created instances.
+  the package, and Multipass cleanup only deletes successfully created instances.
+  Vagrant teardown requires an attempted VM startup and surfaces cleanup failures.
 - **CMake entrypoint**: Platform workflows configure through `cmake-configure`, which requires
   `qt-cmake` by default. Android is the explicit exception and supplies its target Qt toolchain and
   prefix to plain CMake.

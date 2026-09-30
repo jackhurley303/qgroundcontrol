@@ -10,8 +10,10 @@
 #include "MockLinkMissionItemHandler.h"
 
 #include <QtCore/QElapsedTimer>
+#include <QtCore/QList>
 #include <QtCore/QMap>
 #include <QtCore/QMutex>
+#include <QtCore/QPair>
 #include <QtCore/QSet>
 #include <QtPositioning/QGeoCoordinate>
 
@@ -29,6 +31,7 @@ class MockLink : public LinkInterface
 {
     Q_OBJECT
     friend class MockLinkFTP;
+    friend class StandardModesTest;
 
 public:
     explicit MockLink(SharedLinkConfigurationPtr &config, QObject *parent = nullptr);
@@ -128,6 +131,9 @@ public:
     /// delayed flight mode and causes QGC to re-query standard modes.
     void bumpAvailableModesMonitorSequence() { ++_availableModesMonitorSeqNumber; }
 
+    /// Unit test support: sends every vehicle->QGC message twice, as when two links receive the same traffic.
+    void setDuplicateResponses(bool duplicate) { _duplicateResponses = duplicate; }
+
     enum RequestMessageFailureMode_t {
         FailRequestMessageNone,
         FailRequestMessageCommandAcceptedMsgNotSent,
@@ -178,6 +184,8 @@ public:
 
     /// Returns the number of standalone PARAM_REQUEST_READ requests for _HASH_CHECK received
     int hashCheckRequestCount() const { return _hashCheckRequestCount; }
+    /// Index-based PARAM_REQUEST_READs received, in arrival order: (componentId, paramIndex)
+    QList<QPair<int, int>> paramRequestReadIndexLog() const { return _paramRequestReadIndexLog; }
 
     /// Change a float parameter value directly on MockLink (for testing cache invalidation)
     void setMockParamValue(int componentId, const QString &paramName, float value);
@@ -283,6 +291,9 @@ private:
     void _handleParamRequestList(const mavlink_message_t &msg);
     void _handleParamSet(const mavlink_message_t &msg);
     void _handleParamRequestRead(const mavlink_message_t &msg);
+    bool _shouldSkipParamSend(int componentId, const QString &paramName, int paramIndex) const;
+    bool _shouldSkipParamRead(int componentId, const QString &paramName, int paramIndex);
+    bool _hasNonDefaultParamComponent() const;
     void _handleFTP(const mavlink_message_t &msg);
     void _handleCommandLong(const mavlink_message_t &msg);
     void _handleCommandInt(const mavlink_message_t &msg);
@@ -364,6 +375,7 @@ private:
     const MockConfiguration::FailureMode_t _failureMode = MockConfiguration::FailNone;
     const bool _stayMavlinkV1 = false;  ///< Test-only: never upgrade outgoing traffic to MAVLink v2
     const bool _ftpCapability = false;  ///< Test-only: advertise MAV_PROTOCOL_CAPABILITY_FTP
+    const bool _sendRadioStatusEnabled = true; ///< Stream RADIO_STATUS at 1Hz (marks the link as a radio link)
     const uint8_t _vehicleSystemId = 0;
     const double _vehicleLatitude = 0.0;
     const double _vehicleLongitude = 0.0;
@@ -422,6 +434,7 @@ private:
 
     double _vehicleAltitudeAMSL = _defaultVehicleHomeAltitude;
     std::atomic<bool> _commLost = false;
+    std::atomic<bool> _duplicateResponses = false;
     bool _mavlinkV2Upgraded = false;    ///< True once outgoing traffic has switched from v1 to v2
     bool _signingEnabled = false;
     bool _highLatencyTransmissionEnabled = true;
@@ -439,9 +452,9 @@ private:
     QMutex _paramRequestListMutex;
 
     // Mavlink standard modes worker information
-    int _availableModesWorkerNextModeIndex = 0;         ///< 0: not active, +index: next mode the send in sequence, -index: send a single mode (indices are 1-based)
+    int _availableModesWorkerNextModeIndex = 0;  ///< 0: inactive; otherwise the next one-based streaming index
     /// Protects _availableModesWorkerNextModeIndex from check-then-set and read-modify-write races:
-    ///   - Main thread: _handleRequestMessageAvailableModes() checking/starting/stopping worker
+    ///   - Main thread: _handleRequestMessageAvailableModes() checking/starting a stream
     ///   - Worker thread: _availableModesWorker() incrementing index every 2ms (500Hz)
     QMutex _availableModesWorkerMutex;
     /// Sequence number sent in AVAILABLE_MODES_MONITOR. Written from the test (main) thread via
@@ -468,6 +481,7 @@ private:
     bool _paramRequestReadFailureFirstAttemptPending = false;
     bool _hashCheckNoResponse = false;
     int _hashCheckRequestCount = 0;
+    QList<QPair<int, int>> _paramRequestReadIndexLog;
     bool _paramRequestListHashCheckSent = false;
     bool _resetSysAutostartOnParamReset = false;
 
@@ -547,6 +561,13 @@ private:
     static constexpr const char *_failParam = "COM_FLTMODE6";
 
     static constexpr uint8_t _vehicleComponentId = MAV_COMP_ID_AUTOPILOT1;
+
+    // Simulated DroneCAN node exposed as its own param component (FailMissingParamOnAllRequestsNonDefaultComponent and friends)
+    static constexpr uint8_t _nonDefaultParamComponentId = 125;
+    static constexpr const char *_nonDefaultFailParam = "BATT_MONITOR";
+    static constexpr int _sharedFailParamIndex = 1;         ///< FailMissingParamSharedIndexAcrossComponents: index missing on both components
+    static constexpr int _nonDefaultStreamedParamCount = 2; ///< FailNonDefaultComponentDead/Lossy: params that make it through the stream
+    QSet<QPair<int, int>> _nonDefaultReadAttempted;         ///< FailNonDefaultComponentLossy: (component, index) reads already dropped once
 
     static constexpr uint16_t _logDownloadLogId = 0;        ///< Id of siumulated log file
     static constexpr uint32_t _logDownloadFileSize = 1000;  ///< Size of simulated log file

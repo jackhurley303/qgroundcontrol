@@ -1,37 +1,39 @@
 #include "SettingsManager.h"
-#include "AppMessages.h"
-#include "QGCLoggingCategory.h"
+
+#include <QtCore/QApplicationStatic>
+#include <QtCore/QRegularExpression>
+
 #include "ADSBVehicleManagerSettings.h"
 #include "APMMavlinkStreamRateSettings.h"
+#include "AppMessages.h"
 #include "AppSettings.h"
 #include "AutoConnectSettings.h"
 #include "BatteryIndicatorSettings.h"
-#include "MavlinkActionsSettings.h"
 #include "FirmwareUpgradeSettings.h"
 #include "FlightMapSettings.h"
 #include "FlightModeSettings.h"
 #include "FlyViewSettings.h"
+#include "GPSCorrectionSettings.h"
 #include "GimbalControllerSettings.h"
+#include "JoystickManagerSettings.h"
+#include "JsonParsing.h"
+#include "LogManagerSettings.h"
+#include "LogViewerSettings.h"
 #include "MapsSettings.h"
+#include "MavlinkActionsSettings.h"
+#include "MavlinkSettings.h"
+#include "NTRIPSettings.h"
 #include "OfflineMapsSettings.h"
 #include "PlanViewSettings.h"
 #include "PluginSettings.h"
-#include "RemoteIDSettings.h"
-#include "RTKSettings.h"
-#include "UnitsSettings.h"
-#include "NTRIPSettings.h"
-#include "VideoSettings.h"
-#include "MavlinkSettings.h"
-#include "JoystickManagerSettings.h"
-#include "LogManagerSettings.h"
-#include "LogViewerSettings.h"
-#include "Viewer3DSettings.h"
-#include "JsonParsing.h"
 #include "QGCCorePlugin.h"
+#include "QGCLoggingCategory.h"
+#include "RTKSettings.h"
+#include "RemoteIDSettings.h"
 #include "SettingsGroup.h"
-
-#include <QtCore/QApplicationStatic>
-#include <QtCore/QRegularExpression>
+#include "UnitsSettings.h"
+#include "VideoSettings.h"
+#include "Viewer3DSettings.h"
 
 QGC_LOGGING_CATEGORY(SettingsManagerLog, "Utilities.SettingsManager")
 
@@ -74,6 +76,7 @@ void SettingsManager::init()
     _pluginSettings = new PluginSettings(this);
     _remoteIDSettings = new RemoteIDSettings(this);
     _rtkSettings = new RTKSettings(this);
+    _gpsCorrectionSettings = new GPSCorrectionSettings(this);
     _ntripSettings = new NTRIPSettings(this);
     _videoSettings = new VideoSettings(this);
     _mavlinkSettings = new MavlinkSettings(this);
@@ -134,6 +137,12 @@ RemoteIDSettings *SettingsManager::remoteIDSettings() const { return _remoteIDSe
 RTKSettings *SettingsManager::rtkSettings() const { return _rtkSettings; }
 UnitsSettings *SettingsManager::unitsSettings() const { return _unitsSettings; }
 NTRIPSettings *SettingsManager::ntripSettings() const { return _ntripSettings; }
+
+GPSCorrectionSettings* SettingsManager::gpsCorrectionSettings() const
+{
+    return _gpsCorrectionSettings;
+}
+
 VideoSettings *SettingsManager::videoSettings() const { return _videoSettings; }
 MavlinkSettings *SettingsManager::mavlinkSettings() const { return _mavlinkSettings; }
 JoystickManagerSettings *SettingsManager::joystickManagerSettings() const { return _joystickManagerSettings; }

@@ -1,21 +1,19 @@
 #pragma once
 
+#include <chrono>
+
 #include <QtCore/QChronoTimer>
-#include <QtCore/QElapsedTimer>
 #include <QtCore/QHash>
 #include <QtCore/QObject>
 #include <QtCore/QVariant>
 #include <QtCore/QVariantList>
-#include <QtQmlIntegration/QtQmlIntegration>
-#include <chrono>
 
 #include "DataRateTracker.h"
+#include "MonotonicClock.h"
 
 class NTRIPConnectionStats : public QObject
 {
     Q_OBJECT
-    QML_ELEMENT
-    QML_UNCREATABLE("")
     Q_PROPERTY(quint64 bytesReceived READ bytesReceived NOTIFY bytesReceivedChanged)
     Q_PROPERTY(quint32 messagesReceived READ messagesReceived NOTIFY messagesReceivedChanged)
     Q_PROPERTY(double dataRateBytesPerSec READ dataRateBytesPerSec NOTIFY dataRateChanged)
@@ -31,9 +29,9 @@ public:
 
     void start();
     void stop();
-    /// Record a received RTCM message. messageId = 0 is treated as "unknown/unparseable"
-    /// and tracked under a distinct bucket so it still shows up in diagnostics.
-    void recordMessage(int bytes, int messageId = 0);
+    /// Count every message; health uses the newest valid monotonic receipt.
+    void recordMessage(int bytes, int messageId = 0,
+                       qint64 receivedAtMs = static_cast<qint64>(MonotonicClock::nowUs() / 1000));
     void reset();
 
     quint64 bytesReceived() const { return _rateTracker.totalBytes(); }
@@ -42,7 +40,7 @@ public:
 
     double dataRateBytesPerSec() const { return _rateTracker.bytesPerSec(); }
 
-    double correctionAgeSec() const { return _lastMessageTime.isValid() ? _lastMessageTime.elapsed() / 1000.0 : -1.0; }
+    double correctionAgeSec() const;
 
     bool dataStale() const { return _dataStale; }
 
@@ -57,6 +55,8 @@ signals:
     void messageCountsByIdChanged();
 
 private:
+    void _updateDataStale(qint64 nowMs);
+
     static constexpr std::chrono::milliseconds kStaleThreshold{5000};
 
     DataRateTracker _rateTracker;
@@ -65,7 +65,7 @@ private:
     quint32 _prevMessagesReceived = 0;
     bool _dataStale = false;
     bool _messageCountsDirty = false;
-    QElapsedTimer _lastMessageTime;
+    qint64 _lastReceivedAtMs = 0;
     QChronoTimer _rateTimer;
     // Per-ID counts. Using int for compatibility with QVariant in QML.
     QHash<int, quint32> _messageCountsById;

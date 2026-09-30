@@ -1,16 +1,21 @@
 #pragma once
 
 #include <QtCore/QObject>
+#include <QtCore/QString>
 #include <QtCore/QVector>
 
 #include "NTRIPError.h"
+#include "RTCMDecodedFrame.h"
 
 class NTRIPTransport : public QObject
 {
     Q_OBJECT
 
 public:
-    using QObject::QObject;
+    explicit NTRIPTransport(QObject* parent = nullptr)
+        : QObject(parent)
+    {
+    }
 
     virtual void start() = 0;
     virtual void stop() = 0;
@@ -22,13 +27,10 @@ public:
 
 signals:
     void connected();
-    void error(NTRIPError code, const QString& detail);
-    void RTCMDataUpdate(const QByteArray& message, int messageId);
-    void finished();
+    void error(const NTRIPFailure& failure);
+    /// Includes invalid and filtered candidates.
+    void correctionFrameReceived(const RTCMDecodedFrame& frame);
 
-    /// Emitted when the transport sent authentication credentials over a cleartext
-    /// channel (e.g. Basic auth over HTTP, no TLS). Subclasses that never transmit
-    /// credentials simply never emit this. Exposed on the base so NTRIPManager does
-    /// not need to know the concrete transport type to wire the warning logger.
+    /// Warns before admitting a plaintext credential write; observers may cancel.
     void plaintextCredentialsWarning();
 };

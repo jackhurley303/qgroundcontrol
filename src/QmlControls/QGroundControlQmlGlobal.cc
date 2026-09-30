@@ -1,25 +1,26 @@
 #include "QGroundControlQmlGlobal.h"
 
-#include "QGCCorePlugin.h"
-#include "QGCPluginManager.h"
-#include "LinkManager.h"
-#include "MAVLinkProtocol.h"
-#include "FirmwarePluginManager.h"
-#include "AppSettings.h"
-#include "FlightMapSettings.h"
-#include "SettingsManager.h"
-#include "PositionManager.h"
-#include "QGCMapEngineManager.h"
 #include "ADSBVehicleManager.h"
+#include "AppSettings.h"
 #include "AudioOutput.h"
-#include "NTRIPManager.h"
-#include "MAVLinkSigningKeys.h"
-#include "MissionCommandTree.h"
-#include "VideoManager.h"
-#include "MultiVehicleManager.h"
-#include "LoggingCategoryModel.h"
+#include "FirmwarePluginManager.h"
+#include "FlightMapSettings.h"
 #include "GPSManager.h"
 #include "GPSRtk.h"
+#include "LinkManager.h"
+#include "LoggingCategoryModel.h"
+#include "MAVLinkProtocol.h"
+#include "MAVLinkSigningKeys.h"
+#include "MissionCommandTree.h"
+#include "MultiVehicleManager.h"
+#include "NTRIPManager.h"
+#include "PositionManager.h"
+#include "QGCCorePlugin.h"
+#include "QGCMapEngineManager.h"
+#include "QGCPluginManager.h"
+#include "QGCVersionCheck.h"
+#include "SettingsManager.h"
+#include "VideoManager.h"
 #ifndef QGC_NO_SERIAL_LINK
 #include "SerialPortManager.h"
 #endif
@@ -87,10 +88,17 @@ QGroundControlQmlGlobal::QGroundControlQmlGlobal(QObject *parent)
             _flightMapPositionSettledTimer.start();
         }
     });
+    (void) connect(QGCVersionCheck::instance(), &QGCVersionCheck::newStableVersionChanged, this,
+                   &QGroundControlQmlGlobal::newStableVersionChanged);
 }
 
 QGroundControlQmlGlobal::~QGroundControlQmlGlobal()
 {
+}
+
+GPSManager* QGroundControlQmlGlobal::gpsManager() const
+{
+    return GPSManager::instance();
 }
 
 void QGroundControlQmlGlobal::saveGlobalSetting (const QString& key, const QString& value)
@@ -296,6 +304,11 @@ QString QGroundControlQmlGlobal::qgcVersion(void)
 QString QGroundControlQmlGlobal::qgcAppDate()
 {
     return QGC_APP_DATE;
+}
+
+QString QGroundControlQmlGlobal::newStableVersion()
+{
+    return QGCVersionCheck::instance()->newStableVersion();
 }
 
 QString QGroundControlQmlGlobal::altitudeFrameExtraUnits(AltitudeFrame altFrame)
