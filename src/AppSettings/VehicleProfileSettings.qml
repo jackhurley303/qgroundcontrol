@@ -245,6 +245,14 @@ SettingsPage {
             // createVehicle() wrote. Cancel then retries that delete instead of a revert.
             property bool _deleteOnCancel: false
 
+            // QGCFlickableScrollIndicator draws the vertical scrollbar as an overlay inside the
+            // flickable's own width, not in a separate reserved column (see
+            // QGCFlickableScrollIndicator.qml). formColumn below fills that width exactly, so
+            // without this gutter the indicator sits on top of the form's rightmost fields
+            // whenever the dialog scrolls. formColumnContainer reserves this much extra width
+            // past formColumn's own right edge for the indicator to sit in instead.
+            property real _scrollbarGutterWidth: ScreenTools.defaultFontPixelWidth
+
             // Assigns every staged battery/sensor row a small integer identity that survives
             // add/remove/reorder, since the array index a row happens to sit at can change
             // between the moment a text field's onEditingFinished closes over it and the
@@ -594,416 +602,424 @@ SettingsPage {
                 _updateRow(_sensors, key, field, value)
             }
 
-            // QGCPopupDialog's own QGCFlickable scrolls this form when it is taller than the window.
-            ColumnLayout {
-                id:         formColumn
-                width:      ScreenTools.defaultFontPixelWidth * 60
-                spacing:    ScreenTools.defaultFontPixelHeight / 2
+            // QGCPopupDialog's own QGCFlickable scrolls this form when it is taller than the
+            // window. See _scrollbarGutterWidth above for why formColumn sits inside this
+            // wider container rather than being the flickable's content directly.
+            Item {
+                id:     formColumnContainer
+                width:  formColumn.width + editDialog._scrollbarGutterWidth
+                height: formColumn.height
 
-                SectionHeader {
-                    Layout.fillWidth:   true
-                    text:               qsTr("Identity")
-                }
+                ColumnLayout {
+                    id:         formColumn
+                    width:      ScreenTools.defaultFontPixelWidth * 60
+                    spacing:    ScreenTools.defaultFontPixelHeight / 2
 
-                RowLayout {
-                    Layout.fillWidth:   true
-                    spacing:            ScreenTools.defaultFontPixelWidth
-
-                    QGCLabel { text: qsTr("Name") }
-                    QGCTextField {
-                        id:                 nameField
-                        objectName:         "vehicleNameField"
+                    SectionHeader {
                         Layout.fillWidth:   true
-                        placeholderText:    qsTr("Enter name")
-                        onEditingFinished:  editDialog._name = text
+                        text:               qsTr("Identity")
                     }
-                }
 
-                RowLayout {
-                    Layout.fillWidth:   true
-                    spacing:            ScreenTools.defaultFontPixelWidth
-
-                    QGCLabel { text: qsTr("Manufacturer") }
-                    QGCTextField {
-                        id:                 manufacturerField
-                        objectName:         "vehicleManufacturerField"
+                    RowLayout {
                         Layout.fillWidth:   true
-                        onEditingFinished:  editDialog._manufacturer = text
+                        spacing:            ScreenTools.defaultFontPixelWidth
+
+                        QGCLabel { text: qsTr("Name") }
+                        QGCTextField {
+                            id:                 nameField
+                            objectName:         "vehicleNameField"
+                            Layout.fillWidth:   true
+                            placeholderText:    qsTr("Enter name")
+                            onEditingFinished:  editDialog._name = text
+                        }
                     }
 
-                    QGCLabel { text: qsTr("Model") }
-                    QGCTextField {
-                        id:                 modelField
-                        objectName:         "vehicleModelField"
+                    RowLayout {
                         Layout.fillWidth:   true
-                        onEditingFinished:  editDialog._model = text
-                    }
-                }
+                        spacing:            ScreenTools.defaultFontPixelWidth
 
-                QGCCheckBoxSlider {
-                    id:                 activeToggle
-                    objectName:         "vehicleActiveToggle"
-                    Layout.fillWidth:   true
-                    text:               qsTr("Active")
-                    onCheckedChanged:   editDialog._active = checked
-                }
+                        QGCLabel { text: qsTr("Manufacturer") }
+                        QGCTextField {
+                            id:                 manufacturerField
+                            objectName:         "vehicleManufacturerField"
+                            Layout.fillWidth:   true
+                            onEditingFinished:  editDialog._manufacturer = text
+                        }
 
-                RowLayout {
-                    Layout.fillWidth:   true
-                    spacing:            ScreenTools.defaultFontPixelWidth
-
-                    Image {
-                        objectName:             "vehicleImagePreview"
-                        Layout.preferredWidth:  ScreenTools.defaultFontPixelHeight * 6
-                        Layout.preferredHeight: ScreenTools.defaultFontPixelHeight * 6
-                        fillMode:               Image.PreserveAspectFit
-                        visible:                editDialog._hasImageToShow()
-                        source:                 editDialog._pendingImagePath.length > 0
-                                                    ? editDialog._imagePreviewSource(editDialog._pendingImagePath)
-                                                    : (editDialog._hasImageToShow() ? editingEntry.imageDataUrl : "")
+                        QGCLabel { text: qsTr("Model") }
+                        QGCTextField {
+                            id:                 modelField
+                            objectName:         "vehicleModelField"
+                            Layout.fillWidth:   true
+                            onEditingFinished:  editDialog._model = text
+                        }
                     }
 
-                    ColumnLayout {
-                        Layout.fillWidth: true
+                    QGCCheckBoxSlider {
+                        id:                 activeToggle
+                        objectName:         "vehicleActiveToggle"
+                        Layout.fillWidth:   true
+                        text:               qsTr("Active")
+                        onCheckedChanged:   editDialog._active = checked
+                    }
 
-                        // The image is staged like every other field: Import and Clear only
-                        // record which one the user asked for (_pendingImagePath /
-                        // _pendingClearImage below); onAccepted is the only place that calls
-                        // entry.importImage() / clearImage(), after createVehicle in Add mode
-                        // and alongside every other staged write. importImage() takes a file
-                        // path rather than bytes, so the path itself is the staged value -
-                        // there is nothing to decode until Save.
-                        //
-                        // The "Browse..." button opens the platform's native file picker
-                        // (QGCFileDialog -> QtQuick.Dialogs FileDialog on desktop), which UI
-                        // automation cannot reach or drive. The path field plus "Import"
-                        // button is the reachable route: paste or type a path, then Import -
-                        // no native dialog involved.
-                        RowLayout {
+                    RowLayout {
+                        Layout.fillWidth:   true
+                        spacing:            ScreenTools.defaultFontPixelWidth
+
+                        Image {
+                            objectName:             "vehicleImagePreview"
+                            Layout.preferredWidth:  ScreenTools.defaultFontPixelHeight * 6
+                            Layout.preferredHeight: ScreenTools.defaultFontPixelHeight * 6
+                            fillMode:               Image.PreserveAspectFit
+                            visible:                editDialog._hasImageToShow()
+                            source:                 editDialog._pendingImagePath.length > 0
+                                                        ? editDialog._imagePreviewSource(editDialog._pendingImagePath)
+                                                        : (editDialog._hasImageToShow() ? editingEntry.imageDataUrl : "")
+                        }
+
+                        ColumnLayout {
                             Layout.fillWidth: true
+
+                            // The image is staged like every other field: Import and Clear only
+                            // record which one the user asked for (_pendingImagePath /
+                            // _pendingClearImage below); onAccepted is the only place that calls
+                            // entry.importImage() / clearImage(), after createVehicle in Add mode
+                            // and alongside every other staged write. importImage() takes a file
+                            // path rather than bytes, so the path itself is the staged value -
+                            // there is nothing to decode until Save.
+                            //
+                            // The "Browse..." button opens the platform's native file picker
+                            // (QGCFileDialog -> QtQuick.Dialogs FileDialog on desktop), which UI
+                            // automation cannot reach or drive. The path field plus "Import"
+                            // button is the reachable route: paste or type a path, then Import -
+                            // no native dialog involved.
+                            RowLayout {
+                                Layout.fillWidth: true
+
+                                QGCTextField {
+                                    id:                 imagePathField
+                                    objectName:         "vehicleImagePathField"
+                                    Layout.fillWidth:   true
+                                    placeholderText:    qsTr("Image file path")
+                                }
+
+                                QGCButton {
+                                    objectName: "vehicleImageBrowseButton"
+                                    text:       qsTr("Browse…")
+                                    onClicked:  imagePickerDialog.openForLoad()
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+
+                                QGCButton {
+                                    objectName: "vehicleImageImportButton"
+                                    text:       qsTr("Import")
+                                    enabled:    imagePathField.text.length > 0
+                                    onClicked:  editDialog._stageImportImage(imagePathField.text)
+                                }
+
+                                QGCButton {
+                                    objectName: "vehicleImageClearButton"
+                                    text:       qsTr("Clear Image")
+                                    enabled:    editDialog._hasImageToShow()
+                                    onClicked:  editDialog._stageClearImage()
+                                }
+                            }
+                        }
+                    }
+
+                    QGCFileDialog {
+                        id:             imagePickerDialog
+                        title:          qsTr("Select vehicle image")
+                        nameFilters:    [ qsTr("Images (*.png *.jpg *.jpeg *.bmp *.gif)"), qsTr("All Files (*)") ]
+
+                        // file is a local path, the same form Import passes, so picking a file
+                        // stages it at once.
+                        onAcceptedForLoad: (file) => {
+                            imagePathField.text = file
+                            editDialog._stageImportImage(file)
+                        }
+                    }
+
+                    SectionHeader {
+                        Layout.fillWidth:   true
+                        text:               qsTr("Frame")
+                    }
+
+                    LabelledComboBox {
+                        id:                     mavTypeCombo
+                        Layout.fillWidth:       true
+                        label:                  qsTr("Type")
+                        // Without a set width the combo sizes to its longest MAV_TYPE text and
+                        // pushes every row of the form past the dialog's right edge.
+                        comboBoxPreferredWidth: ScreenTools.defaultFontPixelWidth * 30
+                        // A property binding, not an imperative Component.onCompleted
+                        // assignment, so it is guaranteed set before _loadFromEntry() below
+                        // sets currentIndex regardless of completion order between this combo
+                        // and editDialog itself.
+                        model:                  root._mavTypeOptions.map(function (option) { return option.text })
+
+                        Component.onCompleted: comboBox.objectName = "vehicleMavTypeCombo"
+
+                        onActivated: (index) => {
+                            editDialog._mavType = root._mavTypeOptions[index].value
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth:   true
+                        spacing:            ScreenTools.defaultFontPixelWidth
+
+                        QGCLabel { text: qsTr("Weight") }
+                        QGCTextField {
+                            id:                     weightField
+                            objectName:             "vehicleWeightField"
+                            Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 10
+                            validator:              DoubleValidator { bottom: 0; decimals: 3 }
+                            onEditingFinished:      editDialog._weightKg = QGroundControl.unitsConversion.appSettingsWeightUnitsToGrams(parseFloat(text) || 0) / 1000
+                        }
+                        QGCLabel { text: QGroundControl.unitsConversion.appSettingsWeightUnitsString }
+
+                        QGCLabel { text: qsTr("Max Payload") }
+                        QGCTextField {
+                            id:                     maxPayloadField
+                            objectName:             "vehicleMaxPayloadField"
+                            Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 10
+                            validator:              DoubleValidator { bottom: 0; decimals: 3 }
+                            onEditingFinished:      editDialog._maxPayloadKg = QGroundControl.unitsConversion.appSettingsWeightUnitsToGrams(parseFloat(text) || 0) / 1000
+                        }
+                        QGCLabel { text: QGroundControl.unitsConversion.appSettingsWeightUnitsString }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth:   true
+                        spacing:            ScreenTools.defaultFontPixelWidth
+
+                        QGCLabel { text: qsTr("Max Flight Time") }
+                        QGCTextField {
+                            id:                     maxFlightTimeField
+                            objectName:             "vehicleMaxFlightTimeField"
+                            Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 10
+                            validator:              IntValidator { bottom: 0 }
+                            onEditingFinished:      editDialog._maxFlightTimeMinutes = parseInt(text) || 0
+                        }
+                        QGCLabel { text: qsTr("minutes") }
+                    }
+
+                    SectionHeader {
+                        Layout.fillWidth:   true
+                        text:               qsTr("Battery")
+                    }
+
+                    Repeater {
+                        model: editDialog._batteries
+
+                        RowLayout {
+                            Layout.fillWidth:   true
+                            spacing:            ScreenTools.defaultFontPixelWidth
+
+                            QGCLabel { text: qsTr("Cells") }
+                            QGCTextField {
+                                objectName:             "batteryCellCountField_" + index
+                                Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 8
+                                text:                   modelData.cellCount.toString()
+                                validator:              IntValidator { bottom: 0 }
+                                onEditingFinished:      editDialog._updateBattery(modelData._key, "cellCount", parseInt(text) || 0)
+                            }
+
+                            QGCLabel { text: qsTr("Capacity") }
+                            QGCTextField {
+                                objectName:             "batteryCapacityField_" + index
+                                Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 10
+                                text:                   modelData.capacityMah.toString()
+                                validator:              IntValidator { bottom: 0 }
+                                onEditingFinished:      editDialog._updateBattery(modelData._key, "capacityMah", parseInt(text) || 0)
+                            }
+                            QGCLabel { text: qsTr("mAh") }
+
+                            QGCColoredImage {
+                                height:                 ScreenTools.minTouchPixels
+                                width:                  height
+                                sourceSize.height:      height
+                                fillMode:               Image.PreserveAspectFit
+                                mipmap:                 true
+                                smooth:                 true
+                                color:                  qgcPal.text
+                                source:                 "/res/TrashDelete.svg"
+
+                                QGCMouseArea {
+                                    objectName: "batteryDeleteButton_" + index
+                                    fillItem:   parent
+                                    // Taking focus first commits a field still being edited in
+                                    // another row before the removal rebuilds every row.
+                                    onClicked: {
+                                        forceActiveFocus()
+                                        editDialog._removeBattery(modelData._key)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    LabelledButton {
+                        label:      qsTr("Batteries")
+                        buttonText: qsTr("Add Battery")
+
+                        Component.onCompleted: objectName = "addBatteryRow"
+
+                        onClicked: editDialog._addBattery()
+                    }
+
+                    SectionHeader {
+                        Layout.fillWidth:   true
+                        text:               qsTr("Flight Controller")
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth:   true
+                        spacing:            ScreenTools.defaultFontPixelWidth
+
+                        QGCLabel { text: qsTr("Hardware") }
+                        QGCTextField {
+                            id:                 fcHardwareField
+                            objectName:         "vehicleFcHardwareField"
+                            Layout.fillWidth:   true
+                            onEditingFinished:  editDialog._fcHardware = text
+                        }
+                    }
+
+                    LabelledComboBox {
+                        id:                     firmwareCombo
+                        Layout.fillWidth:       true
+                        label:                  qsTr("Firmware")
+                        comboBoxPreferredWidth: ScreenTools.defaultFontPixelWidth * 30
+                        // See mavTypeCombo above: a property binding, not
+                        // Component.onCompleted, so completion order with editDialog cannot
+                        // matter.
+                        model:                  root._firmwareOptions.map(function (option) { return option.text })
+
+                        Component.onCompleted: comboBox.objectName = "vehicleFirmwareCombo"
+
+                        onActivated: (index) => {
+                            editDialog._fcFirmware = root._firmwareOptions[index].value
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth:   true
+                        spacing:            ScreenTools.defaultFontPixelWidth
+
+                        QGCLabel { text: qsTr("Firmware Version") }
+                        QGCTextField {
+                            id:                 fcFirmwareVersionField
+                            objectName:         "vehicleFcFirmwareVersionField"
+                            Layout.fillWidth:   true
+                            onEditingFinished:  editDialog._fcFirmwareVersion = text
+                        }
+                    }
+
+                    SectionHeader {
+                        Layout.fillWidth:   true
+                        text:               qsTr("Registration")
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth:   true
+                        spacing:            ScreenTools.defaultFontPixelWidth
+
+                        QGCLabel { text: qsTr("Registration #") }
+                        QGCTextField {
+                            id:                 registrationNumberField
+                            objectName:         "vehicleRegistrationNumberField"
+                            Layout.fillWidth:   true
+                            onEditingFinished:  editDialog._registrationNumber = text
+                        }
+
+                        QGCLabel { text: qsTr("Serial #") }
+                        QGCTextField {
+                            id:                 serialNumberField
+                            objectName:         "vehicleSerialNumberField"
+                            Layout.fillWidth:   true
+                            onEditingFinished:  editDialog._serialNumber = text
+                        }
+                    }
+
+                    SectionHeader {
+                        Layout.fillWidth:   true
+                        text:               qsTr("Sensors")
+                    }
+
+                    Repeater {
+                        model: editDialog._sensors
+
+                        RowLayout {
+                            Layout.fillWidth:   true
+                            spacing:            ScreenTools.defaultFontPixelWidth
 
                             QGCTextField {
-                                id:                 imagePathField
-                                objectName:         "vehicleImagePathField"
-                                Layout.fillWidth:   true
-                                placeholderText:    qsTr("Image file path")
+                                objectName:             "sensorTypeField_" + index
+                                Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 12
+                                placeholderText:        qsTr("Type")
+                                text:                   modelData.type
+                                onEditingFinished:      editDialog._updateSensor(modelData._key, "type", text)
                             }
-
-                            QGCButton {
-                                objectName: "vehicleImageBrowseButton"
-                                text:       qsTr("Browse…")
-                                onClicked:  imagePickerDialog.openForLoad()
+                            QGCTextField {
+                                objectName:             "sensorModelField_" + index
+                                Layout.fillWidth:       true
+                                placeholderText:        qsTr("Model")
+                                text:                   modelData.model
+                                onEditingFinished:      editDialog._updateSensor(modelData._key, "model", text)
                             }
-                        }
+                            QGCColoredImage {
+                                height:                 ScreenTools.minTouchPixels
+                                width:                  height
+                                sourceSize.height:      height
+                                fillMode:               Image.PreserveAspectFit
+                                mipmap:                 true
+                                smooth:                 true
+                                color:                  qgcPal.text
+                                source:                 "/res/TrashDelete.svg"
 
-                        RowLayout {
-                            Layout.fillWidth: true
-
-                            QGCButton {
-                                objectName: "vehicleImageImportButton"
-                                text:       qsTr("Import")
-                                enabled:    imagePathField.text.length > 0
-                                onClicked:  editDialog._stageImportImage(imagePathField.text)
-                            }
-
-                            QGCButton {
-                                objectName: "vehicleImageClearButton"
-                                text:       qsTr("Clear Image")
-                                enabled:    editDialog._hasImageToShow()
-                                onClicked:  editDialog._stageClearImage()
-                            }
-                        }
-                    }
-                }
-
-                QGCFileDialog {
-                    id:             imagePickerDialog
-                    title:          qsTr("Select vehicle image")
-                    nameFilters:    [ qsTr("Images (*.png *.jpg *.jpeg *.bmp *.gif)"), qsTr("All Files (*)") ]
-
-                    // file is a local path, the same form Import passes, so picking a file
-                    // stages it at once.
-                    onAcceptedForLoad: (file) => {
-                        imagePathField.text = file
-                        editDialog._stageImportImage(file)
-                    }
-                }
-
-                SectionHeader {
-                    Layout.fillWidth:   true
-                    text:               qsTr("Frame")
-                }
-
-                LabelledComboBox {
-                    id:                     mavTypeCombo
-                    Layout.fillWidth:       true
-                    label:                  qsTr("Type")
-                    // Without a set width the combo sizes to its longest MAV_TYPE text and
-                    // pushes every row of the form past the dialog's right edge.
-                    comboBoxPreferredWidth: ScreenTools.defaultFontPixelWidth * 30
-                    // A property binding, not an imperative Component.onCompleted
-                    // assignment, so it is guaranteed set before _loadFromEntry() below
-                    // sets currentIndex regardless of completion order between this combo
-                    // and editDialog itself.
-                    model:                  root._mavTypeOptions.map(function (option) { return option.text })
-
-                    Component.onCompleted: comboBox.objectName = "vehicleMavTypeCombo"
-
-                    onActivated: (index) => {
-                        editDialog._mavType = root._mavTypeOptions[index].value
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth:   true
-                    spacing:            ScreenTools.defaultFontPixelWidth
-
-                    QGCLabel { text: qsTr("Weight") }
-                    QGCTextField {
-                        id:                     weightField
-                        objectName:             "vehicleWeightField"
-                        Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 10
-                        validator:              DoubleValidator { bottom: 0; decimals: 3 }
-                        onEditingFinished:      editDialog._weightKg = QGroundControl.unitsConversion.appSettingsWeightUnitsToGrams(parseFloat(text) || 0) / 1000
-                    }
-                    QGCLabel { text: QGroundControl.unitsConversion.appSettingsWeightUnitsString }
-
-                    QGCLabel { text: qsTr("Max Payload") }
-                    QGCTextField {
-                        id:                     maxPayloadField
-                        objectName:             "vehicleMaxPayloadField"
-                        Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 10
-                        validator:              DoubleValidator { bottom: 0; decimals: 3 }
-                        onEditingFinished:      editDialog._maxPayloadKg = QGroundControl.unitsConversion.appSettingsWeightUnitsToGrams(parseFloat(text) || 0) / 1000
-                    }
-                    QGCLabel { text: QGroundControl.unitsConversion.appSettingsWeightUnitsString }
-                }
-
-                RowLayout {
-                    Layout.fillWidth:   true
-                    spacing:            ScreenTools.defaultFontPixelWidth
-
-                    QGCLabel { text: qsTr("Max Flight Time") }
-                    QGCTextField {
-                        id:                     maxFlightTimeField
-                        objectName:             "vehicleMaxFlightTimeField"
-                        Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 10
-                        validator:              IntValidator { bottom: 0 }
-                        onEditingFinished:      editDialog._maxFlightTimeMinutes = parseInt(text) || 0
-                    }
-                    QGCLabel { text: qsTr("minutes") }
-                }
-
-                SectionHeader {
-                    Layout.fillWidth:   true
-                    text:               qsTr("Battery")
-                }
-
-                Repeater {
-                    model: editDialog._batteries
-
-                    RowLayout {
-                        Layout.fillWidth:   true
-                        spacing:            ScreenTools.defaultFontPixelWidth
-
-                        QGCLabel { text: qsTr("Cells") }
-                        QGCTextField {
-                            objectName:             "batteryCellCountField_" + index
-                            Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 8
-                            text:                   modelData.cellCount.toString()
-                            validator:              IntValidator { bottom: 0 }
-                            onEditingFinished:      editDialog._updateBattery(modelData._key, "cellCount", parseInt(text) || 0)
-                        }
-
-                        QGCLabel { text: qsTr("Capacity") }
-                        QGCTextField {
-                            objectName:             "batteryCapacityField_" + index
-                            Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 10
-                            text:                   modelData.capacityMah.toString()
-                            validator:              IntValidator { bottom: 0 }
-                            onEditingFinished:      editDialog._updateBattery(modelData._key, "capacityMah", parseInt(text) || 0)
-                        }
-                        QGCLabel { text: qsTr("mAh") }
-
-                        QGCColoredImage {
-                            height:                 ScreenTools.minTouchPixels
-                            width:                  height
-                            sourceSize.height:      height
-                            fillMode:               Image.PreserveAspectFit
-                            mipmap:                 true
-                            smooth:                 true
-                            color:                  qgcPal.text
-                            source:                 "/res/TrashDelete.svg"
-
-                            QGCMouseArea {
-                                objectName: "batteryDeleteButton_" + index
-                                fillItem:   parent
-                                // Taking focus first commits a field still being edited in
-                                // another row before the removal rebuilds every row.
-                                onClicked: {
-                                    forceActiveFocus()
-                                    editDialog._removeBattery(modelData._key)
+                                QGCMouseArea {
+                                    objectName: "sensorDeleteButton_" + index
+                                    fillItem:   parent
+                                    // See batteryDeleteButton above.
+                                    onClicked: {
+                                        forceActiveFocus()
+                                        editDialog._removeSensor(modelData._key)
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                LabelledButton {
-                    label:      qsTr("Batteries")
-                    buttonText: qsTr("Add Battery")
+                    LabelledButton {
+                        label:      qsTr("Sensors")
+                        buttonText: qsTr("Add Sensor")
 
-                    Component.onCompleted: objectName = "addBatteryRow"
+                        Component.onCompleted: objectName = "addSensorRow"
 
-                    onClicked: editDialog._addBattery()
-                }
+                        onClicked: editDialog._addSensor()
+                    }
 
-                SectionHeader {
-                    Layout.fillWidth:   true
-                    text:               qsTr("Flight Controller")
-                }
-
-                RowLayout {
-                    Layout.fillWidth:   true
-                    spacing:            ScreenTools.defaultFontPixelWidth
-
-                    QGCLabel { text: qsTr("Hardware") }
-                    QGCTextField {
-                        id:                 fcHardwareField
-                        objectName:         "vehicleFcHardwareField"
+                    SectionHeader {
                         Layout.fillWidth:   true
-                        onEditingFinished:  editDialog._fcHardware = text
-                    }
-                }
-
-                LabelledComboBox {
-                    id:                     firmwareCombo
-                    Layout.fillWidth:       true
-                    label:                  qsTr("Firmware")
-                    comboBoxPreferredWidth: ScreenTools.defaultFontPixelWidth * 30
-                    // See mavTypeCombo above: a property binding, not
-                    // Component.onCompleted, so completion order with editDialog cannot
-                    // matter.
-                    model:                  root._firmwareOptions.map(function (option) { return option.text })
-
-                    Component.onCompleted: comboBox.objectName = "vehicleFirmwareCombo"
-
-                    onActivated: (index) => {
-                        editDialog._fcFirmware = root._firmwareOptions[index].value
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth:   true
-                    spacing:            ScreenTools.defaultFontPixelWidth
-
-                    QGCLabel { text: qsTr("Firmware Version") }
-                    QGCTextField {
-                        id:                 fcFirmwareVersionField
-                        objectName:         "vehicleFcFirmwareVersionField"
-                        Layout.fillWidth:   true
-                        onEditingFinished:  editDialog._fcFirmwareVersion = text
-                    }
-                }
-
-                SectionHeader {
-                    Layout.fillWidth:   true
-                    text:               qsTr("Registration")
-                }
-
-                RowLayout {
-                    Layout.fillWidth:   true
-                    spacing:            ScreenTools.defaultFontPixelWidth
-
-                    QGCLabel { text: qsTr("Registration #") }
-                    QGCTextField {
-                        id:                 registrationNumberField
-                        objectName:         "vehicleRegistrationNumberField"
-                        Layout.fillWidth:   true
-                        onEditingFinished:  editDialog._registrationNumber = text
+                        text:               qsTr("Notes")
                     }
 
-                    QGCLabel { text: qsTr("Serial #") }
-                    QGCTextField {
-                        id:                 serialNumberField
-                        objectName:         "vehicleSerialNumberField"
-                        Layout.fillWidth:   true
-                        onEditingFinished:  editDialog._serialNumber = text
+                    TextArea {
+                        id:                     notesField
+                        objectName:             "vehicleNotesField"
+                        Layout.fillWidth:       true
+                        Layout.preferredHeight: ScreenTools.defaultFontPixelHeight * 4
+                        font.pointSize:         ScreenTools.defaultFontPointSize
+                        color:                  qgcPal.textFieldText
+                        background:             Rectangle { color: qgcPal.textField }
+                        onEditingFinished:      editDialog._notes = text
                     }
-                }
-
-                SectionHeader {
-                    Layout.fillWidth:   true
-                    text:               qsTr("Sensors")
-                }
-
-                Repeater {
-                    model: editDialog._sensors
-
-                    RowLayout {
-                        Layout.fillWidth:   true
-                        spacing:            ScreenTools.defaultFontPixelWidth
-
-                        QGCTextField {
-                            objectName:             "sensorTypeField_" + index
-                            Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 12
-                            placeholderText:        qsTr("Type")
-                            text:                   modelData.type
-                            onEditingFinished:      editDialog._updateSensor(modelData._key, "type", text)
-                        }
-                        QGCTextField {
-                            objectName:             "sensorModelField_" + index
-                            Layout.fillWidth:       true
-                            placeholderText:        qsTr("Model")
-                            text:                   modelData.model
-                            onEditingFinished:      editDialog._updateSensor(modelData._key, "model", text)
-                        }
-                        QGCColoredImage {
-                            height:                 ScreenTools.minTouchPixels
-                            width:                  height
-                            sourceSize.height:      height
-                            fillMode:               Image.PreserveAspectFit
-                            mipmap:                 true
-                            smooth:                 true
-                            color:                  qgcPal.text
-                            source:                 "/res/TrashDelete.svg"
-
-                            QGCMouseArea {
-                                objectName: "sensorDeleteButton_" + index
-                                fillItem:   parent
-                                // See batteryDeleteButton above.
-                                onClicked: {
-                                    forceActiveFocus()
-                                    editDialog._removeSensor(modelData._key)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                LabelledButton {
-                    label:      qsTr("Sensors")
-                    buttonText: qsTr("Add Sensor")
-
-                    Component.onCompleted: objectName = "addSensorRow"
-
-                    onClicked: editDialog._addSensor()
-                }
-
-                SectionHeader {
-                    Layout.fillWidth:   true
-                    text:               qsTr("Notes")
-                }
-
-                TextArea {
-                    id:                     notesField
-                    objectName:             "vehicleNotesField"
-                    Layout.fillWidth:       true
-                    Layout.preferredHeight: ScreenTools.defaultFontPixelHeight * 4
-                    font.pointSize:         ScreenTools.defaultFontPointSize
-                    color:                  qgcPal.textFieldText
-                    background:             Rectangle { color: qgcPal.textField }
-                    onEditingFinished:      editDialog._notes = text
                 }
             }
         }
