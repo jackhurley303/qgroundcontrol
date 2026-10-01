@@ -22,6 +22,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         HostServices/QGCTelemetryLoggingServiceImpl.h
         HostServices/QGCVehicleServiceImpl.cc
         HostServices/QGCVehicleServiceImpl.h
+        PluginCatalog.cc
+        PluginCatalog.h
         PluginContributions.cc
         PluginContributions.h
         PluginInstaller.cc

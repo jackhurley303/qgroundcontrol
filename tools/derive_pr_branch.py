@@ -302,7 +302,17 @@ PLUGIN_SDK = PRSpec(
         # so a second fork-only hook landing here would ride along and need splitting out.
         ".pre-commit-config.yaml",
     ),
-    delete_paths=("plugins/qdrive", ".gitmodules"),
+    # PLUGIN_CATALOG is stacked on this spec and owns these files. This spec takes
+    # src/PluginSystem and test/PluginSystem whole, so it drops them again, and strips
+    # their CMake lines in the doc_rewrites below.
+    delete_paths=(
+        "plugins/qdrive",
+        ".gitmodules",
+        "src/PluginSystem/PluginCatalog.h",
+        "src/PluginSystem/PluginCatalog.cc",
+        "test/PluginSystem/PluginCatalogTest.h",
+        "test/PluginSystem/PluginCatalogTest.cc",
+    ),
     seam_tokens=("QGCPluginManager", "QGroundControl.pluginManager"),
     seam_exempt=(
         # src/API/README.md was exempt here while it stayed behind on mainline; it now
@@ -486,6 +496,17 @@ PLUGIN_SDK = PRSpec(
                 ),
             ),
         ),
+        (
+            "src/PluginSystem/CMakeLists.txt",
+            (("        PluginCatalog.cc\n        PluginCatalog.h\n", ""),),
+        ),
+        (
+            "test/PluginSystem/CMakeLists.txt",
+            (
+                ("        PluginCatalogTest.cc\n        PluginCatalogTest.h\n", ""),
+                ("add_qgc_test(PluginCatalogTest LABELS Unit)\n", ""),
+            ),
+        ),
         # VEHICLE_PROFILES is a sibling that takes these four files whole too. Strip its lines,
         # or this branch would add_subdirectory(VehicleProfile) without the folder. That spec
         # strips this one's lines in turn.
@@ -664,8 +685,32 @@ VEHICLE_PROFILES = PRSpec(
     ),
 )
 
+# A catalog of installable plugins: the Plugins page reads one JSON index and installs or updates
+# from it — routing rule 2, generic plugin infrastructure with no plugin named. Builds up over
+# several units (~/.claude/local/qgroundcontrol/plans/plugin-catalog.md); U1 is the parser.
+#
+# Stacked on PLUGIN_SDK because later units edit files that spec owns (PluginSettings.qml,
+# PluginInstaller, QGCPluginManager, PluginSettings, src/PluginSystem/CMakeLists.txt); stacking
+# takes those whole. PLUGIN_SDK takes src/PluginSystem whole too, so it deletes this spec's new
+# files and strips their CMake lines, and this spec brings them back.
+PLUGIN_CATALOG = PRSpec(
+    branch="upstream-pr-plugin-catalog",
+    source_ref="upstream-pr-plugin-sdk",
+    mainline_ref="plugin-infrastructure-with-qdrive",
+    commit_subject="feat(PluginSystem): add a catalog for browsing and installing plugins",
+    include_paths=(
+        "src/PluginSystem/PluginCatalog.h",
+        "src/PluginSystem/PluginCatalog.cc",
+        "src/PluginSystem/CMakeLists.txt",
+        "test/PluginSystem/PluginCatalogTest.h",
+        "test/PluginSystem/PluginCatalogTest.cc",
+        "test/PluginSystem/CMakeLists.txt",
+    ),
+)
+
 SPECS: dict[str, PRSpec] = {
     "plugin-sdk": PLUGIN_SDK,
+    "plugin-catalog": PLUGIN_CATALOG,
     "replay-fidelity": REPLAY_FIDELITY,
     "gstreamer-rpath": GSTREAMER_RPATH,
     "media-backend": MEDIA_BACKEND,

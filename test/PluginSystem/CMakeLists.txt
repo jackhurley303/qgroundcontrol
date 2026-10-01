@@ -9,6 +9,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         HostServicesTest.h
         HostVehicleServicesTest.cc
         HostVehicleServicesTest.h
+        PluginCatalogTest.cc
+        PluginCatalogTest.h
         PluginContributionsTest.cc
         PluginContributionsTest.h
         PluginInstallerTest.cc
@@ -70,6 +72,7 @@ endif()
 
 add_qgc_test(HostServicesTest LABELS Unit)
 add_qgc_test(HostVehicleServicesTest LABELS Integration Vehicle RESOURCE_LOCK MockLink)
+add_qgc_test(PluginCatalogTest LABELS Unit)
 add_qgc_test(PluginContributionsTest LABELS Unit)
 add_qgc_test(PluginInstallerTest LABELS Unit)
 add_qgc_test(PluginLoaderGateTest LABELS Unit)
