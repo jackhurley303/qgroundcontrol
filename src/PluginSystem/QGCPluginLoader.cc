@@ -383,6 +383,11 @@ HostInfo QGCPluginLoader::hostInfo()
     return host;
 }
 
+QString QGCPluginLoader::platformKey()
+{
+    return platformBinarySubdir();
+}
+
 QStringList QGCPluginLoader::defaultPluginPaths()
 {
     QStringList paths;

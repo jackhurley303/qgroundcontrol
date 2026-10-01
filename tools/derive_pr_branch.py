@@ -312,6 +312,10 @@ PLUGIN_SDK = PRSpec(
         "src/PluginSystem/PluginCatalog.cc",
         "test/PluginSystem/PluginCatalogTest.h",
         "test/PluginSystem/PluginCatalogTest.cc",
+        "src/PluginSystem/PluginCatalogManager.h",
+        "src/PluginSystem/PluginCatalogManager.cc",
+        "test/PluginSystem/PluginCatalogManagerTest.h",
+        "test/PluginSystem/PluginCatalogManagerTest.cc",
     ),
     seam_tokens=("QGCPluginManager", "QGroundControl.pluginManager"),
     seam_exempt=(
@@ -498,13 +502,63 @@ PLUGIN_SDK = PRSpec(
         ),
         (
             "src/PluginSystem/CMakeLists.txt",
-            (("        PluginCatalog.cc\n        PluginCatalog.h\n", ""),),
+            (
+                ("        PluginCatalog.cc\n        PluginCatalog.h\n", ""),
+                ("        PluginCatalogManager.cc\n        PluginCatalogManager.h\n", ""),
+            ),
         ),
         (
             "test/PluginSystem/CMakeLists.txt",
             (
                 ("        PluginCatalogTest.cc\n        PluginCatalogTest.h\n", ""),
                 ("add_qgc_test(PluginCatalogTest LABELS Unit)\n", ""),
+                ("        PluginCatalogManagerTest.cc\n        PluginCatalogManagerTest.h\n", ""),
+                ("add_qgc_test(PluginCatalogManagerTest LABELS Unit)\n", ""),
+            ),
+        ),
+        # Catalog-only lines in files this spec owns. PLUGIN_CATALOG takes the files back
+        # whole, so on that branch they return.
+        (
+            "src/PluginSystem/QGCPluginLoader.h",
+            (
+                (
+                    "\n    /// @brief This build's platform key (`macos-universal`, `windows-x64`, `linux-x64`):\n"
+                    "    /// the bin/ subdirectory a package's binary sits in, and the plugin catalog's package key\n"
+                    "    static QString platformKey();\n",
+                    "",
+                ),
+            ),
+        ),
+        (
+            "src/PluginSystem/QGCPluginLoader.cc",
+            (
+                (
+                    "QString QGCPluginLoader::platformKey()\n{\n    return platformBinarySubdir();\n}\n\n",
+                    "",
+                ),
+            ),
+        ),
+        ("src/Settings/PluginSettings.h", (("    DEFINE_SETTINGFACT(catalogUrl)\n\n", ""),)),
+        (
+            "src/Settings/PluginSettings.cc",
+            (("DECLARE_SETTINGSFACT(PluginSettings, catalogUrl)\n\n", ""),),
+        ),
+        (
+            "src/Settings/Plugin.SettingsGroup.json",
+            (
+                (
+                    '    "QGC.MetaData.Facts": [\n'
+                    "        {\n"
+                    '            "name": "catalogUrl",\n'
+                    '            "shortDesc": "Address of the plugin catalog index. Leave empty to turn the catalog off.",\n'
+                    '            "type": "string",\n'
+                    '            "default": "https://jackhurley303.github.io/qgc-plugin-catalog/index.json",\n'
+                    '            "label": "Catalog URL",\n'
+                    '            "keywords": "plugin,catalog,url"\n'
+                    "        }\n"
+                    "    ]\n",
+                    '    "QGC.MetaData.Facts": []\n',
+                ),
             ),
         ),
         # VEHICLE_PROFILES is a sibling that takes these four files whole too. Strip its lines,
@@ -687,12 +741,14 @@ VEHICLE_PROFILES = PRSpec(
 
 # A catalog of installable plugins: the Plugins page reads one JSON index and installs or updates
 # from it — routing rule 2, generic plugin infrastructure with no plugin named. Builds up over
-# several units (~/.claude/local/qgroundcontrol/plans/plugin-catalog.md); U1 is the parser.
+# several units (~/.claude/local/qgroundcontrol/plans/plugin-catalog.md): U1 the parser, U3
+# PluginCatalogManager and the catalogUrl setting.
 #
 # Stacked on PLUGIN_SDK because later units edit files that spec owns (PluginSettings.qml,
 # PluginInstaller, QGCPluginManager, PluginSettings, src/PluginSystem/CMakeLists.txt); stacking
 # takes those whole. PLUGIN_SDK takes src/PluginSystem whole too, so it deletes this spec's new
-# files and strips their CMake lines, and this spec brings them back.
+# files and strips their CMake lines and the catalog-only lines in QGCPluginLoader and
+# PluginSettings, and this spec brings them back.
 PLUGIN_CATALOG = PRSpec(
     branch="upstream-pr-plugin-catalog",
     source_ref="upstream-pr-plugin-sdk",
@@ -705,7 +761,21 @@ PLUGIN_CATALOG = PRSpec(
         "test/PluginSystem/PluginCatalogTest.h",
         "test/PluginSystem/PluginCatalogTest.cc",
         "test/PluginSystem/CMakeLists.txt",
+        "src/PluginSystem/PluginCatalogManager.h",
+        "src/PluginSystem/PluginCatalogManager.cc",
+        "test/PluginSystem/PluginCatalogManagerTest.h",
+        "test/PluginSystem/PluginCatalogManagerTest.cc",
+        # PLUGIN_SDK strips the catalog's lines from these; taking them whole restores them.
+        "src/PluginSystem/QGCPluginLoader.h",
+        "src/PluginSystem/QGCPluginLoader.cc",
+        "src/Settings/PluginSettings.h",
+        "src/Settings/PluginSettings.cc",
+        "src/Settings/Plugin.SettingsGroup.json",
     ),
+    # The QML singleton and the setting it reads: whatever binds to either is catalog code
+    # and must ship here.
+    seam_tokens=("PluginCatalogManager", "catalogUrl"),
+    seam_exempt=("tools/derive_pr_branch.py",),
 )
 
 SPECS: dict[str, PRSpec] = {

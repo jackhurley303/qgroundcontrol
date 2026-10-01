@@ -49,6 +49,7 @@ private slots:
     void _stageMismatchedIdRefused_test();
     void _applyWithNothingInstalledDiscards_test();
     void _installUnsafeIdRejected_test();
+    void _readManifestRunsInstallChecks_test();
 
 private:
     // Writes a zip at tempPath(zipRelPath) with the given entries (archive-relative

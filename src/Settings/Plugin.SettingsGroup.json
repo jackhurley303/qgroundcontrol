@@ -1,5 +1,14 @@
 {
     "version": 1,
     "fileType": "FactMetaData",
-    "QGC.MetaData.Facts": []
+    "QGC.MetaData.Facts": [
+        {
+            "name": "catalogUrl",
+            "shortDesc": "Address of the plugin catalog index. Leave empty to turn the catalog off.",
+            "type": "string",
+            "default": "https://jackhurley303.github.io/qgc-plugin-catalog/index.json",
+            "label": "Catalog URL",
+            "keywords": "plugin,catalog,url"
+        }
+    ]
 }

@@ -175,6 +175,8 @@ QVariantList QGCPluginManager::knownPlugins() const
         info["state"]       = pluginStateName(record.state);
         info["statusText"] = statusText;
         info["updateError"] = record.updateError;
+        const QString pendingDir = PluginInstaller::pendingUpdateDir(record.manifest.id);
+        info["updateStaged"] = !pendingDir.isEmpty() && QFileInfo::exists(pendingDir);
         info["sourceText"]  = _sourceText(record);
         info["buildText"]   = _buildText(record);
         // The raw discriminator stays available for the tooltip: two builds are told
@@ -707,6 +709,9 @@ QString QGCPluginManager::stagePluginUpdate(const QString& pluginId, const QStri
         return tr("Could not read the staged update to record consent");
     }
     _recordStore.setStagedPluginDigest(stageResult.pluginId, digest);
+
+    // knownPlugins() now reports the staged update.
+    emit loadedPluginsChanged();
 
     return QString();
 }

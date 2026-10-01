@@ -24,6 +24,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         HostServices/QGCVehicleServiceImpl.h
         PluginCatalog.cc
         PluginCatalog.h
+        PluginCatalogManager.cc
+        PluginCatalogManager.h
         PluginContributions.cc
         PluginContributions.h
         PluginInstaller.cc

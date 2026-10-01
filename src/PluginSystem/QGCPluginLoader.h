@@ -95,4 +95,8 @@ public:
 
     /// @brief Identity/compatibility facts of the running host, used to validate manifests
     static HostInfo hostInfo();
+
+    /// @brief This build's platform key (`macos-universal`, `windows-x64`, `linux-x64`):
+    /// the bin/ subdirectory a package's binary sits in, and the plugin catalog's package key
+    static QString platformKey();
 };

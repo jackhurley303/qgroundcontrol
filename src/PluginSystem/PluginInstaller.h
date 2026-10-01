@@ -15,6 +15,8 @@
 
 Q_DECLARE_LOGGING_CATEGORY(PluginInstallerLog)
 
+class PluginManifest;
+
 /// @brief Result of a PluginInstaller operation
 struct PluginInstallResult {
     bool success = false;
@@ -33,6 +35,15 @@ class PluginInstaller
 {
 public:
     PluginInstaller() = delete;
+
+    /// @brief Read and validate a package's qgcplugin.json without extracting anything
+    /// Runs every archive check installFromFile() and stageUpdate() run before they
+    /// extract: a real zip, no unsafe or bundled-runtime entry, exactly one manifest at
+    /// the root, a valid manifest whose id can name a package directory, not tier internal.
+    /// @param zipPath Absolute path to the .qgcplugin file
+    /// @param errorOut Why the package was rejected; untouched on success
+    /// @return The manifest, or one with an empty id on rejection
+    static PluginManifest readManifest(const QString& zipPath, QString* errorOut);
 
     /// @brief Install a .qgcplugin package from a zip file into the user plugins directory
     /// Reads and validates qgcplugin.json at the archive root before extracting anything;

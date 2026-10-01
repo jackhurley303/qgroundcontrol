@@ -21,6 +21,8 @@ DECLARE_SETTINGGROUP(Plugin, "Plugins")
     // Settings are dynamically created per plugin
 }
 
+DECLARE_SETTINGSFACT(PluginSettings, catalogUrl)
+
 void PluginSettings::registerPlugin(const QString& pluginId, const QString& displayName, bool defaultEnabled)
 {
     qCDebug(PluginSettingsLog) << "Registering plugin:" << pluginId;

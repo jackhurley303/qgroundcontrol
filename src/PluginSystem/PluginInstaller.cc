@@ -398,6 +398,17 @@ PluginInstallResult applyPendingUpdate(const QString& pluginsDir, const QString&
 
 }  // namespace
 
+PluginManifest PluginInstaller::readManifest(const QString& zipPath, QString* errorOut)
+{
+    QStringList entryNames;
+    QString error;
+    const PluginManifest manifest = readPackageManifest(zipPath, &entryNames, &error);
+    if (manifest.id.isEmpty() && errorOut) {
+        *errorOut = error;
+    }
+    return manifest;
+}
+
 QString PluginInstaller::userPluginsDir()
 {
     const QStringList paths = QGCPluginLoader::defaultPluginPaths();

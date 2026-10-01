@@ -76,7 +76,8 @@ public:
     /// Get every discovered plugin, in any state, for QML display (e.g. the Plugins
     /// settings page). Each item is a QVariantMap with keys: id, name, version, vendor,
     /// description, state (raw PluginState name, for UI color-coding), statusText
-    /// (human-readable status line), updateError (why a staged update was not applied).
+    /// (human-readable status line), updateError (why a staged update was not applied),
+    /// updateStaged (an update waits to be applied at the next start).
     /// @return A list of known plugin info as QVariantList
     QVariantList knownPlugins() const;
 

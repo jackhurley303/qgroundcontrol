@@ -32,6 +32,8 @@ public:
 
     DEFINE_SETTING_NAME_GROUP()
 
+    DEFINE_SETTINGFACT(catalogUrl)
+
     /// Register a plugin and create its enabled Fact
     /// @param pluginId Manifest id (reverse-DNS), used as the Fact key
     /// @param displayName Human-readable name shown in UI

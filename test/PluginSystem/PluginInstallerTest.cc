@@ -895,4 +895,36 @@ void PluginInstallerTest::_installUnsafeIdRejected_test()
     QVERIFY(QFile::remove(sentinel.fileName()));
 }
 
+void PluginInstallerTest::_readManifestRunsInstallChecks_test()
+{
+    // A caller checks a package through this before it installs it, so it must reject
+    // what an install rejects, with the same reason, and write nothing.
+    const QString goodZip =
+        _writePackageZip(QStringLiteral("readmanifest.qgcplugin"), _validManifestJson(QStringLiteral("org.test.read")),
+                         QStringLiteral("marker.txt"));
+    QVERIFY(!goodZip.isEmpty());
+    QString error;
+    const PluginManifest manifest = PluginInstaller::readManifest(goodZip, &error);
+    QCOMPARE(manifest.id, QStringLiteral("org.test.read"));
+    QCOMPARE(manifest.version, QVersionNumber(1, 0, 0));
+    QVERIFY(error.isEmpty());
+
+    QMap<QString, QByteArray> entries;
+    entries[QStringLiteral("qml/View.qml")] = QByteArrayLiteral("import QtQuick\nItem {}\n");
+    const QString manifestless = _writeZip(QStringLiteral("readmanifest-none.qgcplugin"), entries);
+    QVERIFY(!manifestless.isEmpty());
+
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg,
+                     QRegularExpression("archive does not contain qgcplugin.json at its root"));
+    QVERIFY(PluginInstaller::readManifest(manifestless, &error).id.isEmpty());
+    verifyExpectedLogMessage();
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg,
+                     QRegularExpression("archive does not contain qgcplugin.json at its root"));
+    const PluginInstallResult install = PluginInstaller::installFromFile(manifestless);
+    verifyExpectedLogMessage();
+    QVERIFY(!install.success);
+    QCOMPARE(error, install.errorString);
+    QVERIFY(!QFileInfo::exists(QDir(PluginInstaller::userPluginsDir()).filePath(QStringLiteral("org.test.read"))));
+}
+
 UT_REGISTER_TEST(PluginInstallerTest, TestLabel::Unit)
