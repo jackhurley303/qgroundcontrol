@@ -70,7 +70,7 @@ class PRSpec:
     doc_rewrites: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = ()
     """(path, (old_text, new_text)...) — content rewrites applied after includes/patches
     land, for mentions of an excluded plugin that live in an otherwise-generic shared
-    file. Every path here must also be in include_paths (asserted in __post_init__) — a
+    file, and for a sibling spec's lines in a file both specs take whole. Every path here must also be in include_paths (asserted in __post_init__) — a
     rewrite path missing from include_paths would be silently skipped by derive() and
     never scanned by verify()'s forbidden-terms grep, since that's scoped to include_paths
     too."""
@@ -486,6 +486,25 @@ PLUGIN_SDK = PRSpec(
                 ),
             ),
         ),
+        # VEHICLE_PROFILES is a sibling that takes these four files whole too. Strip its lines,
+        # or this branch would add_subdirectory(VehicleProfile) without the folder. That spec
+        # strips this one's lines in turn.
+        ("src/CMakeLists.txt", (("add_subdirectory(VehicleProfile)\n", ""),)),
+        ("test/CMakeLists.txt", (("add_subdirectory(VehicleProfile)\n", ""),)),
+        ("src/AppSettings/CMakeLists.txt", (("              VehicleProfileSettings.qml\n", ""),)),
+        (
+            "src/AppSettings/pages/SettingsPages.json",
+            (
+                (
+                    "        {\n"
+                    '            "name": "Vehicles",\n'
+                    '            "qml": "VehicleProfileSettings.qml",\n'
+                    '            "icon": "qrc:/InstrumentValueIcons/drone.svg"\n'
+                    "        },\n",
+                    "",
+                ),
+            ),
+        ),
     ),
 )
 
@@ -582,11 +601,10 @@ MOCKLINK_BYTESSENT = PRSpec(
 # (~/.claude/local/qgroundcontrol/plans/vehicles.md); V1 only adds the save folder itself,
 # mirroring the existing `missionDirectory` entries.
 #
-# V2 adds `src/CMakeLists.txt` and `test/CMakeLists.txt` to register the new VehicleProfile
-# module and its test — the one file this spec is not free of: both are also in PLUGIN_SDK's
-# include_paths (not stacked with this spec). A wholesale checkout of either file pulls in
-# every fork addition to it, not just this spec's one `add_subdirectory` line each. Resolved
-# at submission, before the first derive — a human decision, not something a derive discovers.
+# Four of its files are also in PLUGIN_SDK, which is a sibling, not stacked with this spec:
+# `src/CMakeLists.txt`, `test/CMakeLists.txt`, `src/AppSettings/CMakeLists.txt` and
+# `SettingsPages.json`. A wholesale take pulls in PLUGIN_SDK's lines too, so doc_rewrites strip
+# them, and PLUGIN_SDK strips this spec's lines in turn.
 VEHICLE_PROFILES = PRSpec(
     branch="upstream-pr-vehicle-profiles",
     source_ref="upstream/master",
@@ -611,12 +629,38 @@ VEHICLE_PROFILES = PRSpec(
         "test/VehicleProfile/CMakeLists.txt",
         "src/CMakeLists.txt",
         "test/CMakeLists.txt",
-        # V4: the Settings -> Vehicles page. SettingsPages.json and src/AppSettings/CMakeLists.txt
-        # are also in PLUGIN_SDK's include_paths (not stacked with this spec) - resolved at
-        # submission, before the first derive, same as the overlap above.
         "src/AppSettings/VehicleProfileSettings.qml",
         "src/AppSettings/pages/SettingsPages.json",
         "src/AppSettings/CMakeLists.txt",
+    ),
+    doc_rewrites=(
+        (
+            "src/CMakeLists.txt",
+            (
+                (
+                    "# PluginAPI after MAVLink: its mavlink BUILD_INTERFACE include dir (QO1) reads\n"
+                    "# QGC_MAVLINK_INCLUDE_DIRS, which MAVLink's CMakeLists.txt sets.\n"
+                    "add_subdirectory(PluginAPI)\n"
+                    "add_subdirectory(PluginSystem)\n",
+                    "",
+                ),
+            ),
+        ),
+        ("test/CMakeLists.txt", (("add_subdirectory(PluginSystem)\n", ""),)),
+        ("src/AppSettings/CMakeLists.txt", (("              PluginSettings.qml\n", ""),)),
+        (
+            "src/AppSettings/pages/SettingsPages.json",
+            (
+                (
+                    "        {\n"
+                    '            "name": "Plugins",\n'
+                    '            "qml": "PluginSettings.qml",\n'
+                    '            "icon": "qrc:/InstrumentValueIcons/plugins.svg"\n'
+                    "        },\n",
+                    "",
+                ),
+            ),
+        ),
     ),
 )
 

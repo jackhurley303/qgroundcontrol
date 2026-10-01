@@ -446,7 +446,7 @@ class TestSharedPaths:
 
     The 2026-09-30 defect: vehicle-profiles and plugin-sdk both took `src/CMakeLists.txt`,
     so each derived branch would `add_subdirectory` a folder it does not carry, and the
-    audit still reported clean.
+    audit still reported clean. Both specs now strip the other's lines with doc_rewrites.
     """
 
     @staticmethod
@@ -460,17 +460,29 @@ class TestSharedPaths:
             doc_rewrites=rewrites,
         )
 
-    def test_real_specs_share_exactly_the_recorded_files(self):
+    SHARED_FILES = (
+        "src/AppSettings/CMakeLists.txt",
+        "src/AppSettings/pages/SettingsPages.json",
+        "src/CMakeLists.txt",
+        "test/CMakeLists.txt",
+    )
+
+    def test_real_specs_share_exactly_the_four_files(self):
         shared = unstacked_shared_paths(SPECS)
-        assert sorted(shared) == sorted(_SHARED_BY_DECISION)
+        assert sorted(shared) == list(self.SHARED_FILES)
         for owners in shared.values():
             assert owners == ("plugin-sdk", "vehicle-profiles")
 
-    def test_real_specs_fail_without_the_recorded_decision(self):
-        assert check_shared_paths(SPECS, decided={}) is False
+    def test_real_specs_pass_with_no_recorded_decision(self):
+        """Both specs strip the other's lines, so nothing needs deferring."""
+        assert check_shared_paths(SPECS, decided={}) is True
 
-    def test_real_specs_pass_with_the_recorded_decision(self):
-        assert check_shared_paths(SPECS) is True
+    def test_real_specs_fail_when_one_side_drops_its_rewrites(self):
+        stripped = dict(SPECS)
+        stripped["vehicle-profiles"] = dataclasses.replace(
+            SPECS["vehicle-profiles"], doc_rewrites=()
+        )
+        assert check_shared_paths(stripped, decided={}) is False
 
     def test_stacked_specs_may_share_a_file(self):
         """plugin-sdk sits on replay-fidelity; their 16 shared files are sound by design."""

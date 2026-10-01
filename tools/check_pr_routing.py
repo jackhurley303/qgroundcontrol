@@ -127,16 +127,7 @@ _DEFERRED_ROUTING: dict[str, str] = {}
 # Shared by specs that are not stacked, with the split decided but not yet written. Like
 # _DEFERRED_ROUTING, the audit prints these every run and only stops counting them as
 # failures, so a known gap does not block every base-app commit's routing pre-flight.
-_SPLIT_AFTER_SYNC = (
-    "plugin-sdk and vehicle-profiles each add lines here. Strip the other spec's lines with "
-    "doc_rewrites in both before the next derive of either"
-)
-_SHARED_BY_DECISION: dict[str, str] = {
-    "src/CMakeLists.txt": _SPLIT_AFTER_SYNC,
-    "test/CMakeLists.txt": _SPLIT_AFTER_SYNC,
-    "src/AppSettings/CMakeLists.txt": _SPLIT_AFTER_SYNC,
-    "src/AppSettings/pages/SettingsPages.json": _SPLIT_AFTER_SYNC,
-}
+_SHARED_BY_DECISION: dict[str, str] = {}
 
 
 def check_routing_coverage(mainline_ref: str, since: str, repo_root: Path) -> bool:
