@@ -59,6 +59,17 @@ public:
     /// @param digest Digest as computed by QGCPluginManager (version + content hash)
     void setApprovedPluginDigest(const QString& pluginId, const QString& digest);
 
+    /// Get the consent digest of an update the user staged for this plugin, or empty
+    /// if none is staged. It becomes the approved digest once the update is in place.
+    /// @param pluginId Manifest id (reverse-DNS)
+    QString stagedPluginDigest(const QString& pluginId) const;
+
+    /// Record the consent digest of a staged update, or clear it with an empty digest.
+    /// Kept here rather than beside the staged files, so a package cannot vouch for itself.
+    /// @param pluginId Manifest id (reverse-DNS)
+    /// @param digest Digest as computed by QGCPluginManager (version + content hash)
+    void setStagedPluginDigest(const QString& pluginId, const QString& digest);
+
 signals:
     void registeredPluginsChanged();
 

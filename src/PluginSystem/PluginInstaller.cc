@@ -30,6 +30,11 @@ namespace {
 
 constexpr const char* kManifestFileName = "qgcplugin.json";
 
+// Staging directories under the user plugins directory. The scan only discovers direct
+// children that carry qgcplugin.json, so packages one level below these are never loaded.
+constexpr const char* kPendingDirName = ".pending";
+constexpr const char* kPreviousDirName = ".previous";
+
 // Extraction ceiling for untrusted packages. A plugin is a binary plus QML and assets;
 // anything past this is a decompression bomb, not a package. libarchive's own pre-check
 // only compares the archive's *declared* sizes against free disk space, so a bomb sized
@@ -131,25 +136,26 @@ bool findMissingEntry(const QStringList& entryNames, const QString& destDir, QSt
     return false;
 }
 
-} // namespace
-
-QString PluginInstaller::userPluginsDir()
+// A manifest id names a directory under the user plugins directory, so it must name
+// exactly one child of it: no separators, and no leading '.', which also keeps it clear
+// of "..", "." and the staging directories below.
+bool isSafePackageId(const QString& pluginId)
 {
-    const QStringList paths = QGCPluginLoader::defaultPluginPaths();
-    return paths.isEmpty() ? QString() : paths.last();
+    return !pluginId.isEmpty() && !pluginId.startsWith(QLatin1Char('.')) && !pluginId.contains(QLatin1Char('/')) &&
+           !pluginId.contains(QLatin1Char('\\'));
 }
 
-PluginInstallResult PluginInstaller::installFromFile(const QString& zipPath)
+// Every archive check installFromFile() and stageUpdate() share, run before anything is
+// extracted. Returns a manifest with an empty id on rejection, with the reason in errorOut.
+PluginManifest readPackageManifest(const QString& zipPath, QStringList* entryNamesOut, QString* errorOut)
 {
-    PluginInstallResult result;
-
     // Entry names for the whole archive, read before anything is extracted. The manifest
     // lookup and both entry-name checks below work off this one list.
     const QStringList entryNames = QGCCompression::listArchive(zipPath, QGCCompression::Format::ZIP);
     if (entryNames.isEmpty()) {
-        result.errorString = QStringLiteral("could not open '%1' as a zip archive").arg(zipPath);
-        qCWarning(PluginInstallerLog) << result.errorString;
-        return result;
+        *errorOut = QStringLiteral("could not open '%1' as a zip archive").arg(zipPath);
+        qCWarning(PluginInstallerLog) << *errorOut;
+        return PluginManifest();
     }
 
     // The Format argument above only skips QGCCompression's own sniffing — the reader is
@@ -162,9 +168,9 @@ PluginInstallResult PluginInstaller::installFromFile(const QString& zipPath)
     QFile archiveFile(zipPath);
     if (!archiveFile.open(QIODevice::ReadOnly) ||
         QGCCompression::detectFormatFromData(archiveFile.read(kMagicBytesToRead)) != QGCCompression::Format::ZIP) {
-        result.errorString = QStringLiteral("'%1' is not a zip archive").arg(zipPath);
-        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
-        return result;
+        *errorOut = QStringLiteral("'%1' is not a zip archive").arg(zipPath);
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << *errorOut;
+        return PluginManifest();
     }
     archiveFile.close();
 
@@ -172,15 +178,18 @@ PluginInstallResult PluginInstaller::installFromFile(const QString& zipPath)
     // data is decompressed.
     QString offendingEntry;
     if (findUnsafeEntry(entryNames, &offendingEntry)) {
-        result.errorString = QStringLiteral("archive entry '%1' has an unsafe path").arg(offendingEntry);
-        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
-        return result;
+        *errorOut = QStringLiteral("archive entry '%1' has an unsafe path").arg(offendingEntry);
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << *errorOut;
+        return PluginManifest();
     }
 
     if (findBundledRuntimeEntry(entryNames, &offendingEntry)) {
-        result.errorString = QStringLiteral("archive bundles a runtime library ('%1'); plugins must link the host's QGCPluginAPI/Qt, not ship their own").arg(offendingEntry);
-        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
-        return result;
+        *errorOut = QStringLiteral(
+                        "archive bundles a runtime library ('%1'); plugins must link the host's QGCPluginAPI/Qt, not "
+                        "ship their own")
+                        .arg(offendingEntry);
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << *errorOut;
+        return PluginManifest();
     }
 
     // Exactly one manifest. Zip allows duplicate names, and the reader answers a by-name
@@ -188,17 +197,17 @@ PluginInstallResult PluginInstaller::installFromFile(const QString& zipPath)
     // qgcplugin.json entries would mean validating one manifest and installing another.
     const qsizetype manifestCount = entryNames.count(QLatin1String(kManifestFileName));
     if (manifestCount == 0) {
-        result.errorString =
+        *errorOut =
             QStringLiteral("archive does not contain %1 at its root").arg(QString::fromLatin1(kManifestFileName));
-        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
-        return result;
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << *errorOut;
+        return PluginManifest();
     }
     if (manifestCount > 1) {
-        result.errorString = QStringLiteral("archive contains %1 copies of %2")
-                                 .arg(manifestCount)
-                                 .arg(QString::fromLatin1(kManifestFileName));
-        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
-        return result;
+        *errorOut = QStringLiteral("archive contains %1 copies of %2")
+                        .arg(manifestCount)
+                        .arg(QString::fromLatin1(kManifestFileName));
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << *errorOut;
+        return PluginManifest();
     }
 
     // Reads qgcplugin.json's bytes straight out of the archive without extracting
@@ -206,31 +215,211 @@ PluginInstallResult PluginInstaller::installFromFile(const QString& zipPath)
     const QByteArray manifestBytes =
         QGCCompression::extractFileData(zipPath, QString::fromLatin1(kManifestFileName), QGCCompression::Format::ZIP);
     if (manifestBytes.isEmpty()) {
-        result.errorString =
-            QStringLiteral("could not read %1 from archive").arg(QString::fromLatin1(kManifestFileName));
-        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
-        return result;
+        *errorOut = QStringLiteral("could not read %1 from archive").arg(QString::fromLatin1(kManifestFileName));
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << *errorOut;
+        return PluginManifest();
     }
 
     QJsonParseError parseError;
     const QJsonDocument doc = QJsonDocument::fromJson(manifestBytes, &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-        result.errorString = QStringLiteral("malformed %1: %2").arg(QString::fromLatin1(kManifestFileName), parseError.errorString());
-        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
-        return result;
+        *errorOut =
+            QStringLiteral("malformed %1: %2").arg(QString::fromLatin1(kManifestFileName), parseError.errorString());
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << *errorOut;
+        return PluginManifest();
     }
 
     QString manifestError;
     const PluginManifest manifest = PluginManifest::fromJson(doc.object(), &manifestError);
     if (manifest.id.isEmpty()) {
-        result.errorString = QStringLiteral("invalid manifest: %1").arg(manifestError);
-        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
-        return result;
+        *errorOut = QStringLiteral("invalid manifest: %1").arg(manifestError);
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << *errorOut;
+        return PluginManifest();
+    }
+
+    // The id becomes a directory name under the user plugins directory. Without this,
+    // ".." would point the install at that directory's parent and ".pending" at the
+    // staged updates, and the replace step below deletes whatever is there.
+    if (!isSafePackageId(manifest.id)) {
+        *errorOut = QStringLiteral("manifest id '%1' cannot name a package directory").arg(manifest.id);
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << *errorOut;
+        return PluginManifest();
     }
 
     if (manifest.tier == PluginManifest::Tier::HostPinned) {
-        result.errorString = QStringLiteral("tier internal cannot be packaged (dev-loop only); use tier sdk for a distributable binary plugin");
-        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
+        *errorOut = QStringLiteral(
+            "tier internal cannot be packaged (dev-loop only); use tier sdk for a distributable binary plugin");
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << *errorOut;
+        return PluginManifest();
+    }
+
+    *entryNamesOut = entryNames;
+    return manifest;
+}
+
+// Extracts a package readPackageManifest() accepted into destDir, replacing whatever is
+// there. On failure nothing is left at destDir.
+bool extractPackage(const QString& zipPath, const QStringList& entryNames, const QString& destDir, QString* errorOut)
+{
+    // Collision on id: replace. The manifest just validated is the new truth; any prior
+    // copy at this path (a previous version, or a stale/corrupt one) goes.
+    if (QDir(destDir).exists()) {
+        qCDebug(PluginInstallerLog) << "Replacing existing package at" << destDir;
+        if (!QDir(destDir).removeRecursively()) {
+            *errorOut = QStringLiteral("could not remove existing install at '%1'").arg(destDir);
+            qCWarning(PluginInstallerLog) << *errorOut;
+            return false;
+        }
+    }
+
+    if (!QDir().mkpath(destDir)) {
+        *errorOut = QStringLiteral("could not create '%1'").arg(destDir);
+        qCWarning(PluginInstallerLog) << *errorOut;
+        return false;
+    }
+
+    if (!QGCCompression::extractArchive(zipPath, destDir, QGCCompression::Format::ZIP, nullptr, kMaxPackageBytes)) {
+        QDir(destDir).removeRecursively();
+        *errorOut = QStringLiteral("could not extract '%1': %2").arg(zipPath, QGCCompression::lastErrorString());
+        qCWarning(PluginInstallerLog) << "Extraction of" << zipPath << "failed -" << *errorOut;
+        return false;
+    }
+
+    // Extraction reports success even when it silently skipped entries — an escaping
+    // symlink and a name the listing pass read differently are both dropped with only a
+    // warning — so confirm every listed entry actually landed. (It cannot catch an
+    // archive whose headers stop early: the listing pass truncates at the same point, so
+    // both agree on a short list. That needs QGCCompression itself to distinguish
+    // ARCHIVE_EOF from ARCHIVE_FATAL.)
+    QString offendingEntry;
+    if (findMissingEntry(entryNames, destDir, &offendingEntry)) {
+        QDir(destDir).removeRecursively();
+        *errorOut = QStringLiteral("archive entry '%1' was not extracted").arg(offendingEntry);
+        qCWarning(PluginInstallerLog) << "Extraction of" << zipPath << "failed -" << *errorOut;
+        return false;
+    }
+
+    return true;
+}
+
+QString previousPackageDir(const QString& pluginsDir, const QString& pluginId)
+{
+    return QDir(pluginsDir).filePath(QStringLiteral("%1/%2").arg(QString::fromLatin1(kPreviousDirName), pluginId));
+}
+
+// A run killed between the two renames of an apply leaves the installed package under
+// .previous and nothing in its place: put it back. A copy left there after a completed
+// swap is only garbage.
+void finishInterruptedUpdates(const QString& pluginsDir)
+{
+    const QDir previousRoot(QDir(pluginsDir).filePath(QString::fromLatin1(kPreviousDirName)));
+    const QStringList ids = previousRoot.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QString& pluginId : ids) {
+        const QString previousDir = previousRoot.filePath(pluginId);
+        const QString installedDir = QDir(pluginsDir).filePath(pluginId);
+        if (QFileInfo::exists(installedDir)) {
+            if (!QDir(previousDir).removeRecursively()) {
+                qCWarning(PluginInstallerLog) << "Could not delete replaced package" << previousDir;
+            }
+        } else if (QDir().rename(previousDir, installedDir)) {
+            qCWarning(PluginInstallerLog) << "Restored" << pluginId << "after an interrupted update";
+        } else {
+            qCWarning(PluginInstallerLog) << "Could not restore" << pluginId << "from" << previousDir;
+        }
+    }
+}
+
+PluginInstallResult applyPendingUpdate(const QString& pluginsDir, const QString& pluginId)
+{
+    PluginInstallResult result;
+    result.pluginId = pluginId;
+
+    const QString pendingDir = PluginInstaller::pendingUpdateDir(pluginId);
+    const QString installedDir = QDir(pluginsDir).filePath(pluginId);
+    const QString previousDir = previousPackageDir(pluginsDir, pluginId);
+
+    const auto fail = [&](const QString& error) {
+        result.errorString = error;
+        qCWarning(PluginInstallerLog) << "Update of" << pluginId << "not applied -" << error;
+        if (!PluginInstaller::discardPendingUpdate(pluginId)) {
+            qCWarning(PluginInstallerLog) << "Could not discard the staged update at" << pendingDir;
+        }
+        return result;
+    };
+
+    if (pendingDir.isEmpty()) {
+        return fail(QStringLiteral("'%1' is not a valid plugin id").arg(pluginId));
+    }
+
+    // An update replaces an installed package; it never installs one. Runs after
+    // finishInterruptedUpdates(), so a package an interrupted swap set aside is back by now.
+    if (!QFileInfo::exists(installedDir)) {
+        return fail(QStringLiteral("'%1' is not installed, so there is nothing to update").arg(pluginId));
+    }
+
+    // The staged copy is re-inspected rather than trusted: it sat on disk since the
+    // stage step, and only a package that would load may replace one that does.
+    const PluginLoadInfo staged = QGCPluginLoader::inspectPackage(pendingDir);
+    if (staged.state != PluginState::Discovered) {
+        return fail(QStringLiteral("the staged update cannot load: %1").arg(staged.errorString));
+    }
+    if (staged.manifest.id != pluginId) {
+        return fail(QStringLiteral("the staged update declares id '%1'").arg(staged.manifest.id));
+    }
+
+    if (!QDir().mkpath(QFileInfo(previousDir).absolutePath())) {
+        return fail(QStringLiteral("could not create '%1'").arg(QFileInfo(previousDir).absolutePath()));
+    }
+
+    // Rename the installed package aside, then rename the staged one into its place. A
+    // directory rename either happens whole or not at all, so the old package is always
+    // complete at one of the two paths.
+    if (!QDir().rename(installedDir, previousDir)) {
+        return fail(QStringLiteral("could not move the installed package aside"));
+    }
+
+    if (!QDir().rename(pendingDir, installedDir)) {
+        if (!QDir().rename(previousDir, installedDir)) {
+            // finishInterruptedUpdates() retries the restore at the next start.
+            return fail(QStringLiteral("could not move the update into place, and the previous version is at '%1'")
+                            .arg(previousDir));
+        }
+        return fail(QStringLiteral("could not move the update into place"));
+    }
+
+    if (!QDir(previousDir).removeRecursively()) {
+        qCWarning(PluginInstallerLog) << "Could not delete replaced package" << previousDir;
+    }
+
+    qCDebug(PluginInstallerLog) << "Applied staged update of" << pluginId << "to version" << staged.manifest.version;
+    result.success = true;
+    return result;
+}
+
+}  // namespace
+
+QString PluginInstaller::userPluginsDir()
+{
+    const QStringList paths = QGCPluginLoader::defaultPluginPaths();
+    return paths.isEmpty() ? QString() : paths.last();
+}
+
+QString PluginInstaller::pendingUpdateDir(const QString& pluginId)
+{
+    const QString pluginsDir = userPluginsDir();
+    if (pluginsDir.isEmpty() || !isSafePackageId(pluginId)) {
+        return QString();
+    }
+    return QDir(pluginsDir).filePath(QStringLiteral("%1/%2").arg(QString::fromLatin1(kPendingDirName), pluginId));
+}
+
+PluginInstallResult PluginInstaller::installFromFile(const QString& zipPath)
+{
+    PluginInstallResult result;
+
+    QStringList entryNames;
+    const PluginManifest manifest = readPackageManifest(zipPath, &entryNames, &result.errorString);
+    if (manifest.id.isEmpty()) {
         return result;
     }
 
@@ -242,42 +431,7 @@ PluginInstallResult PluginInstaller::installFromFile(const QString& zipPath)
     }
 
     const QString destDir = QDir(pluginsDir).filePath(manifest.id);
-
-    // Collision on id: replace. The manifest we just validated is the new truth;
-    // any prior install of this id (a previous version, or a stale/corrupt one) goes.
-    if (QDir(destDir).exists()) {
-        qCDebug(PluginInstallerLog) << "Replacing existing install of" << manifest.id << "at" << destDir;
-        if (!QDir(destDir).removeRecursively()) {
-            result.errorString = QStringLiteral("could not remove existing install at '%1'").arg(destDir);
-            qCWarning(PluginInstallerLog) << result.errorString;
-            return result;
-        }
-    }
-
-    if (!QDir().mkpath(destDir)) {
-        result.errorString = QStringLiteral("could not create '%1'").arg(destDir);
-        qCWarning(PluginInstallerLog) << result.errorString;
-        return result;
-    }
-
-    if (!QGCCompression::extractArchive(zipPath, destDir, QGCCompression::Format::ZIP, nullptr, kMaxPackageBytes)) {
-        QDir(destDir).removeRecursively();
-        result.errorString =
-            QStringLiteral("could not extract '%1': %2").arg(zipPath, QGCCompression::lastErrorString());
-        qCWarning(PluginInstallerLog) << "Extraction of" << zipPath << "failed -" << result.errorString;
-        return result;
-    }
-
-    // Extraction reports success even when it silently skipped entries — an escaping
-    // symlink and a name the listing pass read differently are both dropped with only a
-    // warning — so confirm every listed entry actually landed. (It cannot catch an
-    // archive whose headers stop early: the listing pass truncates at the same point, so
-    // both agree on a short list. That needs QGCCompression itself to distinguish
-    // ARCHIVE_EOF from ARCHIVE_FATAL.)
-    if (findMissingEntry(entryNames, destDir, &offendingEntry)) {
-        QDir(destDir).removeRecursively();
-        result.errorString = QStringLiteral("archive entry '%1' was not extracted").arg(offendingEntry);
-        qCWarning(PluginInstallerLog) << "Extraction of" << zipPath << "failed -" << result.errorString;
+    if (!extractPackage(zipPath, entryNames, destDir, &result.errorString)) {
         return result;
     }
 
@@ -285,6 +439,84 @@ PluginInstallResult PluginInstaller::installFromFile(const QString& zipPath)
     result.success = true;
     result.pluginId = manifest.id;
     return result;
+}
+
+PluginInstallResult PluginInstaller::stageUpdate(const QString& pluginId, const QString& zipPath)
+{
+    PluginInstallResult result;
+    result.pluginId = pluginId;
+
+    QStringList entryNames;
+    const PluginManifest manifest = readPackageManifest(zipPath, &entryNames, &result.errorString);
+    if (manifest.id.isEmpty()) {
+        return result;
+    }
+
+    // The caller's consent is for updating pluginId. A package declaring another id
+    // would otherwise replace that plugin under this plugin's consent.
+    if (manifest.id != pluginId) {
+        result.errorString = QStringLiteral("package declares id '%1', not '%2'").arg(manifest.id, pluginId);
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
+        return result;
+    }
+
+    const QString pendingDir = pendingUpdateDir(manifest.id);
+    if (pendingDir.isEmpty()) {
+        result.errorString = QStringLiteral("'%1' is not a valid plugin id").arg(manifest.id);
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
+        return result;
+    }
+
+    // A fresh install activates at once through installFromFile(); only a package
+    // already in place has a mapped binary to wait out.
+    if (!QFileInfo::exists(QDir(userPluginsDir()).filePath(manifest.id))) {
+        result.errorString = QStringLiteral("'%1' is not installed, so there is nothing to update").arg(manifest.id);
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
+        return result;
+    }
+
+    if (!extractPackage(zipPath, entryNames, pendingDir, &result.errorString)) {
+        return result;
+    }
+
+    // Refuse now what applyPendingUpdates() would refuse at the next start, while the
+    // user is still looking at the result.
+    const PluginLoadInfo staged = QGCPluginLoader::inspectPackage(pendingDir);
+    if (staged.state != PluginState::Discovered) {
+        QDir(pendingDir).removeRecursively();
+        result.errorString = QStringLiteral("the update cannot load: %1").arg(staged.errorString);
+        qCWarning(PluginInstallerLog) << "Rejecting" << zipPath << "-" << result.errorString;
+        return result;
+    }
+
+    qCDebug(PluginInstallerLog) << "Staged" << manifest.id << manifest.version << "at" << pendingDir;
+    result.success = true;
+    return result;
+}
+
+QList<PluginInstallResult> PluginInstaller::applyPendingUpdates()
+{
+    QList<PluginInstallResult> results;
+
+    const QString pluginsDir = userPluginsDir();
+    if (pluginsDir.isEmpty()) {
+        return results;
+    }
+
+    finishInterruptedUpdates(pluginsDir);
+
+    const QDir pendingRoot(QDir(pluginsDir).filePath(QString::fromLatin1(kPendingDirName)));
+    const QStringList ids = pendingRoot.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    for (const QString& pluginId : ids) {
+        results.append(applyPendingUpdate(pluginsDir, pluginId));
+    }
+    return results;
+}
+
+bool PluginInstaller::discardPendingUpdate(const QString& pluginId)
+{
+    const QString pendingDir = pendingUpdateDir(pluginId);
+    return pendingDir.isEmpty() || QDir(pendingDir).removeRecursively();
 }
 
 PluginInstallResult PluginInstaller::removePlugin(const QString& pluginId)

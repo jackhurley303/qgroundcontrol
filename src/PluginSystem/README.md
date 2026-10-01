@@ -282,6 +282,10 @@ copy of its state — a write through either URI is visible through the other, a
 1. Application Startup (before the QML engine exists — QGCApplication.cc)
    └── QGCPluginManager::init()
        └── QGCPluginManager::_loadPlugins()
+           ├── PluginInstaller::applyPendingUpdates() — runs before the scan, because a
+           │   mapped binary cannot be replaced. Moves each update staged in
+           │   <user-plugins-dir>/.pending/<id>/ into place, holding the old package in
+           │   .previous/<id>/ until the move succeeds. The scan never finds either.
            ├── QGCPluginLoader::defaultPluginPaths()
            ├── QGCPluginLoader::inspectDirectories() — reads manifests + contributions,
            │   zero code run

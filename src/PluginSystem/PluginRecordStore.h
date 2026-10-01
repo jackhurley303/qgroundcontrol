@@ -92,6 +92,14 @@ public:
     /// (PluginSettings::setApprovedPluginDigest).
     void setApprovedPluginDigest(const QString& pluginId, const QString& digest);
 
+    /// The consent digest of a staged update, or empty if none is staged
+    /// (PluginSettings::stagedPluginDigest).
+    QString stagedPluginDigest(const QString& pluginId) const;
+
+    /// Record the consent digest of a staged update, or clear it with an empty digest
+    /// (PluginSettings::setStagedPluginDigest).
+    void setStagedPluginDigest(const QString& pluginId, const QString& digest);
+
 private:
     QList<PluginLoadInfo> _records;    // One record per discovered plugin, any state
     QString _crashedPluginId;          // Plugin blamed for crashing a previous run during its load

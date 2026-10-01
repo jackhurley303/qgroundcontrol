@@ -3,6 +3,7 @@
 #include <QtCore/QDateTime>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
+#include <QtCore/QFileInfo>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QLocale>
@@ -17,6 +18,7 @@
 #include "MultiSignalSpy.h"
 #include "PluginContributions.h"
 #include "PluginInstaller.h"
+#include "PluginInstallerTest.h"
 #include "PluginSettings.h"
 #include "QGCPlugin.h"
 #include "QGCPluginInterface.h"
@@ -145,6 +147,7 @@ void QGCPluginManagerTest::init()
     // first-sight assertions.
     QSettings settings;
     settings.remove(QStringLiteral("Plugins/ApprovedDigests"));
+    settings.remove(QStringLiteral("Plugins/StagedDigests"));
 
     // Crash-sentinel keys also persist across runs; a lingering value from an earlier
     // test (or a real crash of this binary) would quarantine unrelated fixtures.
@@ -996,6 +999,217 @@ void QGCPluginManagerTest::_bundleDirPluginTrusted_test()
     manager._processInspected({QGCPluginLoader::inspectPackage(packageDir)});
     QCOMPARE(manager._recordStore.records().first().state, PluginState::Active);
     QVERIFY(pluginSettings()->approvedPluginDigest(id).isEmpty());
+}
+
+QString QGCPluginManagerTest::_writePackageZip(const QString& id, const QString& version)
+{
+    QJsonObject json;
+    json[QStringLiteral("id")] = id;
+    json[QStringLiteral("name")] = QStringLiteral("Test Package");
+    json[QStringLiteral("version")] = version;
+    json[QStringLiteral("vendor")] = QStringLiteral("Test Org");
+    json[QStringLiteral("description")] = QStringLiteral("Manager fixture");
+    json[QStringLiteral("tier")] = QStringLiteral("qml");
+    QJsonObject hostVersion;
+    hostVersion[QStringLiteral("min")] = QStringLiteral("5.0");
+    hostVersion[QStringLiteral("max")] = QString();
+    json[QStringLiteral("hostVersion")] = hostVersion;
+    json[QStringLiteral("contributes")] = QJsonObject();
+
+    const QByteArray archive = storedZipArchive({{QStringLiteral("qgcplugin.json"), QJsonDocument(json).toJson()}});
+    const QString zipPath = tempPath(QStringLiteral("%1-%2.qgcplugin").arg(id, version));
+    QFile file(zipPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(archive) != archive.size()) {
+        return QString();
+    }
+    return zipPath;
+}
+
+void QGCPluginManagerTest::_stagedUpdateActivatesWithoutPrompt_test()
+{
+    const QString id = QStringLiteral("org.test.stagedconsent");
+    const QString v1Zip = _writePackageZip(id, QStringLiteral("1.0.0"));
+    const QString v2Zip = _writePackageZip(id, QStringLiteral("2.0.0"));
+    QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty());
+
+    // A fresh install still installs and activates at once
+    QGCPluginManager manager;
+    QCOMPARE(manager.installPlugin(v1Zip), QString());
+    QVERIFY(manager._recordStore.find(id));
+    QCOMPARE(manager._recordStore.find(id)->state, PluginState::Active);
+    const QString v1Digest = pluginSettings()->approvedPluginDigest(id);
+    QVERIFY(!v1Digest.isEmpty());
+
+    // Staging changes nothing in this run: v1 stays active and stays the approved content
+    QCOMPARE(manager.stagePluginUpdate(id, v2Zip), QString());
+    QCOMPARE(manager._recordStore.find(id)->manifest.version, QVersionNumber(1, 0, 0));
+    QCOMPARE(manager._recordStore.find(id)->state, PluginState::Active);
+    QCOMPARE(pluginSettings()->approvedPluginDigest(id), v1Digest);
+    const QString stagedDigest = pluginSettings()->stagedPluginDigest(id);
+    QVERIFY(!stagedDigest.isEmpty());
+    QVERIFY(stagedDigest != v1Digest);
+
+    // Next start: the update is moved in before the scan and runs with no prompt
+    QGCPluginManager restarted;
+    restarted._loadPlugins();
+    const PluginLoadInfo* record = restarted._recordStore.find(id);
+    QVERIFY(record);
+    QCOMPARE(record->manifest.version, QVersionNumber(2, 0, 0));
+    QCOMPARE(record->state, PluginState::Active);
+    QVERIFY(record->updateError.isEmpty());
+    QVERIFY(pluginSettings()->stagedPluginDigest(id).isEmpty());
+    QCOMPARE(pluginSettings()->approvedPluginDigest(id), stagedDigest);
+}
+
+void QGCPluginManagerTest::_stageForOtherIdRefused_test()
+{
+    // Consent to update one plugin must not stage, or approve, another installed one
+    const QString id = QStringLiteral("org.test.stagetarget");
+    const QString otherId = QStringLiteral("org.test.stageother");
+    const QString targetZip = _writePackageZip(id, QStringLiteral("1.0.0"));
+    const QString otherZip = _writePackageZip(otherId, QStringLiteral("1.0.0"));
+    const QString otherV2Zip = _writePackageZip(otherId, QStringLiteral("2.0.0"));
+    QVERIFY(!targetZip.isEmpty() && !otherZip.isEmpty() && !otherV2Zip.isEmpty());
+
+    QGCPluginManager manager;
+    QCOMPARE(manager.installPlugin(targetZip), QString());
+    QCOMPARE(manager.installPlugin(otherZip), QString());
+    const QString otherApproved = pluginSettings()->approvedPluginDigest(otherId);
+
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("package declares id"));
+    expectLogMessage("PluginSystem.QGCPluginManager", QtWarningMsg, QRegularExpression("Staging failed"));
+    QVERIFY(!manager.stagePluginUpdate(id, otherV2Zip).isEmpty());
+    verifyExpectedLogMessage();
+    verifyExpectedLogMessage();
+    QVERIFY(pluginSettings()->stagedPluginDigest(id).isEmpty());
+    QVERIFY(pluginSettings()->stagedPluginDigest(otherId).isEmpty());
+
+    QGCPluginManager restarted;
+    restarted._loadPlugins();
+    QVERIFY(restarted._recordStore.find(otherId));
+    QCOMPARE(restarted._recordStore.find(otherId)->manifest.version, QVersionNumber(1, 0, 0));
+    QCOMPARE(pluginSettings()->approvedPluginDigest(otherId), otherApproved);
+}
+
+void QGCPluginManagerTest::_editedStagedUpdatePrompts_test()
+{
+    const QString id = QStringLiteral("org.test.stagededited");
+    const QString v1Zip = _writePackageZip(id, QStringLiteral("1.0.0"));
+    const QString v2Zip = _writePackageZip(id, QStringLiteral("2.0.0"));
+    QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty());
+
+    QGCPluginManager manager;
+    QCOMPARE(manager.installPlugin(v1Zip), QString());
+    QCOMPARE(manager.stagePluginUpdate(id, v2Zip), QString());
+
+    // The staged files change by hand after the user approved them
+    QFile pendingManifest(QDir(PluginInstaller::pendingUpdateDir(id)).filePath(QStringLiteral("qgcplugin.json")));
+    QVERIFY(pendingManifest.open(QIODevice::ReadOnly));
+    QJsonObject edited = QJsonDocument::fromJson(pendingManifest.readAll()).object();
+    pendingManifest.close();
+    edited[QStringLiteral("description")] = QStringLiteral("Edited while staged");
+    QVERIFY(pendingManifest.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    pendingManifest.write(QJsonDocument(edited).toJson());
+    pendingManifest.close();
+
+    QGCPluginManager restarted;
+    restarted._loadPlugins();
+    const PluginLoadInfo* record = restarted._recordStore.find(id);
+    QVERIFY(record);
+    QCOMPARE(record->manifest.version, QVersionNumber(2, 0, 0));
+    QCOMPARE(record->state, PluginState::NeedsApproval);
+    QVERIFY2(record->errorString.contains(QStringLiteral("changed")), qPrintable(record->errorString));
+}
+
+void QGCPluginManagerTest::_failedUpdateKeepsOldActive_test()
+{
+    const QString id = QStringLiteral("org.test.stagedfails");
+    const QString v1Zip = _writePackageZip(id, QStringLiteral("1.0.0"));
+    const QString v2Zip = _writePackageZip(id, QStringLiteral("2.0.0"));
+    QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty());
+
+    QGCPluginManager manager;
+    QCOMPARE(manager.installPlugin(v1Zip), QString());
+    const QString v1Digest = pluginSettings()->approvedPluginDigest(id);
+    QCOMPARE(manager.stagePluginUpdate(id, v2Zip), QString());
+
+    QFile pendingManifest(QDir(PluginInstaller::pendingUpdateDir(id)).filePath(QStringLiteral("qgcplugin.json")));
+    QVERIFY(pendingManifest.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    pendingManifest.write("{ not json");
+    pendingManifest.close();
+
+    QGCPluginManager restarted;
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("not applied"));
+    restarted._loadPlugins();
+    verifyExpectedLogMessage();
+
+    // The old version runs, approved as before, and its row says the update failed
+    const PluginLoadInfo* record = restarted._recordStore.find(id);
+    QVERIFY(record);
+    QCOMPARE(record->manifest.version, QVersionNumber(1, 0, 0));
+    QCOMPARE(record->state, PluginState::Active);
+    QVERIFY(!record->updateError.isEmpty());
+    QCOMPARE(pluginSettings()->approvedPluginDigest(id), v1Digest);
+    QVERIFY(pluginSettings()->stagedPluginDigest(id).isEmpty());
+
+    bool foundRow = false;
+    for (const QVariant& item : restarted.knownPlugins()) {
+        const QVariantMap row = item.toMap();
+        if (row[QStringLiteral("id")].toString() == id) {
+            foundRow = true;
+            QVERIFY2(row[QStringLiteral("statusText")].toString().contains(QStringLiteral("update failed")),
+                     qPrintable(row[QStringLiteral("statusText")].toString()));
+            QCOMPARE(row[QStringLiteral("updateError")].toString(), record->updateError);
+        }
+    }
+    QVERIFY(foundRow);
+}
+
+void QGCPluginManagerTest::_removeDiscardsStagedUpdate_test()
+{
+    const QString id = QStringLiteral("org.test.stagedremoved");
+    const QString v1Zip = _writePackageZip(id, QStringLiteral("1.0.0"));
+    const QString v2Zip = _writePackageZip(id, QStringLiteral("2.0.0"));
+    QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty());
+
+    QGCPluginManager manager;
+    QCOMPARE(manager.installPlugin(v1Zip), QString());
+    QCOMPARE(manager.stagePluginUpdate(id, v2Zip), QString());
+    QCOMPARE(manager.removePlugin(id), QString());
+    QVERIFY(!QFileInfo::exists(PluginInstaller::pendingUpdateDir(id)));
+    QVERIFY(pluginSettings()->stagedPluginDigest(id).isEmpty());
+
+    // The staged update does not bring the plugin back
+    QGCPluginManager restarted;
+    restarted._loadPlugins();
+    QVERIFY(!restarted._recordStore.find(id));
+}
+
+void QGCPluginManagerTest::_manualInstallDiscardsStagedUpdate_test()
+{
+    const QString id = QStringLiteral("org.test.stagedoverridden");
+    const QString v1Zip = _writePackageZip(id, QStringLiteral("1.0.0"));
+    const QString v2Zip = _writePackageZip(id, QStringLiteral("2.0.0"));
+    const QString v3Zip = _writePackageZip(id, QStringLiteral("3.0.0"));
+    QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty() && !v3Zip.isEmpty());
+
+    QGCPluginManager manager;
+    QCOMPARE(manager.installPlugin(v1Zip), QString());
+    QCOMPARE(manager.stagePluginUpdate(id, v2Zip), QString());
+
+    // "Install plugin..." is unchanged: it replaces the package now, and the newer
+    // request wins over the update staged earlier
+    QCOMPARE(manager.installPlugin(v3Zip), QString());
+    QCOMPARE(manager._recordStore.find(id)->manifest.version, QVersionNumber(3, 0, 0));
+    QCOMPARE(manager._recordStore.find(id)->state, PluginState::Active);
+    QVERIFY(!QFileInfo::exists(PluginInstaller::pendingUpdateDir(id)));
+    QVERIFY(pluginSettings()->stagedPluginDigest(id).isEmpty());
+
+    QGCPluginManager restarted;
+    restarted._loadPlugins();
+    QVERIFY(restarted._recordStore.find(id));
+    QCOMPARE(restarted._recordStore.find(id)->manifest.version, QVersionNumber(3, 0, 0));
+    QCOMPARE(restarted._recordStore.find(id)->state, PluginState::Active);
 }
 
 void QGCPluginManagerTest::_crashSentinelQuarantines_test()

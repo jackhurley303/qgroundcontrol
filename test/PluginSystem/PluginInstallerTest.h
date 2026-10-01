@@ -1,8 +1,16 @@
 #pragma once
 
+#include <QtCore/QByteArray>
+#include <QtCore/QJsonObject>
+#include <QtCore/QList>
+#include <QtCore/QPair>
+#include <QtCore/QString>
+
 #include "BaseClasses/TempDirectoryTest.h"
 
-#include <QtCore/QJsonObject>
+/// The bytes of a zip with the given entries (archive-relative path -> content), in order,
+/// stored uncompressed. Also used by QGCPluginManagerTest to build update packages.
+QByteArray storedZipArchive(const QList<QPair<QString, QByteArray>>& entries);
 
 /// TempDirectoryTest: builds real .qgcplugin zip fixtures on disk and installs them
 /// into a temp-dir-backed user plugins directory (U3.2).
@@ -30,6 +38,18 @@ private slots:
     void _installBundledPluginApiDylibRejected_test();
     void _installBundledQtFrameworkRejected_test();
 
+    void _stageThenApplyReplacesPackage_test();
+    void _stageUninstalledIdRefused_test();
+    void _stageIncompatiblePackageRefused_test();
+    void _applyInvalidPendingKeepsOldPackage_test();
+    void _applyPendingIdMismatchKeepsOldPackage_test();
+    void _applyFailedMoveKeepsOldPackage_test();
+    void _applyFinishesInterruptedSwap_test();
+    void _scanIgnoresPendingContent_test();
+    void _stageMismatchedIdRefused_test();
+    void _applyWithNothingInstalledDiscards_test();
+    void _installUnsafeIdRejected_test();
+
 private:
     // Writes a zip at tempPath(zipRelPath) with the given entries (archive-relative
     // path -> content); returns the absolute zip path.
@@ -41,4 +61,9 @@ private:
     QString _writeUstarTar(const QString& tarRelPath, const QString& entryName, const QByteArray& content);
     QJsonObject _validManifestJson(const QString& id, const QString& version = QStringLiteral("1.0.0"));
     QJsonObject _internalTierManifestJson(const QString& id);
+    // Writes a package zip whose manifest is manifestJson, plus one marker file named
+    // markerName; returns the absolute zip path.
+    QString _writePackageZip(const QString& zipRelPath, const QJsonObject& manifestJson, const QString& markerName);
+    // The version declared by the manifest of the package at packageDir, or empty.
+    static QString _manifestVersionAt(const QString& packageDir);
 };

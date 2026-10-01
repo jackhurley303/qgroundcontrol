@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <QtCore/QList>
 #include <QtCore/QLoggingCategory>
 #include <QtCore/QString>
 
@@ -47,6 +48,37 @@ public:
     /// the caller is responsible for deactivating the plugin first.
     /// @param pluginId Manifest id of the package to remove
     static PluginInstallResult removePlugin(const QString& pluginId);
+
+    /// @brief Stage an update to an installed package, to be applied at the next start
+    /// A loaded plugin's binary stays mapped until the process exits, so an update is
+    /// extracted beside the installed package rather than over it. Runs the same archive
+    /// checks as installFromFile(), refuses a package whose manifest id is not pluginId,
+    /// refuses an id that is not installed, and refuses a package that would not load on
+    /// this host. Extracts to pendingUpdateDir(pluginId), replacing any update already
+    /// staged for that id.
+    /// @param pluginId Manifest id of the installed plugin being updated
+    /// @param zipPath Absolute path to the .qgcplugin file
+    /// @return Result with pluginId; success only if the update was staged
+    static PluginInstallResult stageUpdate(const QString& pluginId, const QString& zipPath);
+
+    /// @brief Move every staged update into place. Call before the first plugin scan.
+    /// Per package: the installed package is renamed aside, then the staged one is
+    /// renamed into its place. A staged package that would not load, one with no
+    /// installed package to replace, or a move that fails, leaves the installed
+    /// package as it was. The staged copy is discarded
+    /// either way, so a failure is reported once rather than retried at every start.
+    /// Also finishes a swap a previous run was killed in the middle of.
+    /// @return One result per staged package, keyed by its directory name
+    static QList<PluginInstallResult> applyPendingUpdates();
+
+    /// @brief Delete the update staged for pluginId, if any
+    /// @return true if nothing is staged for pluginId afterwards
+    static bool discardPendingUpdate(const QString& pluginId);
+
+    /// @brief Where stageUpdate() puts the update for pluginId. The plugin scan never
+    /// discovers it: the scan only takes direct children of a search directory that
+    /// carry qgcplugin.json, and this is one level deeper.
+    static QString pendingUpdateDir(const QString& pluginId);
 
     /// @brief The directory packages are installed into (the user-writable entry of
     /// QGCPluginLoader::defaultPluginPaths())

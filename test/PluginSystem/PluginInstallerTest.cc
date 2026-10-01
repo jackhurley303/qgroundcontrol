@@ -2,12 +2,19 @@
 
 #include <QtCore/QDir>
 #include <QtCore/QFile>
+#include <QtCore/QFileInfo>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QRegularExpression>
+#include <QtCore/QScopeGuard>
 #include <QtCore/QStandardPaths>
 
 #include "PluginInstaller.h"
 #include "PluginManifest.h"
+#include "QGCPluginLoader.h"
+
+#if !defined(Q_OS_WIN)
+#include <unistd.h>
+#endif
 
 namespace {
 
@@ -86,8 +93,7 @@ QString PluginInstallerTest::_writeZip(const QString& zipRelPath, const QMap<QSt
     return _writeZipOrdered(zipRelPath, ordered);
 }
 
-QString PluginInstallerTest::_writeZipOrdered(const QString& zipRelPath,
-                                              const QList<QPair<QString, QByteArray>>& entries)
+QByteArray storedZipArchive(const QList<QPair<QString, QByteArray>>& entries)
 {
     // Minimal zip writer: STORED (uncompressed) entries, one local file header each,
     // then the central directory and the end-of-central-directory record. QGC only ever
@@ -160,6 +166,14 @@ QString PluginInstallerTest::_writeZipOrdered(const QString& zipRelPath,
     appendU32(archive, static_cast<quint32>(centralDirectory.size()));
     appendU32(archive, centralDirectoryOffset);
     appendU16(archive, 0);  // archive comment length
+
+    return archive;
+}
+
+QString PluginInstallerTest::_writeZipOrdered(const QString& zipRelPath,
+                                              const QList<QPair<QString, QByteArray>>& entries)
+{
+    const QByteArray archive = storedZipArchive(entries);
 
     const QString zipPath = tempPath(zipRelPath);
     QFile file(zipPath);
@@ -515,6 +529,370 @@ void PluginInstallerTest::_installBundledQtFrameworkRejected_test()
     QVERIFY2(result.errorString.contains(QStringLiteral("bundles a runtime")), qPrintable(result.errorString));
 
     QVERIFY(!QDir(QDir(PluginInstaller::userPluginsDir()).filePath("org.test.bundledqt")).exists());
+}
+
+QString PluginInstallerTest::_writePackageZip(const QString& zipRelPath, const QJsonObject& manifestJson,
+                                              const QString& markerName)
+{
+    QMap<QString, QByteArray> entries;
+    entries[QStringLiteral("qgcplugin.json")] = QJsonDocument(manifestJson).toJson();
+    entries[markerName] = markerName.toUtf8();
+    return _writeZip(zipRelPath, entries);
+}
+
+QString PluginInstallerTest::_manifestVersionAt(const QString& packageDir)
+{
+    QFile manifestFile(QDir(packageDir).filePath(QStringLiteral("qgcplugin.json")));
+    if (!manifestFile.open(QIODevice::ReadOnly)) {
+        return QString();
+    }
+    return QJsonDocument::fromJson(manifestFile.readAll()).object()[QStringLiteral("version")].toString();
+}
+
+void PluginInstallerTest::_stageThenApplyReplacesPackage_test()
+{
+    const QString id = QStringLiteral("org.test.staged");
+    const QString v1Zip =
+        _writePackageZip(QStringLiteral("staged-v1.qgcplugin"), _validManifestJson(id, QStringLiteral("1.0.0")),
+                         QStringLiteral("v1-only.txt"));
+    const QString v2Zip =
+        _writePackageZip(QStringLiteral("staged-v2.qgcplugin"), _validManifestJson(id, QStringLiteral("2.0.0")),
+                         QStringLiteral("v2-only.txt"));
+    QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty());
+    QVERIFY(PluginInstaller::installFromFile(v1Zip).success);
+
+    const PluginInstallResult staged = PluginInstaller::stageUpdate(id, v2Zip);
+    QVERIFY2(staged.success, qPrintable(staged.errorString));
+    QCOMPARE(staged.pluginId, id);
+
+    // Staging leaves the installed package alone until the next start
+    const QString installedDir = QDir(PluginInstaller::userPluginsDir()).filePath(id);
+    const QString pendingDir = PluginInstaller::pendingUpdateDir(id);
+    QCOMPARE(_manifestVersionAt(installedDir), QStringLiteral("1.0.0"));
+    QCOMPARE(_manifestVersionAt(pendingDir), QStringLiteral("2.0.0"));
+
+    const QList<PluginInstallResult> results = PluginInstaller::applyPendingUpdates();
+    QCOMPARE(results.size(), 1);
+    QVERIFY2(results.first().success, qPrintable(results.first().errorString));
+    QCOMPARE(results.first().pluginId, id);
+
+    // A whole replace: v1's own file is gone, nothing is left staged or set aside
+    QCOMPARE(_manifestVersionAt(installedDir), QStringLiteral("2.0.0"));
+    QVERIFY(QFile::exists(installedDir + QStringLiteral("/v2-only.txt")));
+    QVERIFY(!QFile::exists(installedDir + QStringLiteral("/v1-only.txt")));
+    QVERIFY(!QFileInfo::exists(pendingDir));
+    QVERIFY(!QFileInfo::exists(QDir(PluginInstaller::userPluginsDir()).filePath(QStringLiteral(".previous/") + id)));
+
+    // Nothing left to apply on the start after that
+    QVERIFY(PluginInstaller::applyPendingUpdates().isEmpty());
+}
+
+void PluginInstallerTest::_stageUninstalledIdRefused_test()
+{
+    const QString id = QStringLiteral("org.test.notinstalled");
+    const QString zipPath = _writePackageZip(QStringLiteral("notinstalled.qgcplugin"), _validManifestJson(id),
+                                             QStringLiteral("marker.txt"));
+    QVERIFY(!zipPath.isEmpty());
+
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("is not installed"));
+    const PluginInstallResult result = PluginInstaller::stageUpdate(id, zipPath);
+    verifyExpectedLogMessage();
+    QVERIFY(!result.success);
+
+    // A fresh install is installFromFile()'s job; staging wrote nothing anywhere
+    QVERIFY(!QFileInfo::exists(PluginInstaller::pendingUpdateDir(id)));
+    QVERIFY(!QFileInfo::exists(QDir(PluginInstaller::userPluginsDir()).filePath(id)));
+}
+
+void PluginInstallerTest::_stageIncompatiblePackageRefused_test()
+{
+    const QString id = QStringLiteral("org.test.stageincompatible");
+    const QString v1Zip = _writePackageZip(QStringLiteral("incompat-v1.qgcplugin"), _validManifestJson(id),
+                                           QStringLiteral("v1-only.txt"));
+    QJsonObject future = _validManifestJson(id, QStringLiteral("2.0.0"));
+    QJsonObject hostVersion;
+    hostVersion[QStringLiteral("min")] = QStringLiteral("999.0");
+    hostVersion[QStringLiteral("max")] = QString();
+    future[QStringLiteral("hostVersion")] = hostVersion;
+    const QString v2Zip =
+        _writePackageZip(QStringLiteral("incompat-v2.qgcplugin"), future, QStringLiteral("v2-only.txt"));
+    QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty());
+    QVERIFY(PluginInstaller::installFromFile(v1Zip).success);
+
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("the update cannot load"));
+    const PluginInstallResult result = PluginInstaller::stageUpdate(id, v2Zip);
+    verifyExpectedLogMessage();
+    QVERIFY(!result.success);
+
+    QVERIFY(!QFileInfo::exists(PluginInstaller::pendingUpdateDir(id)));
+    QCOMPARE(_manifestVersionAt(QDir(PluginInstaller::userPluginsDir()).filePath(id)), QStringLiteral("1.0.0"));
+}
+
+void PluginInstallerTest::_applyInvalidPendingKeepsOldPackage_test()
+{
+    const QString id = QStringLiteral("org.test.badpending");
+    const QString v1Zip = _writePackageZip(QStringLiteral("badpending-v1.qgcplugin"), _validManifestJson(id),
+                                           QStringLiteral("v1-only.txt"));
+    const QString v2Zip =
+        _writePackageZip(QStringLiteral("badpending-v2.qgcplugin"), _validManifestJson(id, QStringLiteral("2.0.0")),
+                         QStringLiteral("v2-only.txt"));
+    QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty());
+    QVERIFY(PluginInstaller::installFromFile(v1Zip).success);
+    QVERIFY(PluginInstaller::stageUpdate(id, v2Zip).success);
+
+    // The staged copy is damaged on disk before the next start
+    QFile pendingManifest(QDir(PluginInstaller::pendingUpdateDir(id)).filePath(QStringLiteral("qgcplugin.json")));
+    QVERIFY(pendingManifest.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    pendingManifest.write("{ not json");
+    pendingManifest.close();
+
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg,
+                     QRegularExpression("not applied.*the staged update cannot load"));
+    const QList<PluginInstallResult> results = PluginInstaller::applyPendingUpdates();
+    verifyExpectedLogMessage();
+    QCOMPARE(results.size(), 1);
+    QVERIFY(!results.first().success);
+    QCOMPARE(results.first().pluginId, id);
+
+    const QString installedDir = QDir(PluginInstaller::userPluginsDir()).filePath(id);
+    QCOMPARE(_manifestVersionAt(installedDir), QStringLiteral("1.0.0"));
+    QVERIFY(QFile::exists(installedDir + QStringLiteral("/v1-only.txt")));
+    QVERIFY(!QFile::exists(installedDir + QStringLiteral("/v2-only.txt")));
+
+    // Refused once, not at every start
+    QVERIFY(!QFileInfo::exists(PluginInstaller::pendingUpdateDir(id)));
+    QVERIFY(PluginInstaller::applyPendingUpdates().isEmpty());
+}
+
+void PluginInstallerTest::_applyPendingIdMismatchKeepsOldPackage_test()
+{
+    // A staged directory whose manifest names another plugin must not install over this one
+    const QString id = QStringLiteral("org.test.mismatch");
+    const QString v1Zip = _writePackageZip(QStringLiteral("mismatch-v1.qgcplugin"), _validManifestJson(id),
+                                           QStringLiteral("v1-only.txt"));
+    const QString v2Zip =
+        _writePackageZip(QStringLiteral("mismatch-v2.qgcplugin"), _validManifestJson(id, QStringLiteral("2.0.0")),
+                         QStringLiteral("v2-only.txt"));
+    QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty());
+    QVERIFY(PluginInstaller::installFromFile(v1Zip).success);
+    QVERIFY(PluginInstaller::stageUpdate(id, v2Zip).success);
+
+    QFile pendingManifest(QDir(PluginInstaller::pendingUpdateDir(id)).filePath(QStringLiteral("qgcplugin.json")));
+    QVERIFY(pendingManifest.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    pendingManifest.write(
+        QJsonDocument(_validManifestJson(QStringLiteral("org.test.other"), QStringLiteral("2.0.0"))).toJson());
+    pendingManifest.close();
+
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("declares id 'org.test.other'"));
+    const QList<PluginInstallResult> results = PluginInstaller::applyPendingUpdates();
+    verifyExpectedLogMessage();
+    QCOMPARE(results.size(), 1);
+    QVERIFY(!results.first().success);
+
+    QCOMPARE(_manifestVersionAt(QDir(PluginInstaller::userPluginsDir()).filePath(id)), QStringLiteral("1.0.0"));
+    QVERIFY(!QFileInfo::exists(QDir(PluginInstaller::userPluginsDir()).filePath(QStringLiteral("org.test.other"))));
+}
+
+void PluginInstallerTest::_applyFailedMoveKeepsOldPackage_test()
+{
+    // The failure is produced with POSIX directory permissions: Windows has no write bit
+    // on a directory (setPermissions only sets the read-only attribute), and root ignores it.
+#if defined(Q_OS_WIN)
+    QSKIP("needs POSIX directory write permission to make a rename fail");
+#else
+    if (geteuid() == 0) {
+        QSKIP("root ignores directory write permission, so the rename cannot be made to fail");
+    }
+#endif
+
+    const QString id = QStringLiteral("org.test.lockedmove");
+    const QString v1Zip =
+        _writePackageZip(QStringLiteral("locked-v1.qgcplugin"), _validManifestJson(id), QStringLiteral("v1-only.txt"));
+    const QString v2Zip =
+        _writePackageZip(QStringLiteral("locked-v2.qgcplugin"), _validManifestJson(id, QStringLiteral("2.0.0")),
+                         QStringLiteral("v2-only.txt"));
+    QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty());
+    QVERIFY(PluginInstaller::installFromFile(v1Zip).success);
+    QVERIFY(PluginInstaller::stageUpdate(id, v2Zip).success);
+
+    // Moving a directory out of its parent needs write permission on that parent. With
+    // the staging root read-only, the installed package is renamed aside and then the
+    // staged one cannot follow — the failure between the two renames.
+    const QString pendingRoot = QFileInfo(PluginInstaller::pendingUpdateDir(id)).absolutePath();
+    const QFileDevice::Permissions originalPermissions = QFile::permissions(pendingRoot);
+    QVERIFY(QFile::setPermissions(pendingRoot, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+    const auto restorePermissions = qScopeGuard([&] { QFile::setPermissions(pendingRoot, originalPermissions); });
+
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg,
+                     QRegularExpression("not applied.*could not move the update into place"));
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg,
+                     QRegularExpression("Could not discard the staged update"));
+    const QList<PluginInstallResult> results = PluginInstaller::applyPendingUpdates();
+    verifyExpectedLogMessage();
+    verifyExpectedLogMessage();
+    QCOMPARE(results.size(), 1);
+    QVERIFY(!results.first().success);
+    // This message, and not "could not move the installed package aside", is what says
+    // the first rename happened and the old package had to be put back.
+    QVERIFY2(results.first().errorString == QStringLiteral("could not move the update into place"),
+             qPrintable(results.first().errorString));
+
+    // The old package is back in place and whole
+    const QString installedDir = QDir(PluginInstaller::userPluginsDir()).filePath(id);
+    QCOMPARE(_manifestVersionAt(installedDir), QStringLiteral("1.0.0"));
+    QVERIFY(QFile::exists(installedDir + QStringLiteral("/v1-only.txt")));
+    QVERIFY(!QFile::exists(installedDir + QStringLiteral("/v2-only.txt")));
+    QVERIFY(!QFileInfo::exists(QDir(PluginInstaller::userPluginsDir()).filePath(QStringLiteral(".previous/") + id)));
+}
+
+void PluginInstallerTest::_applyFinishesInterruptedSwap_test()
+{
+    const QString id = QStringLiteral("org.test.interrupted");
+    const QString v1Zip = _writePackageZip(QStringLiteral("interrupted-v1.qgcplugin"), _validManifestJson(id),
+                                           QStringLiteral("v1-only.txt"));
+    const QString v2Zip =
+        _writePackageZip(QStringLiteral("interrupted-v2.qgcplugin"), _validManifestJson(id, QStringLiteral("2.0.0")),
+                         QStringLiteral("v2-only.txt"));
+    QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty());
+    QVERIFY(PluginInstaller::installFromFile(v1Zip).success);
+    QVERIFY(PluginInstaller::stageUpdate(id, v2Zip).success);
+
+    // A run killed between the two renames: the old package is aside, nothing in its place
+    const QString installedDir = QDir(PluginInstaller::userPluginsDir()).filePath(id);
+    const QString previousDir = QDir(PluginInstaller::userPluginsDir()).filePath(QStringLiteral(".previous/") + id);
+    QVERIFY(QDir().mkpath(QFileInfo(previousDir).absolutePath()));
+    QVERIFY(QDir().rename(installedDir, previousDir));
+
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("after an interrupted update"));
+    const QList<PluginInstallResult> results = PluginInstaller::applyPendingUpdates();
+    verifyExpectedLogMessage();
+    QCOMPARE(results.size(), 1);
+    QVERIFY2(results.first().success, qPrintable(results.first().errorString));
+    QCOMPARE(_manifestVersionAt(installedDir), QStringLiteral("2.0.0"));
+    QVERIFY(!QFileInfo::exists(previousDir));
+}
+
+void PluginInstallerTest::_scanIgnoresPendingContent_test()
+{
+    const QString id = QStringLiteral("org.test.scanpending");
+    const QString v1Zip =
+        _writePackageZip(QStringLiteral("scan-v1.qgcplugin"), _validManifestJson(id), QStringLiteral("v1-only.txt"));
+    const QString v2Zip =
+        _writePackageZip(QStringLiteral("scan-v2.qgcplugin"), _validManifestJson(id, QStringLiteral("2.0.0")),
+                         QStringLiteral("v2-only.txt"));
+    QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty());
+    QVERIFY(PluginInstaller::installFromFile(v1Zip).success);
+    QVERIFY(PluginInstaller::stageUpdate(id, v2Zip).success);
+
+    // Also a staged package with no installed counterpart, written by hand
+    const QString orphanDir = PluginInstaller::pendingUpdateDir(QStringLiteral("org.test.orphan"));
+    QVERIFY(QDir().mkpath(orphanDir));
+    QFile orphanManifest(QDir(orphanDir).filePath(QStringLiteral("qgcplugin.json")));
+    QVERIFY(orphanManifest.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    orphanManifest.write(QJsonDocument(_validManifestJson(QStringLiteral("org.test.orphan"))).toJson());
+    orphanManifest.close();
+
+    // The scan finds the installed package and nothing staged
+    const QList<PluginLoadInfo> found = QGCPluginLoader::inspectDirectories({PluginInstaller::userPluginsDir()});
+    QCOMPARE(found.size(), 1);
+    QCOMPARE(found.first().manifest.id, id);
+    QCOMPARE(found.first().manifest.version.toString(), QStringLiteral("1.0.0"));
+    QCOMPARE(found.first().packageDir, QDir(PluginInstaller::userPluginsDir()).filePath(id));
+}
+
+void PluginInstallerTest::_stageMismatchedIdRefused_test()
+{
+    // Asked to update one installed plugin, handed a package for another installed one
+    const QString id = QStringLiteral("org.test.updatetarget");
+    const QString otherId = QStringLiteral("org.test.otherinstalled");
+    const QString targetZip = _writePackageZip(QStringLiteral("target-v1.qgcplugin"), _validManifestJson(id),
+                                               QStringLiteral("target-only.txt"));
+    const QString otherZip = _writePackageZip(QStringLiteral("other-v1.qgcplugin"), _validManifestJson(otherId),
+                                              QStringLiteral("other-v1-only.txt"));
+    const QString otherV2Zip =
+        _writePackageZip(QStringLiteral("other-v2.qgcplugin"), _validManifestJson(otherId, QStringLiteral("2.0.0")),
+                         QStringLiteral("other-v2-only.txt"));
+    QVERIFY(!targetZip.isEmpty() && !otherZip.isEmpty() && !otherV2Zip.isEmpty());
+    QVERIFY(PluginInstaller::installFromFile(targetZip).success);
+    QVERIFY(PluginInstaller::installFromFile(otherZip).success);
+
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg,
+                     QRegularExpression("package declares id 'org.test.otherinstalled', not 'org.test.updatetarget'"));
+    const PluginInstallResult result = PluginInstaller::stageUpdate(id, otherV2Zip);
+    verifyExpectedLogMessage();
+    QVERIFY(!result.success);
+    QCOMPARE(result.pluginId, id);
+
+    // Refused before extraction: nothing staged for either id
+    QVERIFY(!QFileInfo::exists(PluginInstaller::pendingUpdateDir(id)));
+    QVERIFY(!QFileInfo::exists(PluginInstaller::pendingUpdateDir(otherId)));
+    QVERIFY(PluginInstaller::applyPendingUpdates().isEmpty());
+    QCOMPARE(_manifestVersionAt(QDir(PluginInstaller::userPluginsDir()).filePath(otherId)), QStringLiteral("1.0.0"));
+}
+
+void PluginInstallerTest::_applyWithNothingInstalledDiscards_test()
+{
+    // The plugin went away after its update was staged (a remove whose discard failed,
+    // or a hand delete). The update must not install it again.
+    const QString id = QStringLiteral("org.test.removedafterstage");
+    const QString v1Zip =
+        _writePackageZip(QStringLiteral("removed-v1.qgcplugin"), _validManifestJson(id), QStringLiteral("v1-only.txt"));
+    const QString v2Zip =
+        _writePackageZip(QStringLiteral("removed-v2.qgcplugin"), _validManifestJson(id, QStringLiteral("2.0.0")),
+                         QStringLiteral("v2-only.txt"));
+    QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty());
+    QVERIFY(PluginInstaller::installFromFile(v1Zip).success);
+    QVERIFY(PluginInstaller::stageUpdate(id, v2Zip).success);
+    const QString installedDir = QDir(PluginInstaller::userPluginsDir()).filePath(id);
+    QVERIFY(QDir(installedDir).removeRecursively());
+
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("not applied.*is not installed"));
+    const QList<PluginInstallResult> results = PluginInstaller::applyPendingUpdates();
+    verifyExpectedLogMessage();
+    QCOMPARE(results.size(), 1);
+    QVERIFY(!results.first().success);
+
+    QVERIFY(!QFileInfo::exists(installedDir));
+    QVERIFY(!QFileInfo::exists(PluginInstaller::pendingUpdateDir(id)));
+}
+
+void PluginInstallerTest::_installUnsafeIdRejected_test()
+{
+    // A staged update that a manual install with id ".pending" would otherwise delete
+    const QString stagedId = QStringLiteral("org.test.keepstaged");
+    const QString v1Zip = _writePackageZip(QStringLiteral("keep-v1.qgcplugin"), _validManifestJson(stagedId),
+                                           QStringLiteral("v1-only.txt"));
+    const QString v2Zip =
+        _writePackageZip(QStringLiteral("keep-v2.qgcplugin"), _validManifestJson(stagedId, QStringLiteral("2.0.0")),
+                         QStringLiteral("v2-only.txt"));
+    QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty());
+    QVERIFY(PluginInstaller::installFromFile(v1Zip).success);
+    QVERIFY(PluginInstaller::stageUpdate(stagedId, v2Zip).success);
+
+    // A file beside the plugins directory, which an id of ".." would otherwise reach
+    const QString besidePlugins = QFileInfo(PluginInstaller::userPluginsDir()).absolutePath();
+    QFile sentinel(QDir(besidePlugins).filePath(QStringLiteral("unsafe-id-sentinel.txt")));
+    QVERIFY(sentinel.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    sentinel.write("keep");
+    sentinel.close();
+
+    const QStringList unsafeIds = {QStringLiteral(".."), QStringLiteral(".pending"), QStringLiteral(".previous")};
+    for (const QString& unsafeId : unsafeIds) {
+        const QString zipPath = _writePackageZip(QStringLiteral("unsafe-id.qgcplugin"), _validManifestJson(unsafeId),
+                                                 QStringLiteral("payload.txt"));
+        QVERIFY(!zipPath.isEmpty());
+
+        expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg,
+                         QRegularExpression("cannot name a package directory"));
+        const PluginInstallResult result = PluginInstaller::installFromFile(zipPath);
+        verifyExpectedLogMessage();
+        QVERIFY2(!result.success, qPrintable(unsafeId));
+    }
+
+    QVERIFY(QFile::exists(sentinel.fileName()));
+    QCOMPARE(_manifestVersionAt(PluginInstaller::pendingUpdateDir(stagedId)), QStringLiteral("2.0.0"));
+    QVERIFY(!QFile::exists(QDir(PluginInstaller::userPluginsDir()).filePath(QStringLiteral(".pending/payload.txt"))));
+    QVERIFY(QFile::remove(sentinel.fileName()));
 }
 
 UT_REGISTER_TEST(PluginInstallerTest, TestLabel::Unit)

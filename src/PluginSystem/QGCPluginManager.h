@@ -76,7 +76,7 @@ public:
     /// Get every discovered plugin, in any state, for QML display (e.g. the Plugins
     /// settings page). Each item is a QVariantMap with keys: id, name, version, vendor,
     /// description, state (raw PluginState name, for UI color-coding), statusText
-    /// (human-readable status line).
+    /// (human-readable status line), updateError (why a staged update was not applied).
     /// @return A list of known plugin info as QVariantList
     QVariantList knownPlugins() const;
 
@@ -118,6 +118,17 @@ public:
     /// @return Empty string on success, otherwise a human-readable error
     Q_INVOKABLE QString installPlugin(const QString& zipPath);
 
+    /// Stage an update to an installed package (PluginInstaller::stageUpdate). It is
+    /// moved into place at the next start, before the plugin scan. The caller's request
+    /// to update pluginId is the D10 consent for exactly the staged content: its digest
+    /// is recorded now and becomes the approved digest once the move succeeds, so the
+    /// updated plugin activates without asking again unless the staged files change.
+    /// A package declaring any other id is refused.
+    /// @param pluginId Manifest id of the installed plugin the user asked to update
+    /// @param zipPath Absolute path to the .qgcplugin file
+    /// @return Empty string on success, otherwise a human-readable error
+    QString stagePluginUpdate(const QString& pluginId, const QString& zipPath);
+
     /// Remove an installed package: deactivate it, delete its directory
     /// (PluginInstaller::removePlugin), and drop its record.
     /// @param pluginId The manifest id of the package to remove
@@ -149,6 +160,11 @@ signals:
 
 private:
     void _loadPlugins();
+    /// Moves staged updates into place and settles their consent digests.
+    /// @return Plugin id -> why its update was not applied, for each one that failed
+    QHash<QString, QString> _applyPendingUpdates();
+    /// Deletes any update staged for pluginId together with its staged consent digest.
+    void _discardPendingUpdate(const QString& pluginId);
     void _ensureHostServices();
     void _processInspected(const QList<PluginLoadInfo>& infos);
     void _activateRecord(PluginLoadInfo& record);

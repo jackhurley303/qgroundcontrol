@@ -42,6 +42,13 @@ private slots:
     void _changedContentReprompts_test();
     void _bundleDirPluginTrusted_test();
 
+    void _stagedUpdateActivatesWithoutPrompt_test();
+    void _stageForOtherIdRefused_test();
+    void _editedStagedUpdatePrompts_test();
+    void _failedUpdateKeepsOldActive_test();
+    void _removeDiscardsStagedUpdate_test();
+    void _manualInstallDiscardsStagedUpdate_test();
+
     void _crashSentinelQuarantines_test();
     void _crashSentinelOutranksConsent_test();
     void _sentinelClearedAfterActivation_test();
@@ -54,4 +61,6 @@ private:
     // or "sdk" with a placeholder bin/ binary); returns the package dir path.
     QString _writePackage(const QString& parentDir, const QString& id, const QString& tier,
                           const QString& description = QStringLiteral("Manager fixture"));
+    // Writes a tier-qml .qgcplugin zip for id at version; returns the absolute zip path.
+    QString _writePackageZip(const QString& id, const QString& version);
 };

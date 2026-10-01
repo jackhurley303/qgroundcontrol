@@ -162,6 +162,9 @@ QVariantList QGCPluginManager::knownPlugins() const
 {
     QVariantList pluginList;
     for (const PluginLoadInfo& record : _recordStore.records()) {
+        const QString statusText = record.updateError.isEmpty()
+                                       ? _statusText(record)
+                                       : tr("%1 (update failed: %2)").arg(_statusText(record), record.updateError);
         QVariantMap info;
         info["id"]          = record.manifest.id;
         info["name"]        = record.manifest.name;
@@ -170,7 +173,8 @@ QVariantList QGCPluginManager::knownPlugins() const
         info["description"] = record.manifest.description;
         info["tier"]        = PluginManifest::tierToString(record.manifest.tier);
         info["state"]       = pluginStateName(record.state);
-        info["statusText"]  = _statusText(record);
+        info["statusText"] = statusText;
+        info["updateError"] = record.updateError;
         info["sourceText"]  = _sourceText(record);
         info["buildText"]   = _buildText(record);
         // The raw discriminator stays available for the tooltip: two builds are told
@@ -261,12 +265,45 @@ void QGCPluginManager::_loadPlugins()
 
     _recordStore.checkCrashSentinel();
 
+    // Before the scan: once a plugin's binary is mapped it stays mapped, so this is
+    // the only point in a run where a staged update can still take effect.
+    const QHash<QString, QString> updateErrors = _applyPendingUpdates();
+
     const QStringList pluginPaths = QGCPluginLoader::defaultPluginPaths();
     qCDebug(QGCPluginManagerLog) << "Plugin search paths:" << pluginPaths;
 
-    _processInspected(QGCPluginLoader::inspectDirectories(pluginPaths));
+    QList<PluginLoadInfo> inspected = QGCPluginLoader::inspectDirectories(pluginPaths);
+    for (PluginLoadInfo& info : inspected) {
+        info.updateError = updateErrors.value(info.manifest.id);
+    }
+    _processInspected(inspected);
 
     qCDebug(QGCPluginManagerLog) << "=== Plugin Loading Complete:" << loadedPlugins().size() << "plugin(s) active ===";
+}
+
+QHash<QString, QString> QGCPluginManager::_applyPendingUpdates()
+{
+    QHash<QString, QString> updateErrors;
+    const QList<PluginInstallResult> results = PluginInstaller::applyPendingUpdates();
+    for (const PluginInstallResult& result : results) {
+        // The staged digest is spent either way, so it can never vouch for a later
+        // package with the same id.
+        const QString stagedDigest = _recordStore.stagedPluginDigest(result.pluginId);
+        _recordStore.setStagedPluginDigest(result.pluginId, QString());
+
+        if (!result.success) {
+            updateErrors.insert(result.pluginId, result.errorString);
+            continue;
+        }
+
+        // The digest covers content only, not paths, so the staged files still match it
+        // after the move — unless they were edited while staged, and then the trust gate
+        // asks again. A package staged by some other route has no digest and asks too.
+        if (!stagedDigest.isEmpty()) {
+            _recordStore.setApprovedPluginDigest(result.pluginId, stagedDigest);
+        }
+    }
+    return updateErrors;
 }
 
 void QGCPluginManager::_processInspected(const QList<PluginLoadInfo>& infos)
@@ -614,6 +651,10 @@ QString QGCPluginManager::installPlugin(const QString& zipPath)
         return installResult.errorString;
     }
 
+    // The package just installed is the newest request; an update staged earlier must
+    // not replace it at the next start.
+    _discardPendingUpdate(installResult.pluginId);
+
     // Replacing an existing install: drop the old record (deactivating first) so the
     // freshly-inspected one below isn't rejected as a duplicate id.
     PluginLoadInfo* existing = _recordStore.find(installResult.pluginId);
@@ -642,6 +683,40 @@ QString QGCPluginManager::installPlugin(const QString& zipPath)
     }
 
     return QString();
+}
+
+QString QGCPluginManager::stagePluginUpdate(const QString& pluginId, const QString& zipPath)
+{
+    qCDebug(QGCPluginManagerLog) << "Staging update of" << pluginId << "from:" << zipPath;
+
+    const PluginInstallResult stageResult = PluginInstaller::stageUpdate(pluginId, zipPath);
+    if (!stageResult.success) {
+        qCWarning(QGCPluginManagerLog) << "Staging failed:" << stageResult.errorString;
+        return stageResult.errorString;
+    }
+
+    // Consent is keyed to content (D10), so a digest that cannot be computed is an
+    // update that cannot be vouched for after the restart: fail closed.
+    const PluginLoadInfo staged =
+        QGCPluginLoader::inspectPackage(PluginInstaller::pendingUpdateDir(stageResult.pluginId));
+    const QString digest = PluginTrustGate::consentDigest(staged);
+    if (digest.isEmpty()) {
+        _discardPendingUpdate(stageResult.pluginId);
+        qCWarning(QGCPluginManagerLog) << "Could not read the staged update of" << stageResult.pluginId
+                                       << "to record consent";
+        return tr("Could not read the staged update to record consent");
+    }
+    _recordStore.setStagedPluginDigest(stageResult.pluginId, digest);
+
+    return QString();
+}
+
+void QGCPluginManager::_discardPendingUpdate(const QString& pluginId)
+{
+    if (!PluginInstaller::discardPendingUpdate(pluginId)) {
+        qCWarning(QGCPluginManagerLog) << "Could not discard the update staged for" << pluginId;
+    }
+    _recordStore.setStagedPluginDigest(pluginId, QString());
 }
 
 QString QGCPluginManager::removePlugin(const QString& pluginId)
@@ -676,6 +751,9 @@ QString QGCPluginManager::removePlugin(const QString& pluginId)
     // Removal revokes consent: a copy of the same content arriving later (by any
     // means) starts unapproved again rather than inheriting the old approval.
     _recordStore.setApprovedPluginDigest(pluginId, QString());
+
+    // A staged update would otherwise bring the plugin back at the next start.
+    _discardPendingUpdate(pluginId);
 
     _notifyRecordsChanged();
 

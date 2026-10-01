@@ -114,3 +114,13 @@ void PluginRecordStore::setApprovedPluginDigest(const QString& pluginId, const Q
 {
     pluginSettings()->setApprovedPluginDigest(pluginId, digest);
 }
+
+QString PluginRecordStore::stagedPluginDigest(const QString& pluginId) const
+{
+    return pluginSettings()->stagedPluginDigest(pluginId);
+}
+
+void PluginRecordStore::setStagedPluginDigest(const QString& pluginId, const QString& digest)
+{
+    pluginSettings()->setStagedPluginDigest(pluginId, digest);
+}

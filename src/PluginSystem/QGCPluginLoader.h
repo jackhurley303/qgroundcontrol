@@ -49,6 +49,8 @@ struct PluginLoadInfo {
     bool staleImage = false;            ///< The binary on disk changed after this process mapped it, so
                                          ///< the executing code is the older build (set by the manager
                                          ///< at activation; an in-place upgrade is the way in)
+    QString updateError;  ///< Why the update staged for this plugin was not applied at
+                          ///< startup (set by the manager); empty when none failed
 };
 
 /// @brief Stateless inspect/activate mechanism for QGC plugin libraries
