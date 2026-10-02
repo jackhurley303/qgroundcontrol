@@ -566,7 +566,52 @@ PLUGIN_SDK = PRSpec(
         # strips this one's lines in turn.
         ("src/CMakeLists.txt", (("add_subdirectory(VehicleProfile)\n", ""),)),
         ("test/CMakeLists.txt", (("add_subdirectory(VehicleProfile)\n", ""),)),
-        ("src/AppSettings/CMakeLists.txt", (("              VehicleProfileSettings.qml\n", ""),)),
+        (
+            "src/AppSettings/CMakeLists.txt",
+            (
+                ("              VehicleProfileSettings.qml\n", ""),
+                (
+                    "              PluginCatalogBrowse.qml\n"
+                    "              PluginCatalogInstalledExtras.qml\n"
+                    "              PluginCatalogTabs.qml\n"
+                    "              PluginCatalogUpdateButton.qml\n",
+                    "",
+                ),
+            ),
+        ),
+        # The catalog UI is new files this spec never takes (PLUGIN_CATALOG does), so the
+        # places the page instantiates or binds them go too, or the page would name types the
+        # branch does not have.
+        (
+            "src/AppSettings/PluginSettings.qml",
+            (
+                ("    PluginCatalogTabs {\n        id: catalogTabs\n    }\n\n", ""),
+                ("        visible:            !catalogTabs.browsing\n", ""),
+                ('            enabled:            PluginCatalogManager.installingId === ""\n', ""),
+                ('                    enabled:    PluginCatalogManager.installingId === ""\n', ""),
+                (
+                    "                PluginCatalogUpdateButton {\n"
+                    "                    plugin:     modelData\n"
+                    "                    installer:  catalogTabs\n"
+                    "                }\n\n",
+                    "",
+                ),
+                (
+                    "\n                    PluginCatalogInstalledExtras {\n"
+                    "                        plugin:     modelData\n"
+                    "                        installer:  catalogTabs\n"
+                    "                    }\n",
+                    "",
+                ),
+                (
+                    "\n    PluginCatalogBrowse {\n"
+                    "        visible:    catalogTabs.browsing\n"
+                    "        installer:  catalogTabs\n"
+                    "    }\n",
+                    "",
+                ),
+            ),
+        ),
         (
             "src/AppSettings/pages/SettingsPages.json",
             (
@@ -678,8 +723,9 @@ MOCKLINK_BYTESSENT = PRSpec(
 #
 # Four of its files are also in PLUGIN_SDK, which is a sibling, not stacked with this spec:
 # `src/CMakeLists.txt`, `test/CMakeLists.txt`, `src/AppSettings/CMakeLists.txt` and
-# `SettingsPages.json`. A wholesale take pulls in PLUGIN_SDK's lines too, so doc_rewrites strip
-# them, and PLUGIN_SDK strips this spec's lines in turn.
+# `SettingsPages.json`. A wholesale take pulls in PLUGIN_SDK's lines too (the Plugins page and
+# the plugin catalog's QML files), so doc_rewrites strip them, and PLUGIN_SDK strips this spec's
+# lines in turn.
 VEHICLE_PROFILES = PRSpec(
     branch="upstream-pr-vehicle-profiles",
     source_ref="upstream/master",
@@ -722,7 +768,19 @@ VEHICLE_PROFILES = PRSpec(
             ),
         ),
         ("test/CMakeLists.txt", (("add_subdirectory(PluginSystem)\n", ""),)),
-        ("src/AppSettings/CMakeLists.txt", (("              PluginSettings.qml\n", ""),)),
+        (
+            "src/AppSettings/CMakeLists.txt",
+            (
+                ("              PluginSettings.qml\n", ""),
+                (
+                    "              PluginCatalogBrowse.qml\n"
+                    "              PluginCatalogInstalledExtras.qml\n"
+                    "              PluginCatalogTabs.qml\n"
+                    "              PluginCatalogUpdateButton.qml\n",
+                    "",
+                ),
+            ),
+        ),
         (
             "src/AppSettings/pages/SettingsPages.json",
             (
@@ -771,6 +829,20 @@ PLUGIN_CATALOG = PRSpec(
         "src/Settings/PluginSettings.h",
         "src/Settings/PluginSettings.cc",
         "src/Settings/Plugin.SettingsGroup.json",
+        # The catalog UI. PLUGIN_SDK strips the three lines in PluginSettings.qml that
+        # instantiate it and the three CMake lines that register it; taking both files whole
+        # restores them.
+        "src/AppSettings/PluginCatalogBrowse.qml",
+        "src/AppSettings/PluginCatalogInstalledExtras.qml",
+        "src/AppSettings/PluginCatalogTabs.qml",
+        "src/AppSettings/PluginCatalogUpdateButton.qml",
+        "src/AppSettings/PluginSettings.qml",
+        "src/AppSettings/CMakeLists.txt",
+    ),
+    # CMakeLists.txt is taken whole from mainline, where VEHICLE_PROFILES' page is also
+    # registered; that page is not on this branch.
+    doc_rewrites=(
+        ("src/AppSettings/CMakeLists.txt", (("              VehicleProfileSettings.qml\n", ""),)),
     ),
     # The QML singleton and the setting it reads: whatever binds to either is catalog code
     # and must ship here.

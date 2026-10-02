@@ -140,6 +140,10 @@ qt_add_qml_module(
               OfflineMapEditor.qml
               OfflineMapInfo.qml
               OfflineMapSettings.qml
+              PluginCatalogBrowse.qml
+              PluginCatalogInstalledExtras.qml
+              PluginCatalogTabs.qml
+              PluginCatalogUpdateButton.qml
               PluginSettings.qml
               PX4LogControl.qml
               PX4LogFileManager.qml

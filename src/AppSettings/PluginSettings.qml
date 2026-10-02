@@ -50,9 +50,14 @@ SettingsPage {
         buttons:    MessageDialog.Ok
     }
 
+    PluginCatalogTabs {
+        id: catalogTabs
+    }
+
     SettingsGroupLayout {
         Layout.fillWidth:   true
         heading:            qsTr("Plugins")
+        visible:            !catalogTabs.browsing
 
         QGCLabel {
             Layout.fillWidth:   true
@@ -76,6 +81,7 @@ SettingsPage {
             Layout.alignment:   Qt.AlignRight
             text:               qsTr("Install plugin…")
             visible:            _supportsRuntimeReload
+            enabled:            PluginCatalogManager.installingId === ""
             onClicked:          installDialog.openForLoad()
         }
 
@@ -143,12 +149,22 @@ SettingsPage {
 
                         HoverHandler { id: markerHover }
                     }
+
+                    PluginCatalogInstalledExtras {
+                        plugin:     modelData
+                        installer:  catalogTabs
+                    }
                 }
 
                 QGCButton {
                     text:       qsTr("Enable")
                     visible:    modelData.state === "NeedsApproval"
                     onClicked:  QGroundControl.pluginManager.approvePlugin(modelData.id)
+                }
+
+                PluginCatalogUpdateButton {
+                    plugin:     modelData
+                    installer:  catalogTabs
                 }
 
                 FactCheckBoxSlider {
@@ -169,6 +185,7 @@ SettingsPage {
                 QGCButton {
                     text:       qsTr("Remove")
                     visible:    modelData.removable && _supportsRuntimeReload
+                    enabled:    PluginCatalogManager.installingId === ""
                     onClicked:  QGroundControl.showMessageDialog(
                                     root,
                                     qsTr("Remove Plugin"),
@@ -192,5 +209,10 @@ SettingsPage {
             wrapMode:           Text.WordWrap
             font.italic:        true
         }
+    }
+
+    PluginCatalogBrowse {
+        visible:    catalogTabs.browsing
+        installer:  catalogTabs
     }
 }
