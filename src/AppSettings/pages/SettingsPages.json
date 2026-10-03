@@ -93,7 +93,11 @@
         {
             "name": "Plugins",
             "qml": "PluginSettings.qml",
-            "icon": "qrc:/InstrumentValueIcons/plugins.svg"
+            "icon": "qrc:/InstrumentValueIcons/plugins.svg",
+            "sections": [
+                { "name": "Installed", "keywords": ["enable", "disable", "remove", "install"] },
+                { "name": "Browse", "keywords": ["catalog", "install", "update", "download"] }
+            ]
         },
         {
             "comment": "Deprecated: kept at the bottom pending removal in favor of the GeoMap engine",

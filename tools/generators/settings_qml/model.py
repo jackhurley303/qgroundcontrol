@@ -260,8 +260,10 @@ _ALLOWED_PAGE_ENTRY_KEYS = frozenset(
         "icon",
         "visible",
         "pageDefinition",
+        "sections",
     }
 )
+_ALLOWED_SECTION_KEYS = frozenset({"comment", "name", "keywords"})
 _OVERLAY_POSITION_KEYS = frozenset({"insertAfter", "insertBefore"})
 _ALLOWED_OVERLAY_ENTRY_KEYS = _ALLOWED_PAGE_ENTRY_KEYS | _OVERLAY_POSITION_KEYS | {"remove"}
 
@@ -286,7 +288,26 @@ def _load_pages_file(pages_json_path: Path, allowed_entry_keys: frozenset[str]) 
                 raise ValueError(
                     f"{pages_json_path}: {key!r} must be a bare file name, got: {value!r}"
                 )
+        if "sections" in entry:
+            _validate_sections(entry, pages_json_path)
     return entries
+
+
+def _validate_sections(entry: dict, pages_json_path: Path) -> None:
+    """'sections' lists the sidebar sub-items of a hand-written page; a generated page
+    takes them from its pageDefinition groups instead."""
+    if "pageDefinition" in entry:
+        raise ValueError(
+            f"{pages_json_path}: page {entry.get('name')!r} has both 'sections' and "
+            f"'pageDefinition'; a generated page takes its sections from its groups"
+        )
+    for section in require_list(entry["sections"], "'sections'", pages_json_path):
+        reject_unknown_keys(section, _ALLOWED_SECTION_KEYS, "section", pages_json_path)
+        if not section.get("name"):
+            raise ValueError(f"{pages_json_path}: every section needs a non-empty 'name'")
+        require_qml_safe_string(section["name"], "section name", pages_json_path)
+        for kw in require_list(section.get("keywords", []), "section 'keywords'", pages_json_path):
+            require_qml_safe_string(kw, "section keyword", pages_json_path)
 
 
 def _entry_index(entries: list[dict], name: str) -> int:

@@ -50,14 +50,14 @@ SettingsPage {
         buttons:    MessageDialog.Ok
     }
 
-    PluginCatalogTabs {
-        id: catalogTabs
+    PluginCatalogInstaller {
+        id: catalogInstaller
     }
 
     SettingsGroupLayout {
         Layout.fillWidth:   true
-        heading:            qsTr("Plugins")
-        visible:            !catalogTabs.browsing
+        heading:            qsTr("Installed")
+        visible:            root.sectionFilter !== 1
 
         QGCLabel {
             Layout.fillWidth:   true
@@ -152,7 +152,7 @@ SettingsPage {
 
                     PluginCatalogInstalledExtras {
                         plugin:     modelData
-                        installer:  catalogTabs
+                        installer:  catalogInstaller
                     }
                 }
 
@@ -164,7 +164,7 @@ SettingsPage {
 
                 PluginCatalogUpdateButton {
                     plugin:     modelData
-                    installer:  catalogTabs
+                    installer:  catalogInstaller
                 }
 
                 FactCheckBoxSlider {
@@ -212,7 +212,7 @@ SettingsPage {
     }
 
     PluginCatalogBrowse {
-        visible:    catalogTabs.browsing
-        installer:  catalogTabs
+        visible:    root.sectionFilter !== 0
+        installer:  catalogInstaller
     }
 }

@@ -355,6 +355,26 @@ def generate_pages_model_qml(pages_json_path: Path, custom_pages_dir: Path | Non
                             "visible": visible,
                         }
                     )
+        else:
+            # A hand-written page names its sections directly and reads sectionFilter itself
+            for sec_idx, section in enumerate(entry.get("sections", [])):
+                section_name = section["name"]
+                keywords = section.get("keywords", [])
+                terms = dict.fromkeys(
+                    [name.lower(), section_name.lower(), *(kw.lower() for kw in keywords)]
+                )
+                search_terms = [
+                    json.dumps(" ".join(terms)),
+                    f"{_qml_translate('SettingsPages.json', section_name)}.toLowerCase()",
+                ]
+                sections.append(
+                    {
+                        "index": sec_idx,
+                        "name": _qml_translate("SettingsPages.json", section_name),
+                        "search_terms": f"[{', '.join(search_terms)}]",
+                        "visible": "true",
+                    }
+                )
 
         entries.append(
             {

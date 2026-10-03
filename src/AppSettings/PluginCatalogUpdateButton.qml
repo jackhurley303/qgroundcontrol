@@ -14,7 +14,7 @@ import QGroundControl.Controls
 
 /// The Update button of one Installed row, shown while the catalog offers a newer version that
 /// is not staged yet. `plugin` is the row's QGCPluginManager.knownPlugins entry; `installer`,
-/// the PluginCatalogTabs, finds the catalog entry and owns the consent dialog.
+/// the PluginCatalogInstaller, finds the catalog entry and owns the consent dialog.
 QGCButton {
     id: root
 

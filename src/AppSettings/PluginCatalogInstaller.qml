@@ -14,16 +14,14 @@ import QtQuick.Layouts
 import QGroundControl
 import QGroundControl.Controls
 
-/// The Installed / Browse tab bar of the Plugins page, plus what both tabs share: the catalog
-/// fetch error, the progress and result of the running install, and the consent dialog every
-/// install and update goes through. Starts the fetch when the page opens.
+/// What the Installed and Browse sections of the Plugins page share: the catalog fetch error,
+/// the progress and result of the running install, and the consent dialog every install and
+/// update goes through. Starts the fetch when the page opens.
 ColumnLayout {
     id: root
 
     Layout.fillWidth:   true
     spacing:            ScreenTools.defaultFontPixelHeight / 2
-
-    readonly property bool browsing: tabBar.currentIndex === 1
 
     // The last install's outcome, kept so the banner still says it after the entries refresh.
     property string _resultText:    ""
@@ -98,22 +96,6 @@ ColumnLayout {
             } else {
                 root._resultText = qsTr("%1 is installed.").arg(name)
             }
-        }
-    }
-
-    QGCTabBar {
-        id:                 tabBar
-        objectName:         "pluginCatalogTabBar"
-        Layout.fillWidth:   true
-
-        QGCTabButton {
-            objectName: "pluginCatalogInstalledTab"
-            text:       qsTr("Installed")
-        }
-
-        QGCTabButton {
-            objectName: "pluginCatalogBrowseTab"
-            text:       qsTr("Browse")
         }
     }
 

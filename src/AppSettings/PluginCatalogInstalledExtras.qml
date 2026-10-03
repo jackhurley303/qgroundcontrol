@@ -15,7 +15,7 @@ import QGroundControl.Controls
 
 /// What the catalog adds under one row of the Installed tab: an "Update available" badge, or the
 /// restart line once the update is staged. `plugin` is the row's QGCPluginManager.knownPlugins
-/// entry; `installer`, the PluginCatalogTabs, finds the catalog entry by its id. The Update
+/// entry; `installer`, the PluginCatalogInstaller, finds the catalog entry by its id. The Update
 /// button is PluginCatalogUpdateButton, which sits in line with the row's other controls.
 ColumnLayout {
     id: root

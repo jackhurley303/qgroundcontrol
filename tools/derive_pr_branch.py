@@ -162,6 +162,17 @@ class PRSpec:
             )
 
 
+# The Plugins page's sidebar sections in SettingsPages.json, from its icon line to the end of
+# the entry. PLUGIN_CATALOG owns them; PLUGIN_SDK and VEHICLE_PROFILES strip them.
+_PLUGINS_PAGE_SECTIONS = (
+    '            "icon": "qrc:/InstrumentValueIcons/plugins.svg",\n'
+    '            "sections": [\n'
+    '                { "name": "Installed", "keywords": ["enable", "disable", "remove", "install"] },\n'
+    '                { "name": "Browse", "keywords": ["catalog", "install", "update", "download"] }\n'
+    "            ]\n"
+)
+
+
 PLUGIN_SDK = PRSpec(
     branch="upstream-pr-plugin-sdk",
     source_ref="upstream-pr-replay-fidelity",
@@ -573,7 +584,7 @@ PLUGIN_SDK = PRSpec(
                 (
                     "              PluginCatalogBrowse.qml\n"
                     "              PluginCatalogInstalledExtras.qml\n"
-                    "              PluginCatalogTabs.qml\n"
+                    "              PluginCatalogInstaller.qml\n"
                     "              PluginCatalogUpdateButton.qml\n",
                     "",
                 ),
@@ -585,33 +596,35 @@ PLUGIN_SDK = PRSpec(
         (
             "src/AppSettings/PluginSettings.qml",
             (
-                ("    PluginCatalogTabs {\n        id: catalogTabs\n    }\n\n", ""),
-                ("        visible:            !catalogTabs.browsing\n", ""),
+                ("    PluginCatalogInstaller {\n        id: catalogInstaller\n    }\n\n", ""),
+                ("        visible:            root.sectionFilter !== 1\n", ""),
                 ('            enabled:            PluginCatalogManager.installingId === ""\n', ""),
                 ('                    enabled:    PluginCatalogManager.installingId === ""\n', ""),
                 (
                     "                PluginCatalogUpdateButton {\n"
                     "                    plugin:     modelData\n"
-                    "                    installer:  catalogTabs\n"
+                    "                    installer:  catalogInstaller\n"
                     "                }\n\n",
                     "",
                 ),
                 (
                     "\n                    PluginCatalogInstalledExtras {\n"
                     "                        plugin:     modelData\n"
-                    "                        installer:  catalogTabs\n"
+                    "                        installer:  catalogInstaller\n"
                     "                    }\n",
                     "",
                 ),
                 (
                     "\n    PluginCatalogBrowse {\n"
-                    "        visible:    catalogTabs.browsing\n"
-                    "        installer:  catalogTabs\n"
+                    "        visible:    root.sectionFilter !== 0\n"
+                    "        installer:  catalogInstaller\n"
                     "    }\n",
                     "",
                 ),
             ),
         ),
+        # The Installed / Browse sections exist for the catalog's Browse view, and this
+        # branch's settings generator has no 'sections' key.
         (
             "src/AppSettings/pages/SettingsPages.json",
             (
@@ -622,6 +635,10 @@ PLUGIN_SDK = PRSpec(
                     '            "icon": "qrc:/InstrumentValueIcons/drone.svg"\n'
                     "        },\n",
                     "",
+                ),
+                (
+                    _PLUGINS_PAGE_SECTIONS,
+                    '            "icon": "qrc:/InstrumentValueIcons/plugins.svg"\n',
                 ),
             ),
         ),
@@ -775,7 +792,7 @@ VEHICLE_PROFILES = PRSpec(
                 (
                     "              PluginCatalogBrowse.qml\n"
                     "              PluginCatalogInstalledExtras.qml\n"
-                    "              PluginCatalogTabs.qml\n"
+                    "              PluginCatalogInstaller.qml\n"
                     "              PluginCatalogUpdateButton.qml\n",
                     "",
                 ),
@@ -788,8 +805,8 @@ VEHICLE_PROFILES = PRSpec(
                     "        {\n"
                     '            "name": "Plugins",\n'
                     '            "qml": "PluginSettings.qml",\n'
-                    '            "icon": "qrc:/InstrumentValueIcons/plugins.svg"\n'
-                    "        },\n",
+                    + _PLUGINS_PAGE_SECTIONS
+                    + "        },\n",
                     "",
                 ),
             ),
@@ -834,15 +851,35 @@ PLUGIN_CATALOG = PRSpec(
         # restores them.
         "src/AppSettings/PluginCatalogBrowse.qml",
         "src/AppSettings/PluginCatalogInstalledExtras.qml",
-        "src/AppSettings/PluginCatalogTabs.qml",
+        "src/AppSettings/PluginCatalogInstaller.qml",
         "src/AppSettings/PluginCatalogUpdateButton.qml",
         "src/AppSettings/PluginSettings.qml",
         "src/AppSettings/CMakeLists.txt",
+        # The Plugins page's Installed / Browse sidebar sections: the generator's 'sections'
+        # key for a hand-written page, and the entry that uses it. PLUGIN_SDK strips them.
+        "src/AppSettings/pages/SettingsPages.json",
+        "tools/generators/settings_qml/emit.py",
+        "tools/generators/settings_qml/model.py",
+        "tools/generators/settings_qml/README.md",
+        "tools/tests/test_settings_qml_generator.py",
     ),
-    # CMakeLists.txt is taken whole from mainline, where VEHICLE_PROFILES' page is also
-    # registered; that page is not on this branch.
+    # These are taken whole from mainline, where VEHICLE_PROFILES' page is also registered;
+    # that page is not on this branch.
     doc_rewrites=(
         ("src/AppSettings/CMakeLists.txt", (("              VehicleProfileSettings.qml\n", ""),)),
+        (
+            "src/AppSettings/pages/SettingsPages.json",
+            (
+                (
+                    "        {\n"
+                    '            "name": "Vehicles",\n'
+                    '            "qml": "VehicleProfileSettings.qml",\n'
+                    '            "icon": "qrc:/InstrumentValueIcons/drone.svg"\n'
+                    "        },\n",
+                    "",
+                ),
+            ),
+        ),
     ),
     # The QML singleton and the setting it reads: whatever binds to either is catalog code
     # and must ship here.

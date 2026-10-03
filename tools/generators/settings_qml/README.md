@@ -57,6 +57,7 @@ Defines the ordered list of pages in the Settings sidebar.
 | `pageDefinition` | string | `*.SettingsUI.json` file to generate from |
 | `url` | string | `qrc:` URL of a hand-written QML page (bypasses generation) |
 | `visible` | string | QML expression; entry hidden when falsy |
+| `sections` | array | Sidebar sub-items of a hand-written page: `{ "name", "keywords" }` objects. The page reads `sectionFilter` (the clicked section's index, or `-1`) to choose what to show |
 | `divider` | bool | Insert a visual divider instead of a page entry |
 
 A page entry must have exactly one of `pageDefinition` (generated) or `url` (hand-written).

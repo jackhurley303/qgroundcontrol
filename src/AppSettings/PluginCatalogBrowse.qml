@@ -14,15 +14,15 @@ import QGroundControl
 import QGroundControl.Controls
 import QGroundControl.FactControls
 
-/// The Browse tab of the Plugins page: the catalog URL, one card per catalog plugin, and a
+/// The Browse section of the Plugins page: the catalog URL, one card per catalog plugin, and a
 /// detail view with the screenshots and release notes. Installing goes through `installer`,
-/// the PluginCatalogTabs that owns the consent dialog.
+/// the PluginCatalogInstaller that owns the consent dialog.
 SettingsGroupLayout {
     id: root
 
     Layout.fillWidth:       true
     // Bounds the whole page: wrapped labels report their one-line width as implicit width,
-    // and with the Plugins group hidden these labels would otherwise set the page width.
+    // and with the Installed group hidden these labels would otherwise set the page width.
     Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 60
     heading:                qsTr("Browse plugins")
 

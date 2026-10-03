@@ -1167,6 +1167,55 @@ class TestGeneratePagesModelQml:
         qml = generate_pages_model_qml(pages_path)
         assert 'nameKey: "P"' in qml
 
+    def test_hand_written_page_sections(self, tmp_path: Path):
+        pages_path = tmp_path / "SettingsPages.json"
+        pages_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "pages": [
+                        {
+                            "name": "P",
+                            "qml": "P.qml",
+                            "icon": "qrc:/p.svg",
+                            "sections": [
+                                {"name": "First"},
+                                {"name": "Second", "keywords": ["Extra"]},
+                            ],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        qml = generate_pages_model_qml(pages_path)
+        assert 'name: qsTranslate("SettingsPages.json", "First")' in qml
+        assert "index: 1," in qml
+        assert 'searchTerms: ["p second extra"' in qml
+
+    def test_sections_with_page_definition_rejected(self, pages_setup: Path):
+        data = json.loads(pages_setup.read_text(encoding="utf-8"))
+        data["pages"][0]["sections"] = [{"name": "X"}]
+        pages_setup.write_text(json.dumps(data), encoding="utf-8")
+        with pytest.raises(ValueError, match="both 'sections' and 'pageDefinition'"):
+            generate_pages_model_qml(pages_setup)
+
+    def test_section_without_name_rejected(self, tmp_path: Path):
+        pages_path = tmp_path / "SettingsPages.json"
+        pages_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "pages": [
+                        {"name": "P", "qml": "P.qml", "icon": "qrc:/p.svg", "sections": [{}]}
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="non-empty 'name'"):
+            generate_pages_model_qml(pages_path)
+
     def test_non_array_pages_rejected(self, tmp_path: Path):
         # pages: "oops" must not be iterated per-character
         pages_path = tmp_path / "SettingsPages.json"

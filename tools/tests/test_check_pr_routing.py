@@ -433,9 +433,10 @@ class TestCheckWorktree:
             f.parent.mkdir(parents=True, exist_ok=True)
             f.write_text("qdrive qdrive qdrive\n")
 
-        assert check_worktree(
-            ["plugins/qdrive/src/Thing.cc", "tools/derive_pr_branch.py"], tmp_path
-        ) is True
+        assert (
+            check_worktree(["plugins/qdrive/src/Thing.cc", "tools/derive_pr_branch.py"], tmp_path)
+            is True
+        )
 
     def test_a_missing_file_is_not_a_failure(self, tmp_path):
         assert check_worktree(["src/DeletedSinceEdit.h"], tmp_path) is True
@@ -470,8 +471,13 @@ class TestSharedPaths:
     def test_real_specs_share_exactly_the_four_files(self):
         shared = unstacked_shared_paths(SPECS)
         assert sorted(shared) == list(self.SHARED_FILES)
-        for owners in shared.values():
-            assert owners == ("plugin-sdk", "vehicle-profiles")
+        # plugin-catalog stacks on plugin-sdk, so it is a sibling of vehicle-profiles too
+        # for the two AppSettings files it takes whole.
+        for path, owners in shared.items():
+            expected = ("plugin-sdk", "vehicle-profiles")
+            if path.startswith("src/AppSettings/"):
+                expected = ("plugin-catalog", *expected)
+            assert owners == expected, path
 
     def test_real_specs_pass_with_no_recorded_decision(self):
         """Both specs strip the other's lines, so nothing needs deferring."""
