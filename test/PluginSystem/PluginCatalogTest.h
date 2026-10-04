@@ -33,4 +33,8 @@ private slots:
     void _find_test();
     void _nonAsciiDigitSha256Refused_test();
     void _hugeNumbersRefused_test();
+    void _verifiedParsed_test();
+    void _malformedVerifiedReadsAsNotVerified_test_data();
+    void _malformedVerifiedReadsAsNotVerified_test();
+    void _verifiedOnOtherPlatformDoesNotCount_test();
 };

@@ -44,6 +44,13 @@ private slots:
     void _installRefusedBeforeDownload_test();
     void _overlappingInstallRefused_test();
 
+    void _sourceAndVerifiedLabels_test_data();
+    void _sourceAndVerifiedLabels_test();
+    void _verifiedOnOtherPlatformNotShown_test();
+    void _installedVerifiedNeedsRecordedHash_test();
+    void _manualInstallNotVerified_test();
+    void _stagedUpdateKeepsInstalledRecord_test();
+
 private:
     // A .qgcplugin zip whose manifest declares id, version and tier.
     static QByteArray _packageBytes(const QString& id, const QString& version,

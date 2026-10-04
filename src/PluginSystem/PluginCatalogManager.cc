@@ -17,6 +17,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QHash>
+#include <QtCore/QSettings>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QUrl>
@@ -62,6 +63,34 @@ QHash<QString, QVariantMap> knownPluginsById(const QGCPluginManager* pluginManag
         }
     }
     return known;
+}
+
+// The SHA-256 of the catalog package each installed or staged copy came from, keyed by plugin id
+// and the copy's consent digest. The digest names the extracted content, so a staged update
+// cannot replace the running copy's record, and a manual install of other bytes finds none.
+QString packageHashKey(const QString& pluginId, const QString& digest)
+{
+    return QStringLiteral("Plugins/PackageHashes/%1/%2").arg(pluginId, digest);
+}
+
+QString recordedPackageHash(const QString& pluginId, const QString& digest)
+{
+    if (digest.isEmpty()) {
+        return QString();
+    }
+    return QSettings().value(packageHashKey(pluginId, digest)).toString();
+}
+
+void recordPackageHash(const QString& pluginId, const QString& digest, const QString& sha256)
+{
+    if (!digest.isEmpty()) {
+        QSettings().setValue(packageHashKey(pluginId, digest), sha256);
+    }
+}
+
+PluginSettings* pluginSettings()
+{
+    return SettingsManager::instance()->pluginSettings();
 }
 
 }  // namespace
@@ -128,7 +157,7 @@ bool PluginCatalogManager::_isAllowedSource(const QString& location, bool allowL
 
 QString PluginCatalogManager::_catalogUrl() const
 {
-    return SettingsManager::instance()->pluginSettings()->catalogUrl()->rawValue().toString().trimmed();
+    return pluginSettings()->catalogUrl()->rawValue().toString().trimmed();
 }
 
 void PluginCatalogManager::_setFetchState(FetchState state, const QString& error)
@@ -302,9 +331,14 @@ void PluginCatalogManager::_rebuildEntries()
         item[QStringLiteral("repository")] = entry.repository;
         item[QStringLiteral("icon")] = entry.icon;
         item[QStringLiteral("screenshots")] = entry.screenshots;
+        item[QStringLiteral("openSource")] = !entry.repository.isEmpty();
 
         const std::optional<PluginCatalogOffer> offer = entry.newestCompatible(host, platformKey);
         item[QStringLiteral("compatible")] = offer.has_value();
+        const bool offerVerified = offer && offer->package.verified.has_value();
+        item[QStringLiteral("verified")] = offerVerified;
+        item[QStringLiteral("verifiedBy")] = offerVerified ? offer->package.verified->reviewer : QString();
+        item[QStringLiteral("verifiedDate")] = offerVerified ? offer->package.verified->date : QString();
         if (offer) {
             item[QStringLiteral("version")] = offer->version.manifest.version.toString();
             item[QStringLiteral("tier")] = PluginManifest::tierToString(offer->version.manifest.tier);
@@ -326,6 +360,7 @@ void PluginCatalogManager::_rebuildEntries()
         item[QStringLiteral("installedVersion")] = installedVersion;
         item[QStringLiteral("updateStaged")] = updateStaged;
         item[QStringLiteral("updateAvailable")] = updateAvailable;
+        item[QStringLiteral("installedVerified")] = isInstalled && _isInstalledVerified(entry, installedVersion);
         entries.append(item);
 
         if (updateAvailable) {
@@ -341,6 +376,23 @@ void PluginCatalogManager::_rebuildEntries()
     _entries = entries;
     _availableUpdates = updates;
     emit entriesChanged();
+}
+
+bool PluginCatalogManager::_isInstalledVerified(const PluginCatalogEntry& entry, const QString& installedVersion) const
+{
+    const QVersionNumber version = QVersionNumber::fromString(installedVersion);
+    for (const PluginCatalogVersion& candidate : entry.versions) {
+        if (candidate.manifest.version != version) {
+            continue;
+        }
+        const PluginCatalogPackage* package = candidate.packageFor(QGCPluginLoader::platformKey());
+        if (!package || !package->verified) {
+            return false;
+        }
+        // The index marks that package verified; this copy counts only if it came from it.
+        return recordedPackageHash(entry.id, pluginSettings()->approvedPluginDigest(entry.id)) == package->sha256;
+    }
+    return false;
 }
 
 QString PluginCatalogManager::install(const QString& pluginId)
@@ -502,8 +554,16 @@ QString PluginCatalogManager::_installDownloaded(const QString& zipPath)
     if (!_pluginManager) {
         return tr("Plugins are not available");
     }
-    return _installIsUpdate ? _pluginManager->stagePluginUpdate(expected.id, zipPath)
-                            : _pluginManager->installPlugin(zipPath);
+    const QString error = _installIsUpdate ? _pluginManager->stagePluginUpdate(expected.id, zipPath)
+                                           : _pluginManager->installPlugin(zipPath);
+    if (error.isEmpty()) {
+        const QString digest = _installIsUpdate ? pluginSettings()->stagedPluginDigest(expected.id)
+                                                : pluginSettings()->approvedPluginDigest(expected.id);
+        recordPackageHash(expected.id, digest, package.sha256);
+        // installPlugin() rebuilt the entries before the record existed.
+        _rebuildEntries();
+    }
+    return error;
 }
 
 void PluginCatalogManager::_finishInstall(bool success, const QString& errorString)

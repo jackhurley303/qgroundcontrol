@@ -48,6 +48,42 @@ QVariantMap knownPlugin(const QGCPluginManager& pluginManager, const QString& id
     return QVariantMap();
 }
 
+// Adds a maintainer's mark to the package of `version` under `key`.
+QJsonObject markVerified(QJsonObject version, const QString& key)
+{
+    QJsonObject mark;
+    mark[QStringLiteral("reviewer")] = QStringLiteral("maintainer");
+    mark[QStringLiteral("date")] = QStringLiteral("2026-10-03");
+    mark[QStringLiteral("method")] = QStringLiteral("maintainer-build");
+
+    QJsonObject packages = version.value(QStringLiteral("packages")).toObject();
+    QJsonObject package = packages.value(key).toObject();
+    package[QStringLiteral("verified")] = mark;
+    packages[key] = package;
+    version[QStringLiteral("packages")] = packages;
+    return version;
+}
+
+QString packageHashKey(const QString& id, const QString& digest)
+{
+    return QStringLiteral("Plugins/PackageHashes/%1/%2").arg(id, digest);
+}
+
+QString approvedDigest(const QString& id)
+{
+    return SettingsManager::instance()->pluginSettings()->approvedPluginDigest(id);
+}
+
+QVariantMap entryFor(const PluginCatalogManager& catalog, const QString& id)
+{
+    for (const QVariant& value : catalog.entries()) {
+        if (value.toMap().value(QStringLiteral("id")).toString() == id) {
+            return value.toMap();
+        }
+    }
+    return QVariantMap();
+}
+
 }  // namespace
 
 void PluginCatalogManagerTest::init()
@@ -65,6 +101,7 @@ void PluginCatalogManagerTest::init()
     QSettings settings;
     settings.remove(QStringLiteral("Plugins/ApprovedDigests"));
     settings.remove(QStringLiteral("Plugins/StagedDigests"));
+    settings.remove(QStringLiteral("Plugins/PackageHashes"));
 }
 
 void PluginCatalogManagerTest::cleanup()
@@ -192,6 +229,10 @@ void PluginCatalogManagerTest::_verifyRefused(const QSignalSpy& spy, const QStri
     QVERIFY2(!QFileInfo::exists(stagingDir), qPrintable(stagingDir));
     QVERIFY(!QFileInfo::exists(QDir(PluginInstaller::userPluginsDir()).filePath(id)));
     QCOMPARE(_userPluginsEntries(), pluginsBefore);
+
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("Plugins/PackageHashes"));
+    QVERIFY(settings.childGroups().isEmpty());
 }
 
 void PluginCatalogManagerTest::_emptyUrlTurnsCatalogOff_test()
@@ -813,6 +854,173 @@ void PluginCatalogManagerTest::_invalidPackageRefused_test()
 
     _verifyRefused(spy, id, QStringLiteral("The package is invalid: archive does not contain qgcplugin.json"),
                    stagingDir, pluginsBefore);
+}
+
+void PluginCatalogManagerTest::_sourceAndVerifiedLabels_test_data()
+{
+    QTest::addColumn<bool>("openSource");
+    QTest::addColumn<bool>("verified");
+
+    QTest::newRow("open, verified") << true << true;
+    QTest::newRow("open, not verified") << true << false;
+    QTest::newRow("closed, verified") << false << true;
+    QTest::newRow("closed, not verified") << false << false;
+}
+
+void PluginCatalogManagerTest::_sourceAndVerifiedLabels_test()
+{
+    QFETCH(bool, openSource);
+    QFETCH(bool, verified);
+
+    const QString id = QStringLiteral("org.test.catalog.labels");
+    const QByteArray zip = _packageBytes(id, QStringLiteral("1.0.0"));
+    const QString zipPath = _writeFile(QStringLiteral("labels.qgcplugin"), zip);
+    const QString key = QGCPluginLoader::platformKey();
+    QJsonObject version = _versionJson(QStringLiteral("1.0.0"), key, zipPath, zip);
+    if (verified) {
+        version = markVerified(version, key);
+    }
+    QJsonObject plugin = _pluginJson(id, {version});
+    if (!openSource) {
+        plugin.remove(QStringLiteral("repository"));
+    }
+    (void) _setCatalog({plugin});
+
+    QGCPluginManager pluginManager;
+    PluginCatalogManager catalog(&pluginManager);
+    QVERIFY(_fetch(catalog));
+
+    const QVariantMap entry = entryFor(catalog, id);
+    QCOMPARE(entry.value(QStringLiteral("openSource")).toBool(), openSource);
+    QCOMPARE(entry.value(QStringLiteral("verified")).toBool(), verified);
+    QCOMPARE(entry.value(QStringLiteral("verifiedBy")).toString(), verified ? QStringLiteral("maintainer") : QString());
+    QCOMPARE(entry.value(QStringLiteral("verifiedDate")).toString(),
+             verified ? QStringLiteral("2026-10-03") : QString());
+    QCOMPARE(entry.value(QStringLiteral("installedVerified")).toBool(), false);
+}
+
+void PluginCatalogManagerTest::_verifiedOnOtherPlatformNotShown_test()
+{
+    const QString id = QStringLiteral("org.test.catalog.otherplatform");
+    const QByteArray zip = _packageBytes(id, QStringLiteral("1.0.0"));
+    const QString zipPath = _writeFile(QStringLiteral("other.qgcplugin"), zip);
+    const QString ownKey = QGCPluginLoader::platformKey();
+    const QString otherKey =
+        ownKey == QStringLiteral("macos-universal") ? QStringLiteral("windows-x64") : QStringLiteral("macos-universal");
+
+    // This platform's package is unmarked; another platform's package is marked
+    QJsonObject version = _versionJson(QStringLiteral("1.0.0"), ownKey, zipPath, zip);
+    QJsonObject packages = version.value(QStringLiteral("packages")).toObject();
+    packages[otherKey] = packages.value(ownKey);
+    version[QStringLiteral("packages")] = packages;
+    (void) _setCatalog({_pluginJson(id, {markVerified(version, otherKey)})});
+
+    QGCPluginManager pluginManager;
+    PluginCatalogManager catalog(&pluginManager);
+    QVERIFY(_fetch(catalog));
+
+    const QVariantMap entry = entryFor(catalog, id);
+    QCOMPARE(entry.value(QStringLiteral("compatible")).toBool(), true);
+    QCOMPARE(entry.value(QStringLiteral("verified")).toBool(), false);
+}
+
+void PluginCatalogManagerTest::_installedVerifiedNeedsRecordedHash_test()
+{
+    const QString id = QStringLiteral("org.test.catalog.recorded");
+    const QByteArray zip = _packageBytes(id, QStringLiteral("1.0.0"));
+    const QString zipUrl = QUrl::fromLocalFile(_writeFile(QStringLiteral("recorded.qgcplugin"), zip)).toString();
+    const QString key = QGCPluginLoader::platformKey();
+    (void) _setCatalog({_pluginJson(id, {markVerified(_versionJson(QStringLiteral("1.0.0"), key, zipUrl, zip), key)})});
+
+    QGCPluginManager pluginManager;
+    PluginCatalogManager catalog(&pluginManager);
+    QVERIFY(_fetch(catalog));
+    QCOMPARE(entryFor(catalog, id).value(QStringLiteral("installedVerified")).toBool(), false);
+
+    QSignalSpy spy(&catalog, &PluginCatalogManager::installFinished);
+    QVERIFY(!_startInstall(catalog, id).isEmpty());
+    QVERIFY_SIGNAL_WAIT(spy, TestTimeout::mediumMs());
+    QCOMPARE(spy.first().at(1).toBool(), true);
+
+    // The install recorded the package it came from, so the installed copy reads as verified
+    QVERIFY(!approvedDigest(id).isEmpty());
+    QCOMPARE(QSettings().value(packageHashKey(id, approvedDigest(id))).toString(), _sha256Hex(zip));
+    QCOMPARE(entryFor(catalog, id).value(QStringLiteral("installedVerified")).toBool(), true);
+
+    // A record that names other bytes does not match the index's package
+    QSettings().setValue(packageHashKey(id, approvedDigest(id)), QString(64, QLatin1Char('0')));
+    catalog._rebuildEntries();
+    QCOMPARE(entryFor(catalog, id).value(QStringLiteral("installedVerified")).toBool(), false);
+}
+
+void PluginCatalogManagerTest::_manualInstallNotVerified_test()
+{
+    const QString id = QStringLiteral("org.test.catalog.manual");
+    const QByteArray zip = _packageBytes(id, QStringLiteral("1.0.0"));
+    const QString zipPath = _writeFile(QStringLiteral("manual.qgcplugin"), zip);
+    const QString key = QGCPluginLoader::platformKey();
+    (void) _setCatalog(
+        {_pluginJson(id, {markVerified(_versionJson(QStringLiteral("1.0.0"), key, zipPath, zip), key)})});
+
+    // The index marks exactly these bytes verified, but they did not come through the catalog
+    QGCPluginManager pluginManager;
+    QCOMPARE(pluginManager.installPlugin(zipPath), QString());
+    PluginCatalogManager catalog(&pluginManager);
+    QVERIFY(_fetch(catalog));
+
+    const QVariantMap entry = entryFor(catalog, id);
+    QCOMPARE(entry.value(QStringLiteral("installed")).toBool(), true);
+    QCOMPARE(entry.value(QStringLiteral("verified")).toBool(), true);
+    QCOMPARE(entry.value(QStringLiteral("installedVerified")).toBool(), false);
+}
+
+void PluginCatalogManagerTest::_stagedUpdateKeepsInstalledRecord_test()
+{
+    const QString id = QStringLiteral("org.test.catalog.keeprecord");
+    const QByteArray v1 = _packageBytes(id, QStringLiteral("1.0.0"));
+    const QByteArray v2 = _packageBytes(id, QStringLiteral("2.0.0"));
+    const QString v1Path = _writeFile(QStringLiteral("keep-v1.qgcplugin"), v1);
+    const QString v2Path = _writeFile(QStringLiteral("keep-v2.qgcplugin"), v2);
+    const QString key = QGCPluginLoader::platformKey();
+    const QJsonObject version1 = markVerified(_versionJson(QStringLiteral("1.0.0"), key, v1Path, v1), key);
+    const QJsonObject version2 = _versionJson(QStringLiteral("2.0.0"), key, v2Path, v2);
+
+    // Install the verified 1.0.0 through a catalog that lists only it
+    (void) _setCatalog({_pluginJson(id, {version1})});
+    QGCPluginManager pluginManager;
+    PluginCatalogManager catalog(&pluginManager);
+    QVERIFY(_fetch(catalog));
+    QSignalSpy spy(&catalog, &PluginCatalogManager::installFinished);
+    QVERIFY(!_startInstall(catalog, id).isEmpty());
+    QVERIFY_SIGNAL_WAIT(spy, TestTimeout::mediumMs());
+    QCOMPARE(spy.first().at(1).toBool(), true);
+    const QString installedDigest = approvedDigest(id);
+    QCOMPARE(entryFor(catalog, id).value(QStringLiteral("installedVerified")).toBool(), true);
+
+    // Then a catalog that also lists an unmarked 2.0.0: updating replaces a verified copy
+    (void) _setCatalog({_pluginJson(id, {version1, version2})}, QStringLiteral("index2.json"));
+    QVERIFY(_fetch(catalog));
+    QVariantMap entry = entryFor(catalog, id);
+    QCOMPARE(entry.value(QStringLiteral("updateAvailable")).toBool(), true);
+    QCOMPARE(entry.value(QStringLiteral("verified")).toBool(), false);
+    QCOMPARE(entry.value(QStringLiteral("installedVerified")).toBool(), true);
+
+    spy.clear();
+    QVERIFY(!_startInstall(catalog, id).isEmpty());
+    QVERIFY_SIGNAL_WAIT(spy, TestTimeout::mediumMs());
+    QCOMPARE(spy.first().at(1).toBool(), true);
+    QCOMPARE(spy.first().at(3).toBool(), true);
+
+    // The staged copy has its own record; the running copy keeps its record
+    const QString stagedDigest = SettingsManager::instance()->pluginSettings()->stagedPluginDigest(id);
+    QVERIFY(!stagedDigest.isEmpty());
+    QVERIFY(stagedDigest != installedDigest);
+    QCOMPARE(QSettings().value(packageHashKey(id, stagedDigest)).toString(), _sha256Hex(v2));
+    QCOMPARE(QSettings().value(packageHashKey(id, installedDigest)).toString(), _sha256Hex(v1));
+    QCOMPARE(approvedDigest(id), installedDigest);
+    entry = entryFor(catalog, id);
+    QCOMPARE(entry.value(QStringLiteral("updateStaged")).toBool(), true);
+    QCOMPARE(entry.value(QStringLiteral("installedVerified")).toBool(), true);
 }
 
 UT_REGISTER_TEST(PluginCatalogManagerTest, TestLabel::Unit)

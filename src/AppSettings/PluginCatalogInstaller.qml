@@ -55,7 +55,9 @@ ColumnLayout {
             _resultIsError  = true
             return
         }
-        if (current.version !== shown.version || current.tier !== shown.tier || current.installed !== shown.installed) {
+        if (current.version !== shown.version || current.tier !== shown.tier || current.installed !== shown.installed ||
+                current.verified !== shown.verified || current.openSource !== shown.openSource ||
+                current.verifiedBy !== shown.verifiedBy || current.verifiedDate !== shown.verifiedDate) {
             requestInstall(current)
             return
         }
@@ -165,17 +167,45 @@ ColumnLayout {
             onAccepted: root._startInstall(consentDialog.entry)
 
             ColumnLayout {
+                id: consentColumn
+
                 // A plain width: the dialog's content parent is an Item, which ignores Layout.*
                 width:      ScreenTools.defaultFontPixelWidth * 55
                 spacing:    ScreenTools.defaultFontPixelHeight / 2
+
+                // Native code, no public source and no maintainer review: the case that needs
+                // the plainest warning.
+                readonly property bool _strongestWarning:   consentDialog.entry.tier === "sdk" && !consentDialog.entry.openSource && !consentDialog.entry.verified
 
                 QGCLabel {
                     objectName:         "pluginCatalogConsentText"
                     Layout.fillWidth:   true
                     wrapMode:           Text.Wrap
-                    text:               consentDialog.entry.tier === "sdk" ?
+                    font.bold:          consentColumn._strongestWarning
+                    color:              consentColumn._strongestWarning ? qgcPal.colorRed : qgcPal.text
+                    text:               consentColumn._strongestWarning ?
+                                            qsTr("Warning: this plugin runs native code on your computer, with the same access as QGroundControl itself. Its source code is not public, and no maintainer has reviewed it. Install it only if you fully trust its author.") :
+                                        consentDialog.entry.tier === "sdk" ?
                                             qsTr("This plugin runs native code on your computer, with the same access as QGroundControl itself. Install it only if you trust its author.") :
                                             qsTr("This plugin adds QML pages to QGroundControl. Install it only if you trust its author.")
+                }
+
+                QGCLabel {
+                    objectName:         "pluginCatalogConsentSource"
+                    Layout.fillWidth:   true
+                    wrapMode:           Text.Wrap
+                    text:               consentDialog.entry.openSource ? qsTr("Open source: its source code is public.") :
+                                                                         qsTr("Closed source: its source code is not public.")
+                }
+
+                QGCLabel {
+                    objectName:         "pluginCatalogConsentVerified"
+                    Layout.fillWidth:   true
+                    wrapMode:           Text.Wrap
+                    textFormat:         Text.PlainText  // the reviewer name comes from the index
+                    text:               consentDialog.entry.verified ?
+                                            qsTr("Verified: %1 reviewed this version on %2.").arg(consentDialog.entry.verifiedBy).arg(consentDialog.entry.verifiedDate) :
+                                            qsTr("Not verified: no maintainer has reviewed this version.")
                 }
 
                 QGCLabel {

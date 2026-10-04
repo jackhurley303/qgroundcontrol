@@ -44,6 +44,16 @@ ColumnLayout {
     }
 
     QGCLabel {
+        objectName:         "pluginUnverifiedUpdateWarning_" + root.plugin.id
+        Layout.fillWidth:   true
+        visible:            root._updateAvailable && !root._updateStaged && root._entry.installedVerified && !root._entry.verified
+        text:               qsTr("This update is not verified. The version you have is.")
+        wrapMode:           Text.Wrap
+        font.pointSize:     ScreenTools.smallFontPointSize
+        color:              qgcPal.colorRed
+    }
+
+    QGCLabel {
         objectName:         "pluginRestartLine_" + root.plugin.id
         Layout.fillWidth:   true
         visible:            root._updateStaged

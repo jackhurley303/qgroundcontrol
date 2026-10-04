@@ -88,6 +88,16 @@ bool parsePackage(const QJsonValue& value, PluginCatalogPackage* packageOut, QSt
         return false;
     }
     packageOut->size = static_cast<qint64>(size);
+
+    // Anything but an object with three non-empty strings reads as not verified.
+    const QJsonObject verified = obj.value(QStringLiteral("verified")).toObject();
+    PluginCatalogVerification mark;
+    mark.reviewer = verified.value(QStringLiteral("reviewer")).toString();
+    mark.date = verified.value(QStringLiteral("date")).toString();
+    mark.method = verified.value(QStringLiteral("method")).toString();
+    if (!mark.reviewer.isEmpty() && !mark.date.isEmpty() && !mark.method.isEmpty()) {
+        packageOut->verified = mark;
+    }
     return true;
 }
 
@@ -236,16 +246,22 @@ std::optional<PluginCatalogOffer> PluginCatalogEntry::newestCompatible(const Hos
         if (!version.manifest.validateForHost(host)) {
             continue;
         }
-        auto package = version.packages.constFind(platformKey);
-        if (package == version.packages.constEnd()) {
-            package = version.packages.constFind(AnyPlatformKey);
-        }
-        if (package == version.packages.constEnd()) {
+        const PluginCatalogPackage* package = version.packageFor(platformKey);
+        if (!package) {
             continue;
         }
-        best = PluginCatalogOffer{version, package.value()};
+        best = PluginCatalogOffer{version, *package};
     }
     return best;
+}
+
+const PluginCatalogPackage* PluginCatalogVersion::packageFor(const QString& platformKey) const
+{
+    auto package = packages.constFind(platformKey);
+    if (package == packages.constEnd()) {
+        package = packages.constFind(AnyPlatformKey);
+    }
+    return package == packages.constEnd() ? nullptr : &package.value();
 }
 
 std::optional<PluginCatalogOffer> PluginCatalogEntry::updateFor(const HostInfo& host, const QString& platformKey,

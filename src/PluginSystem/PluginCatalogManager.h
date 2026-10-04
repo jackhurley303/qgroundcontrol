@@ -82,7 +82,10 @@ public:
     /// One QVariantMap per catalog plugin, keys: id, name, author, summary, description,
     /// license, homepage, repository, icon, screenshots (list), compatible (a version runs
     /// on this host and platform), version, tier, released, notes, size (of that version),
-    /// installed, installedVersion, updateAvailable, updateStaged.
+    /// installed, installedVersion, updateAvailable, updateStaged, openSource (the entry names
+    /// a repository), verified, verifiedBy, verifiedDate (the offered version's package for
+    /// this platform carries a maintainer's mark), installedVerified (the installed copy came
+    /// from a package the index marks verified).
     QVariantList entries() const { return _entries; }
 
     /// The entries with updateAvailable set, as maps with keys id, name, installedVersion,
@@ -128,6 +131,10 @@ private:
     void _startFetch();
     void _onIndexFinished(bool success, const QString& localPath, QString errorMessage, bool fromCache);
     void _rebuildEntries();
+    /// True when the index marks the package of installedVersion verified and the installed
+    /// copy was installed from that package through this catalog. A manual install has no
+    /// recorded package, so it reads as not verified.
+    bool _isInstalledVerified(const PluginCatalogEntry& entry, const QString& installedVersion) const;
     void _setInstallProgress(qreal progress);
     void _onPackageProgress(qint64 bytesReceived);
     void _onPackageFinished(QGCFileDownload* download, bool success, const QString& errorMessage);

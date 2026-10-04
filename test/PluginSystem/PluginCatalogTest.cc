@@ -546,4 +546,117 @@ void PluginCatalogTest::_hugeNumbersRefused_test()
     QVERIFY(!error.isEmpty());
 }
 
+namespace {
+
+QJsonObject verifiedJson(const QString& reviewer = QStringLiteral("maintainer"),
+                         const QString& date = QStringLiteral("2026-10-03"),
+                         const QString& method = QStringLiteral("maintainer-build"))
+{
+    QJsonObject json;
+    json[QStringLiteral("reviewer")] = reviewer;
+    json[QStringLiteral("date")] = date;
+    json[QStringLiteral("method")] = method;
+    return json;
+}
+
+// An sdk version whose package under `key` carries `verified` (a JSON value of any shape).
+QJsonObject versionWithVerified(const QString& key, const QJsonValue& verified)
+{
+    QJsonObject version = sdkVersionJson();
+    QJsonObject packages = version.value(QStringLiteral("packages")).toObject();
+    QJsonObject package = packages.value(MacKey).toObject();
+    package[QStringLiteral("verified")] = verified;
+    packages.remove(MacKey);
+    packages[key] = package;
+    version[QStringLiteral("packages")] = packages;
+    return version;
+}
+
+}  // namespace
+
+void PluginCatalogTest::_verifiedParsed_test()
+{
+    // No mark reads as not verified
+    PluginCatalog catalog = PluginCatalog::fromJson(singleVersionIndex(sdkVersionJson()));
+    QCOMPARE(catalog.plugins.size(), 1);
+    QVERIFY(!catalog.plugins.at(0).versions.at(0).packages.value(MacKey).verified.has_value());
+
+    // A well-formed mark parses, and an unknown method still counts
+    for (const QString& method : {QStringLiteral("maintainer-build"), QStringLiteral("method-from-the-future")}) {
+        QString error;
+        catalog = PluginCatalog::fromJson(
+            singleVersionIndex(versionWithVerified(
+                MacKey, verifiedJson(QStringLiteral("maintainer"), QStringLiteral("2026-10-03"), method))),
+            &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        const auto verified = catalog.plugins.at(0).versions.at(0).packages.value(MacKey).verified;
+        QVERIFY(verified.has_value());
+        QCOMPARE(verified->reviewer, QStringLiteral("maintainer"));
+        QCOMPARE(verified->date, QStringLiteral("2026-10-03"));
+        QCOMPARE(verified->method, method);
+    }
+}
+
+void PluginCatalogTest::_malformedVerifiedReadsAsNotVerified_test_data()
+{
+    QTest::addColumn<QJsonValue>("verified");
+
+    QTest::newRow("string") << QJsonValue(QStringLiteral("yes"));
+    QTest::newRow("array") << QJsonValue(QJsonArray{verifiedJson()});
+    QTest::newRow("null") << QJsonValue(QJsonValue::Null);
+    QTest::newRow("empty object") << QJsonValue(QJsonObject());
+    QTest::newRow("empty reviewer") << QJsonValue(verifiedJson(QString()));
+    QTest::newRow("empty date") << QJsonValue(verifiedJson(QStringLiteral("maintainer"), QString()));
+    QTest::newRow("empty method") << QJsonValue(
+        verifiedJson(QStringLiteral("maintainer"), QStringLiteral("2026-10-03"), QString()));
+    QTest::newRow("non-string reviewer") << QJsonValue([] {
+        QJsonObject json = verifiedJson();
+        json[QStringLiteral("reviewer")] = 7;
+        return json;
+    }());
+    QTest::newRow("missing method") << QJsonValue([] {
+        QJsonObject json = verifiedJson();
+        json.remove(QStringLiteral("method"));
+        return json;
+    }());
+}
+
+void PluginCatalogTest::_malformedVerifiedReadsAsNotVerified_test()
+{
+    QFETCH(QJsonValue, verified);
+
+    // The rest of the index still loads, and the package is still offered
+    QString error;
+    const PluginCatalog catalog =
+        PluginCatalog::fromJson(singleVersionIndex(versionWithVerified(MacKey, verified)), &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QCOMPARE(catalog.plugins.size(), 1);
+    const std::optional<PluginCatalogOffer> offer =
+        catalog.plugins.at(0).newestCompatible(hostWithVersion(QStringLiteral("5.1")), MacKey);
+    QVERIFY(offer.has_value());
+    QVERIFY(!offer->package.verified.has_value());
+}
+
+void PluginCatalogTest::_verifiedOnOtherPlatformDoesNotCount_test()
+{
+    // Only the Windows package is marked; the macOS one is not
+    QJsonObject version = versionWithVerified(WinKey, verifiedJson());
+    QJsonObject packages = version.value(QStringLiteral("packages")).toObject();
+    packages[MacKey] = packageJson(QStringLiteral("mac"));
+    version[QStringLiteral("packages")] = packages;
+
+    const PluginCatalog catalog = PluginCatalog::fromJson(singleVersionIndex(version));
+    QCOMPARE(catalog.plugins.size(), 1);
+    const PluginCatalogEntry& entry = catalog.plugins.at(0);
+    const HostInfo host = hostWithVersion(QStringLiteral("5.1"));
+
+    const std::optional<PluginCatalogOffer> mac = entry.newestCompatible(host, MacKey);
+    QVERIFY(mac.has_value());
+    QVERIFY(!mac->package.verified.has_value());
+
+    const std::optional<PluginCatalogOffer> win = entry.newestCompatible(host, WinKey);
+    QVERIFY(win.has_value());
+    QVERIFY(win->package.verified.has_value());
+}
+
 UT_REGISTER_TEST(PluginCatalogTest, TestLabel::Unit)

@@ -68,6 +68,29 @@ SettingsGroupLayout {
         return qsTr("%1 MB").arg((bytes / (1024 * 1024)).toFixed(1))
     }
 
+    function _escapeHtml(text) {
+        return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+    }
+
+    // "Open source" links to the repository only when it is an https address, because the text is
+    // rich text and the index is not trusted.
+    function _sourceText(entry) {
+        if (!entry.openSource) {
+            return qsTr("Closed source")
+        }
+        if (!entry.repository.startsWith("https://")) {
+            return qsTr("Open source")
+        }
+        return "<a href=\"" + _escapeHtml(entry.repository) + "\">" + qsTr("Open source") + "</a>"
+    }
+
+    function _verifiedText(entry) {
+        if (!entry.compatible) {
+            return ""
+        }
+        return entry.verified ? qsTr("Verified") : qsTr("Not verified")
+    }
+
     function _versionText(entry) {
         if (!entry.installed) {
             return entry.version
@@ -77,6 +100,8 @@ SettingsGroupLayout {
     }
 
     Component.onCompleted: _fetchedUrl = _pluginSettings.catalogUrl.valueString
+
+    QGCPalette { id: qgcPal }
 
     RowLayout {
         Layout.fillWidth:   true
@@ -163,6 +188,26 @@ SettingsGroupLayout {
                     wrapMode:           Text.Wrap
                 }
 
+                RowLayout {
+                    spacing: ScreenTools.defaultFontPixelWidth
+
+                    QGCLabel {
+                        objectName:         "pluginCatalogCardSource_" + modelData.id
+                        text:               root._sourceText(modelData)
+                        font.pointSize:     ScreenTools.smallFontPointSize
+                        linkColor:          qgcPal.colorBlue
+                        onLinkActivated:    (link) => Qt.openUrlExternally(link)
+                    }
+
+                    QGCLabel {
+                        objectName:         "pluginCatalogCardVerified_" + modelData.id
+                        text:               root._verifiedText(modelData)
+                        visible:            text !== ""
+                        font.pointSize:     ScreenTools.smallFontPointSize
+                        color:              modelData.verified ? qgcPal.colorGreen : qgcPal.text
+                    }
+                }
+
                 QGCLabel {
                     Layout.fillWidth:   true
                     text:               modelData.summary
@@ -226,6 +271,35 @@ SettingsGroupLayout {
             Layout.fillWidth:   true
             wrapMode:           Text.Wrap
             text:               root._detail ? qsTr("%1 · %2").arg(root._detail.author).arg(root._detail.compatible ? root._detail.tier + " · " + root._versionText(root._detail) : qsTr("not compatible with this version")) : ""
+        }
+
+        RowLayout {
+            spacing:    ScreenTools.defaultFontPixelWidth
+            visible:    root._detail !== null
+
+            QGCLabel {
+                objectName:         "pluginCatalogDetailSource"
+                text:               root._detail ? root._sourceText(root._detail) : ""
+                linkColor:          qgcPal.colorBlue
+                onLinkActivated:    (link) => Qt.openUrlExternally(link)
+            }
+
+            QGCLabel {
+                objectName:         "pluginCatalogDetailVerified"
+                text:               root._detail ? root._verifiedText(root._detail) : ""
+                visible:            text !== ""
+                color:              root._detail && root._detail.verified ? qgcPal.colorGreen : qgcPal.text
+            }
+        }
+
+        QGCLabel {
+            objectName:         "pluginCatalogDetailVerifiedBy"
+            Layout.fillWidth:   true
+            wrapMode:           Text.Wrap
+            textFormat:         Text.PlainText  // the reviewer name comes from the index
+            font.pointSize:     ScreenTools.smallFontPointSize
+            visible:            text !== ""
+            text:               root._detail && root._detail.compatible && root._detail.verified ? qsTr("Verified by %1 on %2").arg(root._detail.verifiedBy).arg(root._detail.verifiedDate) : ""
         }
 
         QGCLabel {

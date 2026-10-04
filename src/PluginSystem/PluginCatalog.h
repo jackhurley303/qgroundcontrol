@@ -21,12 +21,23 @@
 
 #include "PluginManifest.h"
 
+/// A maintainer's review mark on one package.
+struct PluginCatalogVerification
+{
+    QString reviewer;
+    QString date;
+    QString method;  ///< Shown as is; a value this build does not know still counts.
+};
+
 /// One downloadable file of a catalog version, for one platform key.
 struct PluginCatalogPackage
 {
     QString url;
     QString sha256;  ///< Lowercase hex, 64 characters.
     qint64 size = 0;
+    /// Set only for a well-formed `verified` object. A malformed one reads as not verified
+    /// and does not refuse the index.
+    std::optional<PluginCatalogVerification> verified;
 };
 
 /// One published version of a catalog plugin.
@@ -40,6 +51,9 @@ struct PluginCatalogVersion
     /// Keyed by platform key (`macos-universal`, `windows-x64`, `linux-x64`) or `any` (qml tier
     /// only). Keys this build does not know are dropped at parse time.
     QHash<QString, PluginCatalogPackage> packages;
+
+    /// The package for platformKey, else the `any` package, else nullptr.
+    const PluginCatalogPackage* packageFor(const QString& platformKey) const;
 };
 
 /// The version and package a host would install.
