@@ -130,8 +130,7 @@ ToolIndicatorPage {
                 Rectangle {
                     Layout.fillWidth: true
                     height:           1
-                    color:            qgcPal.text
-                    opacity:          0.2
+                    color:            qgcPal.borderSubtle
                 }
             }
 
@@ -162,15 +161,11 @@ ToolIndicatorPage {
 
                 QGCButton {
                     objectName: "toolbar_updateButton"
+                    small: true
                     Layout.alignment: Qt.AlignHCenter
                     Layout.bottomMargin: ScreenTools.defaultFontPixelHeight / 2
-                    implicitHeight: contentItem.implicitHeight + topPadding + bottomPadding
-                    heightFactor: 0.2
-                    leftPadding: ScreenTools.defaultFontPixelWidth
-                    rightPadding: leftPadding
                     text: qsTr("Update")
                     primary: true
-                    pointSize: ScreenTools.smallFontPointSize
                     visible: QGroundControl.newStableVersion !== ""
                     onClicked: {
                         mainWindow.closeIndicatorDrawer()

@@ -1,5 +1,8 @@
 #include "ReplaySeekApplierTest.h"
 
+#include <QtCore/QRegularExpression>
+#include <QtTest/QSignalSpy>
+
 #include "FactSystem/Fact.h"
 #include "FactSystem/ParameterManager.h"
 #include "LogReplayLink.h"
@@ -7,9 +10,6 @@
 #include "MissionManager/MissionManager.h"
 #include "ReplaySeekApplier.h"
 #include "Vehicle/Vehicle.h"
-
-#include <QtCore/QRegularExpression>
-#include <QtTest/QSignalSpy>
 
 namespace {
 
@@ -23,11 +23,12 @@ mavlink_mission_item_int_t _makeWaypoint(int seq)
     return item;
 }
 
-} // namespace
+}  // namespace
 
 void ReplaySeekApplierTest::_missionUploadAppliesItems_test()
 {
-    SharedLinkConfigurationPtr config = std::make_shared<LogReplayConfiguration>(QStringLiteral("ReplaySeekApplierTest"));
+    SharedLinkConfigurationPtr config =
+        std::make_shared<LogReplayConfiguration>(QStringLiteral("ReplaySeekApplierTest"));
     // Declaration order matters: applier is a QObject child of link, so link must
     // outlive it here — reversing this order would double-delete applier on unwind.
     LogReplayLink link(config);
@@ -36,9 +37,8 @@ void ReplaySeekApplierTest::_missionUploadAppliesItems_test()
     const QList<mavlink_mission_item_int_t> items{_makeWaypoint(0), _makeWaypoint(1)};
     QSignalSpy availableSpy(vehicle()->missionManager(), &MissionManager::newMissionItemsAvailable);
 
-    QVERIFY(QMetaObject::invokeMethod(&link, "replayMissionUploaded",
-                                       Q_ARG(int, MAV_MISSION_TYPE_MISSION),
-                                       Q_ARG(QList<mavlink_mission_item_int_t>, items)));
+    QVERIFY(QMetaObject::invokeMethod(&link, "replayMissionUploaded", Q_ARG(int, MAV_MISSION_TYPE_MISSION),
+                                      Q_ARG(QList<mavlink_mission_item_int_t>, items)));
 
     QCOMPARE(availableSpy.count(), 1);
     QCOMPARE(vehicle()->missionManager()->missionItems().count(), items.count());
@@ -46,7 +46,8 @@ void ReplaySeekApplierTest::_missionUploadAppliesItems_test()
 
 void ReplaySeekApplierTest::_seekMissionResolvedRestoresWithoutPlanFile_test()
 {
-    SharedLinkConfigurationPtr config = std::make_shared<LogReplayConfiguration>(QStringLiteral("ReplaySeekApplierTest"));
+    SharedLinkConfigurationPtr config =
+        std::make_shared<LogReplayConfiguration>(QStringLiteral("ReplaySeekApplierTest"));
     // Declaration order matters: applier is a QObject child of link, so link must
     // outlive it here — reversing this order would double-delete applier on unwind.
     LogReplayLink link(config);
@@ -54,30 +55,30 @@ void ReplaySeekApplierTest::_seekMissionResolvedRestoresWithoutPlanFile_test()
 
     // Seed a tlog-snapshot mission so the "restore to empty" branch has something to undo.
     const QList<mavlink_mission_item_int_t> items{_makeWaypoint(0)};
-    QVERIFY(QMetaObject::invokeMethod(&link, "replayMissionUploaded",
-                                       Q_ARG(int, MAV_MISSION_TYPE_MISSION),
-                                       Q_ARG(QList<mavlink_mission_item_int_t>, items)));
+    QVERIFY(QMetaObject::invokeMethod(&link, "replayMissionUploaded", Q_ARG(int, MAV_MISSION_TYPE_MISSION),
+                                      Q_ARG(QList<mavlink_mission_item_int_t>, items)));
     QCOMPARE(vehicle()->missionManager()->missionItems().count(), 1);
 
     // No plan file registered for this vehicle (Vehicle::peekReplayPlanFile is empty by
     // default), so a seek with no resolved mission-type entries restores to empty.
     const MissionItemsByType resolvedByType;
-    QVERIFY(QMetaObject::invokeMethod(&link, "replaySeekMissionResolved",
-                                       Q_ARG(MissionItemsByType, resolvedByType)));
+    QVERIFY(QMetaObject::invokeMethod(&link, "replaySeekMissionResolved", Q_ARG(MissionItemsByType, resolvedByType)));
 
     QCOMPARE(vehicle()->missionManager()->missionItems().count(), 0);
 }
 
 void ReplaySeekApplierTest::_seekParamResolvedSetsValue_test()
 {
-    SharedLinkConfigurationPtr config = std::make_shared<LogReplayConfiguration>(QStringLiteral("ReplaySeekApplierTest"));
+    SharedLinkConfigurationPtr config =
+        std::make_shared<LogReplayConfiguration>(QStringLiteral("ReplaySeekApplierTest"));
     // Declaration order matters: applier is a QObject child of link, so link must
     // outlive it here — reversing this order would double-delete applier on unwind.
     LogReplayLink link(config);
     ReplaySeekApplier applier(&link);
 
     QVERIFY(waitForParametersReady());
-    Fact* const fact = vehicle()->parameterManager()->getParameter(MAV_COMP_ID_AUTOPILOT1, QStringLiteral("BAT1_V_CHARGED"));
+    Fact* const fact =
+        vehicle()->parameterManager()->getParameter(MAV_COMP_ID_AUTOPILOT1, QStringLiteral("BAT1_V_CHARGED"));
     QVERIFY(fact);
 
     mavlink_param_union_t pu;
@@ -90,23 +91,24 @@ void ReplaySeekApplierTest::_seekParamResolvedSetsValue_test()
     seekValue.paramType = MAV_PARAM_TYPE_REAL32;
     seekValue.resetToInitial = false;
 
-    QVERIFY(QMetaObject::invokeMethod(&link, "replaySeekParamResolved",
-                                       Q_ARG(int, vehicle()->id()),
-                                       Q_ARG(QList<ParamSeekValue>, {seekValue})));
+    QVERIFY(QMetaObject::invokeMethod(&link, "replaySeekParamResolved", Q_ARG(quint32, vehicle()->id()),
+                                      Q_ARG(QList<ParamSeekValue>, {seekValue})));
 
     QCOMPARE(fact->rawValue().toFloat(), 12.5f);
 }
 
 void ReplaySeekApplierTest::_seekParamResetUsesTlogInitialWithoutParamsFile_test()
 {
-    SharedLinkConfigurationPtr config = std::make_shared<LogReplayConfiguration>(QStringLiteral("ReplaySeekApplierTest"));
+    SharedLinkConfigurationPtr config =
+        std::make_shared<LogReplayConfiguration>(QStringLiteral("ReplaySeekApplierTest"));
     // Declaration order matters: applier is a QObject child of link, so link must
     // outlive it here — reversing this order would double-delete applier on unwind.
     LogReplayLink link(config);
     ReplaySeekApplier applier(&link);
 
     QVERIFY(waitForParametersReady());
-    Fact* const fact = vehicle()->parameterManager()->getParameter(MAV_COMP_ID_AUTOPILOT1, QStringLiteral("BAT1_V_CHARGED"));
+    Fact* const fact =
+        vehicle()->parameterManager()->getParameter(MAV_COMP_ID_AUTOPILOT1, QStringLiteral("BAT1_V_CHARGED"));
     QVERIFY(fact);
 
     mavlink_param_union_t drifted;
@@ -118,9 +120,8 @@ void ReplaySeekApplierTest::_seekParamResetUsesTlogInitialWithoutParamsFile_test
     seekValue.paramType = MAV_PARAM_TYPE_REAL32;
     seekValue.resetToInitial = false;
 
-    QVERIFY(QMetaObject::invokeMethod(&link, "replaySeekParamResolved",
-                                       Q_ARG(int, vehicle()->id()),
-                                       Q_ARG(QList<ParamSeekValue>, {seekValue})));
+    QVERIFY(QMetaObject::invokeMethod(&link, "replaySeekParamResolved", Q_ARG(quint32, vehicle()->id()),
+                                      Q_ARG(QList<ParamSeekValue>, {seekValue})));
     QCOMPARE(fact->rawValue().toFloat(), 12.5f);
 
     // No params file is registered here, so the initial value can only come from the log
@@ -130,16 +131,16 @@ void ReplaySeekApplierTest::_seekParamResetUsesTlogInitialWithoutParamsFile_test
     seekValue.rawValue = initial.param_float;
     seekValue.resetToInitial = true;
 
-    QVERIFY(QMetaObject::invokeMethod(&link, "replaySeekParamResolved",
-                                       Q_ARG(int, vehicle()->id()),
-                                       Q_ARG(QList<ParamSeekValue>, {seekValue})));
+    QVERIFY(QMetaObject::invokeMethod(&link, "replaySeekParamResolved", Q_ARG(quint32, vehicle()->id()),
+                                      Q_ARG(QList<ParamSeekValue>, {seekValue})));
 
     QCOMPARE(fact->rawValue().toFloat(), 4.25f);
 }
 
 void ReplaySeekApplierTest::_seekParamInventsNoFactOnLiveVehicle_test()
 {
-    SharedLinkConfigurationPtr config = std::make_shared<LogReplayConfiguration>(QStringLiteral("ReplaySeekApplierTest"));
+    SharedLinkConfigurationPtr config =
+        std::make_shared<LogReplayConfiguration>(QStringLiteral("ReplaySeekApplierTest"));
     // Declaration order matters: applier is a QObject child of link, so link must
     // outlive it here — reversing this order would double-delete applier on unwind.
     LogReplayLink link(config);
@@ -165,23 +166,24 @@ void ReplaySeekApplierTest::_seekParamInventsNoFactOnLiveVehicle_test()
     seekValue.paramType = MAV_PARAM_TYPE_INT32;
     seekValue.resetToInitial = false;
 
-    QVERIFY(QMetaObject::invokeMethod(&link, "replaySeekParamResolved",
-                                       Q_ARG(int, vehicle()->id()),
-                                       Q_ARG(QList<ParamSeekValue>, {seekValue})));
+    QVERIFY(QMetaObject::invokeMethod(&link, "replaySeekParamResolved", Q_ARG(quint32, vehicle()->id()),
+                                      Q_ARG(QList<ParamSeekValue>, {seekValue})));
 
     QVERIFY(!paramMgr->parameterExists(MAV_COMP_ID_AUTOPILOT1, paramId));
 }
 
 void ReplaySeekApplierTest::_seekParamResolvedSkipsUnsupportedType_test()
 {
-    SharedLinkConfigurationPtr config = std::make_shared<LogReplayConfiguration>(QStringLiteral("ReplaySeekApplierTest"));
+    SharedLinkConfigurationPtr config =
+        std::make_shared<LogReplayConfiguration>(QStringLiteral("ReplaySeekApplierTest"));
     // Declaration order matters: applier is a QObject child of link, so link must
     // outlive it here — reversing this order would double-delete applier on unwind.
     LogReplayLink link(config);
     ReplaySeekApplier applier(&link);
 
     QVERIFY(waitForParametersReady());
-    Fact* const fact = vehicle()->parameterManager()->getParameter(MAV_COMP_ID_AUTOPILOT1, QStringLiteral("BAT1_V_CHARGED"));
+    Fact* const fact =
+        vehicle()->parameterManager()->getParameter(MAV_COMP_ID_AUTOPILOT1, QStringLiteral("BAT1_V_CHARGED"));
     QVERIFY(fact);
     const QVariant before = fact->rawValue();
 
@@ -197,23 +199,24 @@ void ReplaySeekApplierTest::_seekParamResolvedSkipsUnsupportedType_test()
 
     ignoreLogMessage("Comms.ReplaySeekApplier", QtWarningMsg,
                      QRegularExpression(QStringLiteral("unsupported MAV_PARAM_TYPE")));
-    QVERIFY(QMetaObject::invokeMethod(&link, "replaySeekParamResolved",
-                                       Q_ARG(int, vehicle()->id()),
-                                       Q_ARG(QList<ParamSeekValue>, {seekValue})));
+    QVERIFY(QMetaObject::invokeMethod(&link, "replaySeekParamResolved", Q_ARG(quint32, vehicle()->id()),
+                                      Q_ARG(QList<ParamSeekValue>, {seekValue})));
 
     QCOMPARE(fact->rawValue(), before);
 }
 
 void ReplaySeekApplierTest::_seekParamResolvedIgnoresOtherVehicle_test()
 {
-    SharedLinkConfigurationPtr config = std::make_shared<LogReplayConfiguration>(QStringLiteral("ReplaySeekApplierTest"));
+    SharedLinkConfigurationPtr config =
+        std::make_shared<LogReplayConfiguration>(QStringLiteral("ReplaySeekApplierTest"));
     // Declaration order matters: applier is a QObject child of link, so link must
     // outlive it here — reversing this order would double-delete applier on unwind.
     LogReplayLink link(config);
     ReplaySeekApplier applier(&link);
 
     QVERIFY(waitForParametersReady());
-    Fact* const fact = vehicle()->parameterManager()->getParameter(MAV_COMP_ID_AUTOPILOT1, QStringLiteral("BAT1_V_CHARGED"));
+    Fact* const fact =
+        vehicle()->parameterManager()->getParameter(MAV_COMP_ID_AUTOPILOT1, QStringLiteral("BAT1_V_CHARGED"));
     QVERIFY(fact);
     const QVariant before = fact->rawValue();
 
@@ -227,9 +230,8 @@ void ReplaySeekApplierTest::_seekParamResolvedIgnoresOtherVehicle_test()
     seekValue.paramType = MAV_PARAM_TYPE_REAL32;
     seekValue.resetToInitial = false;
 
-    QVERIFY(QMetaObject::invokeMethod(&link, "replaySeekParamResolved",
-                                       Q_ARG(int, vehicle()->id() + 1),
-                                       Q_ARG(QList<ParamSeekValue>, {seekValue})));
+    QVERIFY(QMetaObject::invokeMethod(&link, "replaySeekParamResolved", Q_ARG(quint32, vehicle()->id() + 1),
+                                      Q_ARG(QList<ParamSeekValue>, {seekValue})));
 
     QCOMPARE(fact->rawValue(), before);
 }

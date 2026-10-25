@@ -65,6 +65,8 @@ void BluetoothLiveAdapterTest::init()
                      QRegularExpression(QStringLiteral(
                          "Cannot open HCI socket|Cannot determine bluetoothd version|"
                          "Disabling Qt Bluetooth LE feature|Cannot find Bluez 5 adapter")));
+    ignoreLogMessage("qt.bluetooth.darwin", QtWarningMsg,
+                     QRegularExpression(QStringLiteral("no valid device found|Default Bluetooth controller is OFF")));
 }
 
 void BluetoothLiveAdapterTest::_testLiveAdapterSelectionAndState()
@@ -166,6 +168,8 @@ void BluetoothLiveAdapterTest::_testLiveScanLifecycle()
     QVERIFY2(observedScanOrError, "Scan neither started nor produced an error within timeout");
 
     if (!config.scanning() && (errorSpy.count() > 0)) {
+        ignoreLogMessage("Comms.Bluetooth.BluetoothConfiguration", QtWarningMsg,
+                         QRegularExpression(QStringLiteral("^Bluetooth discovery error:")));
         const QString reason = errorSpy.last().first().toString();
         const QByteArray skipMsg = QStringLiteral("Live scan unavailable on this host: %1").arg(reason).toUtf8();
         QSKIP(skipMsg.constData());
@@ -173,7 +177,7 @@ void BluetoothLiveAdapterTest::_testLiveScanLifecycle()
 
     if (config.scanning()) {
         config.stopScan();
-        // Single bounded QTRY call replaces the previous spy.wait / qWait(50)
+        // Single bounded QTRY call replaces the previous spy.wait / fixed-delay wait
         // fallback pair — exits immediately once scanning is false, otherwise
         // times out at the same 3 s bound.
         QTRY_VERIFY_WITH_TIMEOUT(!config.scanning(), 3000);

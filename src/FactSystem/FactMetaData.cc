@@ -124,6 +124,11 @@ const FactMetaData &FactMetaData::operator=(const FactMetaData &other)
     _writeOnly = other._writeOnly;
     _volatile = other._volatile;
 
+    disconnect(_appSettingsUnitsConnection);
+    if (other._appSettingsUnitsConnection) {
+        _setAppSettingsTranslators();
+    }
+
     return *this;
 }
 
@@ -638,6 +643,7 @@ void FactMetaData::removeEnumInfo(const QVariant &value)
 
 void FactMetaData::setTranslators(Translator rawTranslator_, Translator cookedTranslator_)
 {
+    disconnect(_appSettingsUnitsConnection);
     _rawTranslator = rawTranslator_;
     _cookedTranslator = cookedTranslator_;
 }
@@ -872,7 +878,7 @@ FactMetaData::ValueType_t FactMetaData::stringToType(const QString &typeString, 
     unknownType = false;
 
     for (size_t i = 0; i < std::size(_rgKnownTypeStrings); i++) {
-        if (typeString.compare(_rgKnownTypeStrings[i], Qt::CaseInsensitive) == 0) {
+        if (typeString.compare(QLatin1StringView(_rgKnownTypeStrings[i]), Qt::CaseInsensitive) == 0) {
             return _rgKnownValueTypes[i];
         }
     }
@@ -920,6 +926,8 @@ size_t FactMetaData::typeToSize(ValueType_t type)
 
 void FactMetaData::_setAppSettingsTranslators()
 {
+    disconnect(_appSettingsUnitsConnection);
+
     // We can only translate between real numbers
     if (_enumStrings.isEmpty() && ((type() == valueTypeDouble) || (type() == valueTypeFloat))) {
         for (size_t i = 0; i < std::size(_rgAppSettingsTranslations); i++) {
@@ -930,34 +938,36 @@ void FactMetaData::_setAppSettingsTranslators()
             }
 
             UnitsSettings *const settings = SettingsManager::instance()->unitsSettings();
-            uint settingsUnits = 0;
+            Fact* settingsFact = nullptr;
 
             switch (pAppSettingsTranslation->unitType) {
             case UnitHorizontalDistance:
-                settingsUnits = settings->horizontalDistanceUnits()->rawValue().toUInt();
+                settingsFact = settings->horizontalDistanceUnits();
                 break;
             case UnitVerticalDistance:
-                settingsUnits = settings->verticalDistanceUnits()->rawValue().toUInt();
+                settingsFact = settings->verticalDistanceUnits();
                 break;
             case UnitSpeed:
-                settingsUnits = settings->speedUnits()->rawValue().toUInt();
+                settingsFact = settings->speedUnits();
                 break;
             case UnitArea:
-                settingsUnits = settings->areaUnits()->rawValue().toUInt();
+                settingsFact = settings->areaUnits();
                 break;
             case UnitTemperature:
-                settingsUnits = settings->temperatureUnits()->rawValue().toUInt();
+                settingsFact = settings->temperatureUnits();
                 break;
             case UnitWeight:
-                settingsUnits = settings->weightUnits()->rawValue().toUInt();
+                settingsFact = settings->weightUnits();
                 break;
             default:
                 break;
             }
 
-            if (settingsUnits == pAppSettingsTranslation->unitOption) {
+            if (settingsFact && (settingsFact->rawValue().toUInt() == pAppSettingsTranslation->unitOption)) {
                 _cookedUnits = pAppSettingsTranslation->cookedUnits;
                 setTranslators(pAppSettingsTranslation->rawTranslator, pAppSettingsTranslation->cookedTranslator);
+                _appSettingsUnitsConnection =
+                    connect(settingsFact, &Fact::rawValueChanged, this, &FactMetaData::_appSettingsUnitsChanged);
                 return;
             }
         }
@@ -968,6 +978,12 @@ void FactMetaData::_setAppSettingsTranslators()
     if (_cookedUnits.compare(QStringLiteral("vertical m"), Qt::CaseInsensitive) == 0) {
         _cookedUnits = QStringLiteral("m");
     }
+}
+
+void FactMetaData::_appSettingsUnitsChanged()
+{
+    _setAppSettingsTranslators();
+    emit appSettingsUnitsChanged();
 }
 
 const FactMetaData::AppSettingsTranslation_s* FactMetaData::_findAppSettingsUnitsTranslation(const QString &rawUnits, UnitTypes type)
@@ -1210,34 +1226,34 @@ FactMetaData *FactMetaData::createFromJsonObject(const QJsonObject &json, const 
     QString errorString;
 
     static const QList<JsonParsing::KeyValidateInfo> keyInfoList = {
-        { _nameJsonKey,                 QJsonValue::String, true },
-        { _labelJsonKey,                QJsonValue::String, false },
-        { _typeJsonKey,                 QJsonValue::String, true },
-        { _commentJsonKey,              QJsonValue::String, false },   // Developer notes only, never parsed
-        { _keywordsJsonKey,             QJsonValue::String, false },   // Consumed by the settings page generator, not C++
-        { _shortDescriptionJsonKey,     QJsonValue::String, false },
-        { _longDescriptionJsonKey,      QJsonValue::String, false },
-        { _unitsJsonKey,                QJsonValue::String, false },
-        { _decimalPlacesJsonKey,        QJsonValue::Double, false },
-        { _maxStringLengthJsonKey,      QJsonValue::Double, false },
-        { _defaultValueJsonKey,         QJsonValue::Undefined, false },    // Undefined: type follows the fact type
-        { _mobileDefaultValueJsonKey,   QJsonValue::Undefined, false },    // Undefined: type follows the fact type
-        { _incrementJsonKey,            QJsonValue::Double, false },
-        { _minJsonKey,                  QJsonValue::Double, false },
-        { _maxJsonKey,                  QJsonValue::Double, false },
-        { _userMinJsonKey,              QJsonValue::Double, false },
-        { _userMaxJsonKey,              QJsonValue::Double, false },
-        { _hasControlJsonKey,           QJsonValue::Bool,   false },
-        { _qgcRebootRequiredJsonKey,    QJsonValue::Bool,   false },
-        { _rebootRequiredJsonKey,       QJsonValue::Bool,   false },
-        { _categoryJsonKey,             QJsonValue::String, false },
-        { _groupJsonKey,                QJsonValue::String, false },
-        { _volatileJsonKey,             QJsonValue::Bool,   false },
-        { _readOnlyJsonKey,             QJsonValue::Bool,   false },
-        { _enumBitmaskArrayJsonKey,     QJsonValue::Array,  false },
-        { _enumValuesArrayJsonKey,      QJsonValue::Array,  false },
-        { _enumValuesJsonKey,           QJsonValue::String, false },
-        { _enumStringsJsonKey,          QJsonValue::String, false },
+        {_nameJsonKey.data(), QJsonValue::String, true},
+        {_labelJsonKey.data(), QJsonValue::String, false},
+        {_typeJsonKey.data(), QJsonValue::String, true},
+        {_commentJsonKey.data(), QJsonValue::String, false},   // Developer notes only, never parsed
+        {_keywordsJsonKey.data(), QJsonValue::String, false},  // Consumed by the settings page generator, not C++
+        {_shortDescriptionJsonKey.data(), QJsonValue::String, false},
+        {_longDescriptionJsonKey.data(), QJsonValue::String, false},
+        {_unitsJsonKey.data(), QJsonValue::String, false},
+        {_decimalPlacesJsonKey.data(), QJsonValue::Double, false},
+        {_maxStringLengthJsonKey.data(), QJsonValue::Double, false},
+        {_defaultValueJsonKey.data(), QJsonValue::Undefined, false},        // Undefined: type follows the fact type
+        {_mobileDefaultValueJsonKey.data(), QJsonValue::Undefined, false},  // Undefined: type follows the fact type
+        {_incrementJsonKey.data(), QJsonValue::Double, false},
+        {_minJsonKey.data(), QJsonValue::Double, false},
+        {_maxJsonKey.data(), QJsonValue::Double, false},
+        {_userMinJsonKey.data(), QJsonValue::Double, false},
+        {_userMaxJsonKey.data(), QJsonValue::Double, false},
+        {_hasControlJsonKey.data(), QJsonValue::Bool, false},
+        {_qgcRebootRequiredJsonKey.data(), QJsonValue::Bool, false},
+        {_rebootRequiredJsonKey.data(), QJsonValue::Bool, false},
+        {_categoryJsonKey.data(), QJsonValue::String, false},
+        {_groupJsonKey.data(), QJsonValue::String, false},
+        {_volatileJsonKey.data(), QJsonValue::Bool, false},
+        {_readOnlyJsonKey.data(), QJsonValue::Bool, false},
+        {_enumBitmaskArrayJsonKey.data(), QJsonValue::Array, false},
+        {_enumValuesArrayJsonKey.data(), QJsonValue::Array, false},
+        {_enumValuesJsonKey.data(), QJsonValue::String, false},
+        {_enumStringsJsonKey.data(), QJsonValue::String, false},
     };
 
     if (!JsonParsing::validateKeysStrict(json, keyInfoList, errorString)) {
@@ -1308,7 +1324,7 @@ FactMetaData *FactMetaData::createFromJsonObject(const QJsonObject &json, const 
         metaData->setRawUnits(json[_unitsJsonKey].toString());
     }
 
-    QString defaultValueJsonKey = _defaultValueJsonKey;
+    QLatin1StringView defaultValueJsonKey = _defaultValueJsonKey;
 #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
     if (json.contains(_mobileDefaultValueJsonKey)) {
         defaultValueJsonKey = _mobileDefaultValueJsonKey;
@@ -1579,8 +1595,8 @@ bool FactMetaData::_parseValuesArray(const QJsonObject &jsonObject, QStringList 
     }
 
     static const QList<JsonParsing::KeyValidateInfo> keyInfoList = {
-        { _enumValuesArrayDescriptionJsonKey, QJsonValue::String, true },
-        { _enumValuesArrayValueJsonKey, QJsonValue::Double, true },
+        {_enumValuesArrayDescriptionJsonKey.data(), QJsonValue::String, true},
+        {_enumValuesArrayValueJsonKey.data(), QJsonValue::Double, true},
     };
 
     const QJsonArray &rgValueDescription = jsonObject[_enumValuesArrayJsonKey].toArray();
@@ -1614,8 +1630,8 @@ bool FactMetaData::_parseBitmaskArray(const QJsonObject &jsonObject, QStringList
     }
 
     static const QList<JsonParsing::KeyValidateInfo> keyInfoList = {
-        { _enumBitmaskArrayDescriptionJsonKey, QJsonValue::String, true },
-        { _enumBitmaskArrayIndexJsonKey, QJsonValue::Double, true },
+        {_enumBitmaskArrayDescriptionJsonKey.data(), QJsonValue::String, true},
+        {_enumBitmaskArrayIndexJsonKey.data(), QJsonValue::Double, true},
     };
 
     const QJsonArray &rgValueDescription = jsonObject[_enumBitmaskArrayJsonKey].toArray();

@@ -14,6 +14,7 @@ class MissionControllerTest : public MissionControllerManagerTest
     Q_OBJECT
 
 public:
+    MissionControllerTest();
     ~MissionControllerTest() override;
 
 private slots:
@@ -22,9 +23,14 @@ private slots:
     void _testLoadJsonSectionAvailable();
     void _testGlobalAltFrame();
     void _testFlightPathSegmentCacheReuse();
+    void _testSplitSegmentTracksSegmentRebuild_data();
+    void _testSplitSegmentTracksSegmentRebuild();
+    void _testSplitSegmentWhenCurrentItemGainsCoordinate();
+    void _testSplitSegmentNotOnLegFromHome();
     void _testGimbalRecalc();
     void _testVehicleYawRecalc();
     void _testMissionReposition();
+    void _testMissionOffset_data();
     void _testMissionOffset();
     void _testMissionRotate();
     void _testMissionTransformsInvalidHome();
@@ -42,6 +48,12 @@ private slots:
     void _testVTOLMulticopterTakeoffAfterFixedWingTransition();
     void _testVTOLTakeoffJsonRoundTrip_data();
     void _testVTOLTakeoffJsonRoundTrip();
+    void _testUnitsChangeDoesNotDirtyPlan_data();
+    void _testUnitsChangeDoesNotDirtyPlan();
+    void _testApplyDefaultMissionAltitudeOfferedOnlyForExistingItems_data();
+    void _testApplyDefaultMissionAltitudeOfferedOnlyForExistingItems();
+    void _testApplyDefaultMissionAltitudeSkipsItemsInOtherFrames_data();
+    void _testApplyDefaultMissionAltitudeSkipsItemsInOtherFrames();
 
     // Parameterized tests - runs once per autopilot type
     UT_PARAMETERIZED_TEST(_testEmptyVehicle);

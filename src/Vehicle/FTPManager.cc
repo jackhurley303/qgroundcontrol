@@ -4,6 +4,7 @@
 #include "QGCLoggingCategory.h"
 #include "Vehicle.h"
 #include "VehicleLinkManager.h"
+#include "VehicleSigningController.h"
 
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
@@ -19,12 +20,11 @@ FTPManager::FTPManager(Vehicle* vehicle)
     , _vehicle  (vehicle)
 {
     _ackOrNakTimeoutTimer.setSingleShot(true);
-    // Mock link responds immediately if at all, speed up unit tests with faster timeout
     _ackOrNakTimeoutTimer.setInterval(QGC::runningUnitTests() ? kTestAckTimeoutMs : _ackOrNakTimeoutMsecs);
     connect(&_ackOrNakTimeoutTimer, &QTimer::timeout, this, &FTPManager::_ackOrNakTimeout);
 
     // Make sure we don't have bad structure packing
-    Q_ASSERT(sizeof(MavlinkFTP::RequestHeader) == 12);
+    static_assert(sizeof(MavlinkFTP::RequestHeader) == 12, "MavlinkFTP::RequestHeader must be 12 bytes");
 
     _uploadState.reset();
 }
@@ -63,7 +63,10 @@ bool FTPManager::download(uint8_t fromCompId, const QString& fromURI, const QStr
     if (fileName.isEmpty()) {
         _downloadState.fileName = _downloadState.fullPathOnVehicle.right(_downloadState.fullPathOnVehicle.size() - lastDirSlashIndex);
     } else {
-        _downloadState.fileName = fileName;
+        // fileName can originate from the vehicle: a MAVLink-FTP ListDirectory entry is
+        // surfaced to QML and handed straight back here as the local name. Reduce it the
+        // same way the derived branch above already does, so it cannot act as a path.
+        _downloadState.fileName = QFileInfo(fileName).fileName();
     }
 
     qCDebug(FTPManagerLog) << "_downloadState.fullPathOnVehicle:_downloadState.fileName" << _downloadState.fullPathOnVehicle << _downloadState.fileName;
@@ -621,8 +624,8 @@ void FTPManager::_mavlinkMessageReceived(const mavlink_message_t& message)
     mavlink_msg_file_transfer_protocol_decode(&message, &data);
 
     // Make sure we are the target system
-    int qgcId = MAVLinkProtocol::instance()->getSystemId();
-    if (data.target_system != qgcId) {
+    quint32 qgcId = MAVLinkProtocol::instance()->getSystemId();
+    if (mavlink_msg_get_target_sysid(&message, mavlink_get_msg_entry(message.msgid)) != qgcId) {
         return;
     }
 
@@ -772,7 +775,14 @@ void FTPManager::_openFileROAckOrNak(const MavlinkFTP::Request* ackOrNak)
 uint8_t FTPManager::_readChunkSize(void) const
 {
     const SharedLinkInterfacePtr sharedLink = _vehicle->vehicleLinkManager()->primaryLink().lock();
-    return (sharedLink && sharedLink->isRadioLink()) ? kRadioReadChunkSize : kFullReadChunkSize;
+    if (!sharedLink || !sharedLink->isRadioLink()) {
+        return kFullReadChunkSize;
+    }
+
+    // Treat a link that is switching signing on or off as signed, packets may carry a signature either way
+    const VehicleSigningController* const signing = _vehicle->signingController();
+    const bool signedLink = signing && (signing->signingStatus().state != SigningStatus::State::Off);
+    return signedLink ? kRadioReadChunkSizeSigned : kRadioReadChunkSize;
 }
 
 void FTPManager::_burstReadFileWorker(bool firstRequest)

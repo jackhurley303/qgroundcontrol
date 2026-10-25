@@ -83,13 +83,17 @@ Item {
     /// Set the full and zoom range (called on log load).
     /// Emits zoomRangeSet so derived charts can refresh their series.
     function initRange(minX, maxX) {
-        fullMinX   = minX
-        fullMaxX   = maxX
-        zoomMinX   = minX
-        zoomMaxX   = maxX
-        _xAxis.min = minX
-        _xAxis.max = maxX
-        zoomRangeSet(minX, maxX)
+        // Small margin each side so data doesn't touch the edges; timestamps are time since boot so never below 0
+        const pad = (maxX - minX) * 0.025
+        const paddedMinX = Math.max(0, minX - pad)
+        const paddedMaxX = maxX + pad
+        fullMinX   = paddedMinX
+        fullMaxX   = paddedMaxX
+        zoomMinX   = paddedMinX
+        zoomMaxX   = paddedMaxX
+        _xAxis.min = paddedMinX
+        _xAxis.max = paddedMaxX
+        zoomRangeSet(paddedMinX, paddedMaxX)
     }
 
     /// User-driven zoom — also emits zoomApplied for cross-chart sync.
@@ -194,14 +198,14 @@ Item {
 
         theme: GraphsTheme {
             colorScheme: qgcPal.globalTheme === QGCPalette.Light ? GraphsTheme.ColorScheme.Light : GraphsTheme.ColorScheme.Dark
-            backgroundColor: qgcPal.windowShadeDark
+            backgroundColor: qgcPal.windowPanel
             backgroundVisible: true
-            plotAreaBackgroundColor: qgcPal.windowShadeDark
-            grid.mainColor: Qt.rgba(qgcPal.text.r, qgcPal.text.g, qgcPal.text.b, 0.25)
-            grid.subColor: Qt.rgba(qgcPal.text.r, qgcPal.text.g, qgcPal.text.b, 0.12)
+            plotAreaBackgroundColor: qgcPal.windowPanel
+            grid.mainColor: Qt.rgba(qgcPal.textPrimary.r, qgcPal.textPrimary.g, qgcPal.textPrimary.b, 0.25)
+            grid.subColor: Qt.rgba(qgcPal.textPrimary.r, qgcPal.textPrimary.g, qgcPal.textPrimary.b, 0.12)
             grid.mainWidth: 1
             labelBackgroundVisible: false
-            labelTextColor: qgcPal.text
+            labelTextColor: qgcPal.textPrimary
             axisXLabelFont.family: ScreenTools.fixedFontFamily
             axisXLabelFont.pointSize: ScreenTools.smallFontPointSize
             axisYLabelFont.family: ScreenTools.fixedFontFamily
@@ -275,7 +279,7 @@ Item {
         id: _zoomRect
         visible: false
         color: Qt.rgba(1, 1, 1, 0.2)
-        border.color: qgcPal.buttonHighlight
+        border.color: qgcPal.accent
         border.width: 1
         z: 10
     }
@@ -362,7 +366,7 @@ Item {
         y: _chart.plotArea.y
         width: 1
         height: _chart.plotArea.height
-        color: qgcPal.text
+        color: qgcPal.textPrimary
         z: 12
     }
 

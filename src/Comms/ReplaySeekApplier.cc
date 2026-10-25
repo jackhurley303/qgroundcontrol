@@ -175,7 +175,7 @@ static QVariant _decodeParamValue(float rawValue, uint8_t paramType)
     }
 }
 
-void ReplaySeekApplier::_onSeekParamResolved(int sysId, QList<ParamSeekValue> resolved)
+void ReplaySeekApplier::_onSeekParamResolved(quint32 sysId, QList<ParamSeekValue> resolved)
 {
     Vehicle* vehicle = MultiVehicleManager::instance()->activeVehicle();
     if (!vehicle || vehicle->id() != sysId) return;

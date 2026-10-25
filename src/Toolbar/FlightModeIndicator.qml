@@ -20,7 +20,7 @@ Item {
 
     property bool _isVTOL:          activeVehicle ? activeVehicle.vtol : false
     property bool _vtolInFWDFlight: activeVehicle ? activeVehicle.vtolInFwdFlight : false
-    property var  _vehicleInAir:    activeVehicle ? activeVehicle.flying || activeVehicle.landing : false
+    property var  _vehicleInAir:    activeVehicle ? activeVehicle.airborne || activeVehicle.landing : false
 
     QGCPalette { id: qgcPal }
 
@@ -35,14 +35,14 @@ Item {
             Layout.preferredHeight: ScreenTools.defaultFontPixelHeight
             fillMode:               Image.PreserveAspectFit
             mipmap:                 true
-            color:                  qgcPal.text
+            color:                  qgcPal.textPrimary
             source:                 "/qmlimages/FlightModesComponentIcon.png"
         }
 
         QGCLabel {
             id:                 flightModeLabel
             text:               activeVehicle ? activeVehicle.flightMode : qsTr("N/A", "No data to display")
-            color:              qgcPal.text
+            color:              qgcPal.textPrimary
             font.pointSize:     fontPointSize
 
         }
@@ -221,7 +221,7 @@ Item {
                 source:             _activeVehicle.expandedToolbarIndicatorSource("FlightMode")
             }
 
-            SettingsGroupLayout {
+            QGCGroupBox {
                 Layout.fillWidth:  true
 
                 FactCheckBoxSlider {

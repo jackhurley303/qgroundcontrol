@@ -83,75 +83,183 @@ Component {
             isReadonly: true
         }
         Property {
-            name: "windowShadeLight"
+            name: "windowPanel"
             type: "QColor"
-            read: "windowShadeLight"
-            write: "setWindowShadeLight"
+            read: "windowPanel"
+            write: "setWindowPanel"
             notify: "paletteChanged"
             index: 7
             lineNumber: 109
         }
         Property {
-            name: "windowShadeLightColors"
+            name: "windowPanelColors"
             type: "QStringList"
-            read: "windowShadeLightColors"
+            read: "windowPanelColors"
             notify: "paletteChanged"
             index: 8
             lineNumber: 109
             isReadonly: true
         }
         Property {
-            name: "windowShade"
+            name: "windowCard"
             type: "QColor"
-            read: "windowShade"
-            write: "setWindowShade"
+            read: "windowCard"
+            write: "setWindowCard"
             notify: "paletteChanged"
             index: 9
             lineNumber: 110
         }
         Property {
-            name: "windowShadeColors"
+            name: "windowCardColors"
             type: "QStringList"
-            read: "windowShadeColors"
+            read: "windowCardColors"
             notify: "paletteChanged"
             index: 10
             lineNumber: 110
             isReadonly: true
         }
         Property {
-            name: "windowShadeDark"
+            name: "windowInset"
             type: "QColor"
-            read: "windowShadeDark"
-            write: "setWindowShadeDark"
+            read: "windowInset"
+            write: "setWindowInset"
             notify: "paletteChanged"
             index: 11
             lineNumber: 111
         }
         Property {
-            name: "windowShadeDarkColors"
+            name: "windowInsetColors"
             type: "QStringList"
-            read: "windowShadeDarkColors"
+            read: "windowInsetColors"
             notify: "paletteChanged"
             index: 12
             lineNumber: 111
             isReadonly: true
         }
         Property {
-            name: "text"
+            name: "borderSubtle"
             type: "QColor"
-            read: "text"
-            write: "setText"
+            read: "borderSubtle"
+            write: "setBorderSubtle"
             notify: "paletteChanged"
             index: 13
             lineNumber: 112
         }
         Property {
-            name: "textColors"
+            name: "borderSubtleColors"
             type: "QStringList"
-            read: "textColors"
+            read: "borderSubtleColors"
             notify: "paletteChanged"
             index: 14
             lineNumber: 112
+            isReadonly: true
+        }
+        Property {
+            name: "textPrimary"
+            type: "QColor"
+            read: "textPrimary"
+            write: "setTextPrimary"
+            notify: "paletteChanged"
+            index: 15
+            lineNumber: 113
+        }
+        Property {
+            name: "textPrimaryColors"
+            type: "QStringList"
+            read: "textPrimaryColors"
+            notify: "paletteChanged"
+            index: 16
+            lineNumber: 113
+            isReadonly: true
+        }
+        Property {
+            name: "textSecondary"
+            type: "QColor"
+            read: "textSecondary"
+            write: "setTextSecondary"
+            notify: "paletteChanged"
+            index: 17
+            lineNumber: 114
+        }
+        Property {
+            name: "textSecondaryColors"
+            type: "QStringList"
+            read: "textSecondaryColors"
+            notify: "paletteChanged"
+            index: 18
+            lineNumber: 114
+            isReadonly: true
+        }
+        Property {
+            name: "accent"
+            type: "QColor"
+            read: "accent"
+            write: "setAccent"
+            notify: "paletteChanged"
+            index: 19
+            lineNumber: 115
+        }
+        Property {
+            name: "accentColors"
+            type: "QStringList"
+            read: "accentColors"
+            notify: "paletteChanged"
+            index: 20
+            lineNumber: 115
+            isReadonly: true
+        }
+        Property {
+            name: "accentSubtle"
+            type: "QColor"
+            read: "accentSubtle"
+            write: "setAccentSubtle"
+            notify: "paletteChanged"
+            index: 21
+            lineNumber: 116
+        }
+        Property {
+            name: "accentSubtleColors"
+            type: "QStringList"
+            read: "accentSubtleColors"
+            notify: "paletteChanged"
+            index: 22
+            lineNumber: 116
+            isReadonly: true
+        }
+        Property {
+            name: "accentText"
+            type: "QColor"
+            read: "accentText"
+            write: "setAccentText"
+            notify: "paletteChanged"
+            index: 23
+            lineNumber: 117
+        }
+        Property {
+            name: "accentTextColors"
+            type: "QStringList"
+            read: "accentTextColors"
+            notify: "paletteChanged"
+            index: 24
+            lineNumber: 117
+            isReadonly: true
+        }
+        Property {
+            name: "errorText"
+            type: "QColor"
+            read: "errorText"
+            write: "setErrorText"
+            notify: "paletteChanged"
+            index: 25
+            lineNumber: 118
+        }
+        Property {
+            name: "errorTextColors"
+            type: "QStringList"
+            read: "errorTextColors"
+            notify: "paletteChanged"
+            index: 26
+            lineNumber: 118
             isReadonly: true
         }
         Property {
@@ -160,178 +268,106 @@ Component {
             read: "warningText"
             write: "setWarningText"
             notify: "paletteChanged"
-            index: 15
-            lineNumber: 113
+            index: 27
+            lineNumber: 119
         }
         Property {
             name: "warningTextColors"
             type: "QStringList"
             read: "warningTextColors"
             notify: "paletteChanged"
-            index: 16
-            lineNumber: 113
-            isReadonly: true
-        }
-        Property {
-            name: "button"
-            type: "QColor"
-            read: "button"
-            write: "setButton"
-            notify: "paletteChanged"
-            index: 17
-            lineNumber: 114
-        }
-        Property {
-            name: "buttonColors"
-            type: "QStringList"
-            read: "buttonColors"
-            notify: "paletteChanged"
-            index: 18
-            lineNumber: 114
-            isReadonly: true
-        }
-        Property {
-            name: "buttonBorder"
-            type: "QColor"
-            read: "buttonBorder"
-            write: "setButtonBorder"
-            notify: "paletteChanged"
-            index: 19
-            lineNumber: 115
-        }
-        Property {
-            name: "buttonBorderColors"
-            type: "QStringList"
-            read: "buttonBorderColors"
-            notify: "paletteChanged"
-            index: 20
-            lineNumber: 115
-            isReadonly: true
-        }
-        Property {
-            name: "buttonText"
-            type: "QColor"
-            read: "buttonText"
-            write: "setButtonText"
-            notify: "paletteChanged"
-            index: 21
-            lineNumber: 116
-        }
-        Property {
-            name: "buttonTextColors"
-            type: "QStringList"
-            read: "buttonTextColors"
-            notify: "paletteChanged"
-            index: 22
-            lineNumber: 116
-            isReadonly: true
-        }
-        Property {
-            name: "buttonHighlight"
-            type: "QColor"
-            read: "buttonHighlight"
-            write: "setButtonHighlight"
-            notify: "paletteChanged"
-            index: 23
-            lineNumber: 117
-        }
-        Property {
-            name: "buttonHighlightColors"
-            type: "QStringList"
-            read: "buttonHighlightColors"
-            notify: "paletteChanged"
-            index: 24
-            lineNumber: 117
-            isReadonly: true
-        }
-        Property {
-            name: "buttonHighlightText"
-            type: "QColor"
-            read: "buttonHighlightText"
-            write: "setButtonHighlightText"
-            notify: "paletteChanged"
-            index: 25
-            lineNumber: 118
-        }
-        Property {
-            name: "buttonHighlightTextColors"
-            type: "QStringList"
-            read: "buttonHighlightTextColors"
-            notify: "paletteChanged"
-            index: 26
-            lineNumber: 118
-            isReadonly: true
-        }
-        Property {
-            name: "primaryButton"
-            type: "QColor"
-            read: "primaryButton"
-            write: "setPrimaryButton"
-            notify: "paletteChanged"
-            index: 27
-            lineNumber: 119
-        }
-        Property {
-            name: "primaryButtonColors"
-            type: "QStringList"
-            read: "primaryButtonColors"
-            notify: "paletteChanged"
             index: 28
             lineNumber: 119
             isReadonly: true
         }
         Property {
-            name: "primaryButtonText"
+            name: "successText"
             type: "QColor"
-            read: "primaryButtonText"
-            write: "setPrimaryButtonText"
+            read: "successText"
+            write: "setSuccessText"
             notify: "paletteChanged"
             index: 29
             lineNumber: 120
         }
         Property {
-            name: "primaryButtonTextColors"
+            name: "successTextColors"
             type: "QStringList"
-            read: "primaryButtonTextColors"
+            read: "successTextColors"
             notify: "paletteChanged"
             index: 30
             lineNumber: 120
             isReadonly: true
         }
         Property {
-            name: "textField"
+            name: "errorIndicator"
             type: "QColor"
-            read: "textField"
-            write: "setTextField"
+            read: "errorIndicator"
+            write: "setErrorIndicator"
             notify: "paletteChanged"
             index: 31
             lineNumber: 121
         }
         Property {
-            name: "textFieldColors"
+            name: "errorIndicatorColors"
             type: "QStringList"
-            read: "textFieldColors"
+            read: "errorIndicatorColors"
             notify: "paletteChanged"
             index: 32
             lineNumber: 121
             isReadonly: true
         }
         Property {
-            name: "textFieldText"
+            name: "warningIndicator"
             type: "QColor"
-            read: "textFieldText"
-            write: "setTextFieldText"
+            read: "warningIndicator"
+            write: "setWarningIndicator"
             notify: "paletteChanged"
             index: 33
             lineNumber: 122
         }
         Property {
-            name: "textFieldTextColors"
+            name: "warningIndicatorColors"
             type: "QStringList"
-            read: "textFieldTextColors"
+            read: "warningIndicatorColors"
             notify: "paletteChanged"
             index: 34
             lineNumber: 122
+            isReadonly: true
+        }
+        Property {
+            name: "successIndicator"
+            type: "QColor"
+            read: "successIndicator"
+            write: "setSuccessIndicator"
+            notify: "paletteChanged"
+            index: 35
+            lineNumber: 123
+        }
+        Property {
+            name: "successIndicatorColors"
+            type: "QStringList"
+            read: "successIndicatorColors"
+            notify: "paletteChanged"
+            index: 36
+            lineNumber: 123
+            isReadonly: true
+        }
+        Property {
+            name: "indicatorText"
+            type: "QColor"
+            read: "indicatorText"
+            write: "setIndicatorText"
+            notify: "paletteChanged"
+            index: 37
+            lineNumber: 124
+        }
+        Property {
+            name: "indicatorTextColors"
+            type: "QStringList"
+            read: "indicatorTextColors"
+            notify: "paletteChanged"
+            index: 38
+            lineNumber: 124
             isReadonly: true
         }
         Property {
@@ -340,16 +376,16 @@ Component {
             read: "mapButton"
             write: "setMapButton"
             notify: "paletteChanged"
-            index: 35
-            lineNumber: 123
+            index: 39
+            lineNumber: 125
         }
         Property {
             name: "mapButtonColors"
             type: "QStringList"
             read: "mapButtonColors"
             notify: "paletteChanged"
-            index: 36
-            lineNumber: 123
+            index: 40
+            lineNumber: 125
             isReadonly: true
         }
         Property {
@@ -358,16 +394,16 @@ Component {
             read: "mapButtonHighlight"
             write: "setMapButtonHighlight"
             notify: "paletteChanged"
-            index: 37
-            lineNumber: 124
+            index: 41
+            lineNumber: 126
         }
         Property {
             name: "mapButtonHighlightColors"
             type: "QStringList"
             read: "mapButtonHighlightColors"
             notify: "paletteChanged"
-            index: 38
-            lineNumber: 124
+            index: 42
+            lineNumber: 126
             isReadonly: true
         }
         Property {
@@ -376,16 +412,16 @@ Component {
             read: "mapIndicator"
             write: "setMapIndicator"
             notify: "paletteChanged"
-            index: 39
-            lineNumber: 125
+            index: 43
+            lineNumber: 127
         }
         Property {
             name: "mapIndicatorColors"
             type: "QStringList"
             read: "mapIndicatorColors"
             notify: "paletteChanged"
-            index: 40
-            lineNumber: 125
+            index: 44
+            lineNumber: 127
             isReadonly: true
         }
         Property {
@@ -394,16 +430,16 @@ Component {
             read: "mapIndicatorChild"
             write: "setMapIndicatorChild"
             notify: "paletteChanged"
-            index: 41
-            lineNumber: 126
+            index: 45
+            lineNumber: 128
         }
         Property {
             name: "mapIndicatorChildColors"
             type: "QStringList"
             read: "mapIndicatorChildColors"
             notify: "paletteChanged"
-            index: 42
-            lineNumber: 126
+            index: 46
+            lineNumber: 128
             isReadonly: true
         }
         Property {
@@ -412,16 +448,16 @@ Component {
             read: "mapWidgetBorderLight"
             write: "setMapWidgetBorderLight"
             notify: "paletteChanged"
-            index: 43
-            lineNumber: 127
+            index: 47
+            lineNumber: 129
         }
         Property {
             name: "mapWidgetBorderLightColors"
             type: "QStringList"
             read: "mapWidgetBorderLightColors"
             notify: "paletteChanged"
-            index: 44
-            lineNumber: 127
+            index: 48
+            lineNumber: 129
             isReadonly: true
         }
         Property {
@@ -430,16 +466,16 @@ Component {
             read: "mapWidgetBorderDark"
             write: "setMapWidgetBorderDark"
             notify: "paletteChanged"
-            index: 45
-            lineNumber: 128
+            index: 49
+            lineNumber: 130
         }
         Property {
             name: "mapWidgetBorderDarkColors"
             type: "QStringList"
             read: "mapWidgetBorderDarkColors"
             notify: "paletteChanged"
-            index: 46
-            lineNumber: 128
+            index: 50
+            lineNumber: 130
             isReadonly: true
         }
         Property {
@@ -448,16 +484,16 @@ Component {
             read: "mapMissionTrajectory"
             write: "setMapMissionTrajectory"
             notify: "paletteChanged"
-            index: 47
-            lineNumber: 129
+            index: 51
+            lineNumber: 131
         }
         Property {
             name: "mapMissionTrajectoryColors"
             type: "QStringList"
             read: "mapMissionTrajectoryColors"
             notify: "paletteChanged"
-            index: 48
-            lineNumber: 129
+            index: 52
+            lineNumber: 131
             isReadonly: true
         }
         Property {
@@ -466,16 +502,16 @@ Component {
             read: "brandPrimary"
             write: "setBrandPrimary"
             notify: "paletteChanged"
-            index: 49
-            lineNumber: 130
+            index: 53
+            lineNumber: 132
         }
         Property {
             name: "brandPrimaryColors"
             type: "QStringList"
             read: "brandPrimaryColors"
             notify: "paletteChanged"
-            index: 50
-            lineNumber: 130
+            index: 54
+            lineNumber: 132
             isReadonly: true
         }
         Property {
@@ -484,16 +520,16 @@ Component {
             read: "brandAccent"
             write: "setBrandAccent"
             notify: "paletteChanged"
-            index: 51
-            lineNumber: 131
+            index: 55
+            lineNumber: 133
         }
         Property {
             name: "brandAccentColors"
             type: "QStringList"
             read: "brandAccentColors"
             notify: "paletteChanged"
-            index: 52
-            lineNumber: 131
+            index: 56
+            lineNumber: 133
             isReadonly: true
         }
         Property {
@@ -502,16 +538,16 @@ Component {
             read: "colorGreen"
             write: "setColorGreen"
             notify: "paletteChanged"
-            index: 53
-            lineNumber: 132
+            index: 57
+            lineNumber: 134
         }
         Property {
             name: "colorGreenColors"
             type: "QStringList"
             read: "colorGreenColors"
             notify: "paletteChanged"
-            index: 54
-            lineNumber: 132
+            index: 58
+            lineNumber: 134
             isReadonly: true
         }
         Property {
@@ -520,16 +556,16 @@ Component {
             read: "colorYellow"
             write: "setColorYellow"
             notify: "paletteChanged"
-            index: 55
-            lineNumber: 133
+            index: 59
+            lineNumber: 135
         }
         Property {
             name: "colorYellowColors"
             type: "QStringList"
             read: "colorYellowColors"
             notify: "paletteChanged"
-            index: 56
-            lineNumber: 133
+            index: 60
+            lineNumber: 135
             isReadonly: true
         }
         Property {
@@ -538,16 +574,16 @@ Component {
             read: "colorYellowGreen"
             write: "setColorYellowGreen"
             notify: "paletteChanged"
-            index: 57
-            lineNumber: 134
+            index: 61
+            lineNumber: 136
         }
         Property {
             name: "colorYellowGreenColors"
             type: "QStringList"
             read: "colorYellowGreenColors"
             notify: "paletteChanged"
-            index: 58
-            lineNumber: 134
+            index: 62
+            lineNumber: 136
             isReadonly: true
         }
         Property {
@@ -556,16 +592,16 @@ Component {
             read: "colorOrange"
             write: "setColorOrange"
             notify: "paletteChanged"
-            index: 59
-            lineNumber: 135
+            index: 63
+            lineNumber: 137
         }
         Property {
             name: "colorOrangeColors"
             type: "QStringList"
             read: "colorOrangeColors"
             notify: "paletteChanged"
-            index: 60
-            lineNumber: 135
+            index: 64
+            lineNumber: 137
             isReadonly: true
         }
         Property {
@@ -574,16 +610,16 @@ Component {
             read: "colorRed"
             write: "setColorRed"
             notify: "paletteChanged"
-            index: 61
-            lineNumber: 136
+            index: 65
+            lineNumber: 138
         }
         Property {
             name: "colorRedColors"
             type: "QStringList"
             read: "colorRedColors"
             notify: "paletteChanged"
-            index: 62
-            lineNumber: 136
+            index: 66
+            lineNumber: 138
             isReadonly: true
         }
         Property {
@@ -592,16 +628,16 @@ Component {
             read: "colorGrey"
             write: "setColorGrey"
             notify: "paletteChanged"
-            index: 63
-            lineNumber: 137
+            index: 67
+            lineNumber: 139
         }
         Property {
             name: "colorGreyColors"
             type: "QStringList"
             read: "colorGreyColors"
             notify: "paletteChanged"
-            index: 64
-            lineNumber: 137
+            index: 68
+            lineNumber: 139
             isReadonly: true
         }
         Property {
@@ -610,16 +646,16 @@ Component {
             read: "colorBlue"
             write: "setColorBlue"
             notify: "paletteChanged"
-            index: 65
-            lineNumber: 138
+            index: 69
+            lineNumber: 140
         }
         Property {
             name: "colorBlueColors"
             type: "QStringList"
             read: "colorBlueColors"
             notify: "paletteChanged"
-            index: 66
-            lineNumber: 138
+            index: 70
+            lineNumber: 140
             isReadonly: true
         }
         Property {
@@ -628,16 +664,16 @@ Component {
             read: "alertBackground"
             write: "setAlertBackground"
             notify: "paletteChanged"
-            index: 67
-            lineNumber: 139
+            index: 71
+            lineNumber: 141
         }
         Property {
             name: "alertBackgroundColors"
             type: "QStringList"
             read: "alertBackgroundColors"
             notify: "paletteChanged"
-            index: 68
-            lineNumber: 139
+            index: 72
+            lineNumber: 141
             isReadonly: true
         }
         Property {
@@ -646,16 +682,16 @@ Component {
             read: "alertBorder"
             write: "setAlertBorder"
             notify: "paletteChanged"
-            index: 69
-            lineNumber: 140
+            index: 73
+            lineNumber: 142
         }
         Property {
             name: "alertBorderColors"
             type: "QStringList"
             read: "alertBorderColors"
             notify: "paletteChanged"
-            index: 70
-            lineNumber: 140
+            index: 74
+            lineNumber: 142
             isReadonly: true
         }
         Property {
@@ -664,16 +700,16 @@ Component {
             read: "alertText"
             write: "setAlertText"
             notify: "paletteChanged"
-            index: 71
-            lineNumber: 141
+            index: 75
+            lineNumber: 143
         }
         Property {
             name: "alertTextColors"
             type: "QStringList"
             read: "alertTextColors"
             notify: "paletteChanged"
-            index: 72
-            lineNumber: 141
+            index: 76
+            lineNumber: 143
             isReadonly: true
         }
         Property {
@@ -682,70 +718,16 @@ Component {
             read: "missionItemEditor"
             write: "setMissionItemEditor"
             notify: "paletteChanged"
-            index: 73
-            lineNumber: 142
+            index: 77
+            lineNumber: 144
         }
         Property {
             name: "missionItemEditorColors"
             type: "QStringList"
             read: "missionItemEditorColors"
             notify: "paletteChanged"
-            index: 74
-            lineNumber: 142
-            isReadonly: true
-        }
-        Property {
-            name: "statusFailedText"
-            type: "QColor"
-            read: "statusFailedText"
-            write: "setstatusFailedText"
-            notify: "paletteChanged"
-            index: 75
-            lineNumber: 143
-        }
-        Property {
-            name: "statusFailedTextColors"
-            type: "QStringList"
-            read: "statusFailedTextColors"
-            notify: "paletteChanged"
-            index: 76
-            lineNumber: 143
-            isReadonly: true
-        }
-        Property {
-            name: "statusPassedText"
-            type: "QColor"
-            read: "statusPassedText"
-            write: "setstatusPassedText"
-            notify: "paletteChanged"
-            index: 77
-            lineNumber: 144
-        }
-        Property {
-            name: "statusPassedTextColors"
-            type: "QStringList"
-            read: "statusPassedTextColors"
-            notify: "paletteChanged"
             index: 78
             lineNumber: 144
-            isReadonly: true
-        }
-        Property {
-            name: "statusPendingText"
-            type: "QColor"
-            read: "statusPendingText"
-            write: "setstatusPendingText"
-            notify: "paletteChanged"
-            index: 79
-            lineNumber: 145
-        }
-        Property {
-            name: "statusPendingTextColors"
-            type: "QStringList"
-            read: "statusPendingTextColors"
-            notify: "paletteChanged"
-            index: 80
-            lineNumber: 145
             isReadonly: true
         }
         Property {
@@ -754,16 +736,16 @@ Component {
             read: "surveyPolygonInterior"
             write: "setSurveyPolygonInterior"
             notify: "paletteChanged"
-            index: 81
-            lineNumber: 146
+            index: 79
+            lineNumber: 145
         }
         Property {
             name: "surveyPolygonInteriorColors"
             type: "QStringList"
             read: "surveyPolygonInteriorColors"
             notify: "paletteChanged"
-            index: 82
-            lineNumber: 146
+            index: 80
+            lineNumber: 145
             isReadonly: true
         }
         Property {
@@ -772,16 +754,16 @@ Component {
             read: "surveyPolygonTerrainCollision"
             write: "setSurveyPolygonTerrainCollision"
             notify: "paletteChanged"
-            index: 83
-            lineNumber: 147
+            index: 81
+            lineNumber: 146
         }
         Property {
             name: "surveyPolygonTerrainCollisionColors"
             type: "QStringList"
             read: "surveyPolygonTerrainCollisionColors"
             notify: "paletteChanged"
-            index: 84
-            lineNumber: 147
+            index: 82
+            lineNumber: 146
             isReadonly: true
         }
         Property {
@@ -790,16 +772,16 @@ Component {
             read: "toolbarBackground"
             write: "setToolbarBackground"
             notify: "paletteChanged"
-            index: 85
-            lineNumber: 148
+            index: 83
+            lineNumber: 147
         }
         Property {
             name: "toolbarBackgroundColors"
             type: "QStringList"
             read: "toolbarBackgroundColors"
             notify: "paletteChanged"
-            index: 86
-            lineNumber: 148
+            index: 84
+            lineNumber: 147
             isReadonly: true
         }
         Property {
@@ -808,16 +790,16 @@ Component {
             read: "toolStripFGColor"
             write: "setToolStripFGColor"
             notify: "paletteChanged"
-            index: 87
-            lineNumber: 149
+            index: 85
+            lineNumber: 148
         }
         Property {
             name: "toolStripFGColorColors"
             type: "QStringList"
             read: "toolStripFGColorColors"
             notify: "paletteChanged"
-            index: 88
-            lineNumber: 149
+            index: 86
+            lineNumber: 148
             isReadonly: true
         }
         Property {
@@ -826,34 +808,16 @@ Component {
             read: "toolStripHoverColor"
             write: "setToolStripHoverColor"
             notify: "paletteChanged"
-            index: 89
-            lineNumber: 150
+            index: 87
+            lineNumber: 149
         }
         Property {
             name: "toolStripHoverColorColors"
             type: "QStringList"
             read: "toolStripHoverColorColors"
             notify: "paletteChanged"
-            index: 90
-            lineNumber: 150
-            isReadonly: true
-        }
-        Property {
-            name: "groupBorder"
-            type: "QColor"
-            read: "groupBorder"
-            write: "setGroupBorder"
-            notify: "paletteChanged"
-            index: 91
-            lineNumber: 151
-        }
-        Property {
-            name: "groupBorderColors"
-            type: "QStringList"
-            read: "groupBorderColors"
-            notify: "paletteChanged"
-            index: 92
-            lineNumber: 151
+            index: 88
+            lineNumber: 149
             isReadonly: true
         }
         Property {
@@ -862,16 +826,16 @@ Component {
             read: "modifiedParamValue"
             write: "setModifiedParamValue"
             notify: "paletteChanged"
-            index: 93
-            lineNumber: 152
+            index: 89
+            lineNumber: 150
         }
         Property {
             name: "modifiedParamValueColors"
             type: "QStringList"
             read: "modifiedParamValueColors"
             notify: "paletteChanged"
-            index: 94
-            lineNumber: 152
+            index: 90
+            lineNumber: 150
             isReadonly: true
         }
         Property {
@@ -880,16 +844,16 @@ Component {
             read: "photoCaptureButtonColor"
             write: "setPhotoCaptureButtonColor"
             notify: "paletteChanged"
-            index: 95
-            lineNumber: 153
+            index: 91
+            lineNumber: 151
         }
         Property {
             name: "photoCaptureButtonColorColors"
             type: "QStringList"
             read: "photoCaptureButtonColorColors"
             notify: "paletteChanged"
-            index: 96
-            lineNumber: 153
+            index: 92
+            lineNumber: 151
             isReadonly: true
         }
         Property {
@@ -898,19 +862,19 @@ Component {
             read: "videoCaptureButtonColor"
             write: "setVideoCaptureButtonColor"
             notify: "paletteChanged"
-            index: 97
-            lineNumber: 154
+            index: 93
+            lineNumber: 152
         }
         Property {
             name: "videoCaptureButtonColorColors"
             type: "QStringList"
             read: "videoCaptureButtonColorColors"
             notify: "paletteChanged"
-            index: 98
-            lineNumber: 154
+            index: 94
+            lineNumber: 152
             isReadonly: true
         }
-        Signal { name: "paletteChanged"; lineNumber: 167 }
+        Signal { name: "paletteChanged"; lineNumber: 165 }
     }
 Component {
         file: "QGCFileDialogController.h"

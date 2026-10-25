@@ -41,7 +41,7 @@ Rectangle {
         id:                 topRightPanelColumnLayout
         anchors.fill:       parent
         anchors.margins:    topRightPanel.color.a ? ScreenTools.defaultFontPixelHeight / 2 : 0
-        spacing:            ScreenTools.defaultFontPixelWidth * 0.75 // _layoutMargin
+        spacing:            ScreenTools.defaultFontPixelWidth * 0.75
 
         MultiVehicleList {
             id:                    multiVehicleList
@@ -58,7 +58,7 @@ Rectangle {
                     anchors.top:        parent.top
                     anchors.margins:    0
                     height:             1
-                    color:              QGroundControl.globalPalette.groupBorder
+                    color:              QGroundControl.globalPalette.borderSubtle
                 }
 
                 gradient: Gradient {
@@ -76,7 +76,7 @@ Rectangle {
                     anchors.bottom:     parent.bottom
                     anchors.margins:    0
                     height:             1
-                    color:              QGroundControl.globalPalette.groupBorder
+                    color:              QGroundControl.globalPalette.borderSubtle
                 }
             }
 
@@ -203,8 +203,6 @@ Rectangle {
                         anchors.horizontalCenter:   parent.horizontalCenter
                         sourceComponent:            globals.activeVehicle ? photoVideoControlComponent : undefined
 
-                        property real rightEdgeCenterInset: visible ? parent.width - x : 0
-
                         Component {
                             id: photoVideoControlComponent
 
@@ -227,7 +225,7 @@ Rectangle {
                     height:    ScreenTools.defaultFontPixelHeight  / 2
                     width:     height
                     radius:    width / 2
-                    color:     model.index === pageIndicator.currentIndex ? qgcPal.text : qgcPal.button
+                    color:     model.index === pageIndicator.currentIndex ? qgcPal.textPrimary : qgcPal.textSecondary
                     opacity:   model.index === pageIndicator.currentIndex ? 0.9 : 0.3
                 }
             }

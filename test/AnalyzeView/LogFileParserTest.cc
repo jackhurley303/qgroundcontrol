@@ -31,14 +31,14 @@ namespace {
 // Callers add formats, subscriptions, and data messages via the callbacks.
 using WriterFn = std::function<void(ulog_cpp::Writer &)>;
 
-QByteArray buildULog(WriterFn headerFn, WriterFn dataFn)
+QByteArray buildULog(WriterFn headerFn, WriterFn dataFn, uint64_t headerTimestampUs = 0)
 {
     std::vector<uint8_t> buffer;
     ulog_cpp::Writer writer([&](const uint8_t *data, int length) {
         buffer.insert(buffer.end(), data, data + length);
     });
 
-    writer.fileHeader(ulog_cpp::FileHeader{});
+    writer.fileHeader(ulog_cpp::FileHeader{headerTimestampUs});
     if (headerFn) {
         headerFn(writer);
     }
@@ -124,6 +124,111 @@ void LogFileParserTest::_parseULogNumericTopicTest()
     QVERIFY(qAbs(samples[0].toPointF().y() - 0.1) < 1e-5);
     QVERIFY(qAbs(samples[1].toPointF().x() - 1.0) < 1e-5);
     QVERIFY(qAbs(samples[1].toPointF().y() - 0.2) < 1e-5);
+}
+
+void LogFileParserTest::_parseULogArrayFieldTest()
+{
+    const auto makePayload = [](uint64_t ts, float c0, float c1, float c2) {
+        std::vector<uint8_t> buf(8 + 3 * sizeof(float));
+        const float control[3] = {c0, c1, c2};
+        memcpy(buf.data(), &ts, 8);
+        memcpy(buf.data() + 8, control, sizeof(control));
+        return buf;
+    };
+
+    const QByteArray bytes = buildULog(
+        [](ulog_cpp::Writer& w) {
+            w.messageFormat(ulog_cpp::MessageFormat{
+                "actuator_motors", {ulog_cpp::Field{"uint64_t", "timestamp"}, ulog_cpp::Field{"float", "control", 3}}});
+        },
+        [&makePayload](ulog_cpp::Writer& w) {
+            w.addLoggedMessage(ulog_cpp::AddLoggedMessage{0, 1, "actuator_motors"});
+            w.data(ulog_cpp::Data{1, makePayload(500000ULL, 0.1f, 0.2f, 0.3f)});
+            w.data(ulog_cpp::Data{1, makePayload(1000000ULL, 0.4f, 0.5f, 0.6f)});
+        });
+
+    QTemporaryFile tmp;
+    tmp.setFileTemplate(QDir::tempPath() + QStringLiteral("/logtest_XXXXXX.ulg"));
+    QVERIFY(writeTempFile(tmp, bytes));
+
+    LogFileParser parser;
+    QVERIFY(parser.parseFile(tmp.fileName()));
+    QVERIFY(parser.parseComplete());
+
+    const QStringList expectedFields = {
+        QStringLiteral("actuator_motors.control[0]"),
+        QStringLiteral("actuator_motors.control[1]"),
+        QStringLiteral("actuator_motors.control[2]"),
+    };
+    QCOMPARE(parser.plottableFields(), expectedFields);
+
+    const QVariantList samples = parser.fieldSamples(QStringLiteral("actuator_motors.control[2]"));
+    QCOMPARE(samples.size(), 2);
+    QVERIFY(qAbs(samples[0].toPointF().x() - 0.5) < 1e-5);
+    QVERIFY(qAbs(samples[0].toPointF().y() - 0.3) < 1e-5);
+    QVERIFY(qAbs(samples[1].toPointF().x() - 1.0) < 1e-5);
+    QVERIFY(qAbs(samples[1].toPointF().y() - 0.6) < 1e-5);
+}
+
+void LogFileParserTest::_parseULogNestedArrayFieldTest()
+{
+    // esc_status { uint64 timestamp; uint8 esc_count; esc_report esc[2] }
+    // esc_report { int32 esc_rpm; float esc_voltage }
+    const auto makePayload = [](uint64_t ts, int32_t rpm0, float volt0, int32_t rpm1, float volt1) {
+        std::vector<uint8_t> buf;
+        const auto append = [&buf](const auto& value) {
+            const auto* bytes = reinterpret_cast<const uint8_t*>(&value);
+            buf.insert(buf.end(), bytes, bytes + sizeof(value));
+        };
+        const uint8_t escCount = 2;
+        append(ts);
+        append(escCount);
+        append(rpm0);
+        append(volt0);
+        append(rpm1);
+        append(volt1);
+        return buf;
+    };
+
+    const QByteArray bytes = buildULog(
+        [](ulog_cpp::Writer& w) {
+            w.messageFormat(ulog_cpp::MessageFormat{
+                "esc_report", {ulog_cpp::Field{"int32_t", "esc_rpm"}, ulog_cpp::Field{"float", "esc_voltage"}}});
+            w.messageFormat(ulog_cpp::MessageFormat{
+                "esc_status",
+                {ulog_cpp::Field{"uint64_t", "timestamp"}, ulog_cpp::Field{"uint8_t", "esc_count"},
+                 ulog_cpp::Field{"esc_report", "esc", 2}}});
+        },
+        [&makePayload](ulog_cpp::Writer& w) {
+            w.addLoggedMessage(ulog_cpp::AddLoggedMessage{0, 1, "esc_status"});
+            w.data(ulog_cpp::Data{1, makePayload(500000ULL, 1000, 15.1f, 1100, 15.2f)});
+            w.data(ulog_cpp::Data{1, makePayload(1000000ULL, 2000, 14.9f, 2100, 14.8f)});
+        });
+
+    QTemporaryFile tmp;
+    tmp.setFileTemplate(QDir::tempPath() + QStringLiteral("/logtest_XXXXXX.ulg"));
+    QVERIFY(writeTempFile(tmp, bytes));
+
+    LogFileParser parser;
+    QVERIFY(parser.parseFile(tmp.fileName()));
+    QVERIFY(parser.parseComplete());
+
+    const QStringList expectedFields = {
+        QStringLiteral("esc_status.esc[0].esc_rpm"), QStringLiteral("esc_status.esc[0].esc_voltage"),
+        QStringLiteral("esc_status.esc[1].esc_rpm"), QStringLiteral("esc_status.esc[1].esc_voltage"),
+        QStringLiteral("esc_status.esc_count"),
+    };
+    QCOMPARE(parser.plottableFields(), expectedFields);
+
+    const QVariantList rpm1 = parser.fieldSamples(QStringLiteral("esc_status.esc[1].esc_rpm"));
+    QCOMPARE(rpm1.size(), 2);
+    QVERIFY(qAbs(rpm1[0].toPointF().y() - 1100.0) < 1e-5);
+    QVERIFY(qAbs(rpm1[1].toPointF().y() - 2100.0) < 1e-5);
+
+    const QVariantList volt0 = parser.fieldSamples(QStringLiteral("esc_status.esc[0].esc_voltage"));
+    QCOMPARE(volt0.size(), 2);
+    QVERIFY(qAbs(volt0[0].toPointF().y() - 15.1) < 1e-5);
+    QVERIFY(qAbs(volt0[1].toPointF().y() - 14.9) < 1e-5);
 }
 
 void LogFileParserTest::_parseULogParameterTest()
@@ -230,6 +335,47 @@ void LogFileParserTest::_parseULogModeSegmentsTest()
 
     QVERIFY(modes.contains(QStringLiteral("Manual")));
     QVERIFY(modes.contains(QStringLiteral("Mission")));
+}
+
+void LogFileParserTest::_parseULogStaleInitialSamplesTest()
+{
+    // PX4 logs each topic's last value when logging starts, keeping its original (older) timestamp
+    constexpr uint64_t logStartUs = 148300000ULL;
+    const QByteArray bytes = buildULog(
+        [](ulog_cpp::Writer& w) {
+            w.messageFormat(ulog_cpp::MessageFormat{
+                "transponder_report",
+                {ulog_cpp::Field{"uint64_t", "timestamp"}, ulog_cpp::Field{"float", "altitude"}}});
+            w.messageFormat(ulog_cpp::MessageFormat{
+                "sensor_combined", {ulog_cpp::Field{"uint64_t", "timestamp"}, ulog_cpp::Field{"float", "gyro_rad_x"}}});
+        },
+        [](ulog_cpp::Writer& w) {
+            w.addLoggedMessage(ulog_cpp::AddLoggedMessage{0, 1, "transponder_report"});
+            w.addLoggedMessage(ulog_cpp::AddLoggedMessage{0, 2, "sensor_combined"});
+            w.data(ulog_cpp::Data{1, makePayload64Float(0ULL, 42.0f)});
+            w.data(ulog_cpp::Data{2, makePayload64Float(logStartUs + 20000ULL, 0.1f)});
+            w.data(ulog_cpp::Data{2, makePayload64Float(212500000ULL, 0.2f)});
+        },
+        logStartUs);
+
+    QTemporaryFile tmp;
+    tmp.setFileTemplate(QDir::tempPath() + QStringLiteral("/logtest_XXXXXX.ulg"));
+    QVERIFY(writeTempFile(tmp, bytes));
+
+    LogFileParser parser;
+    QVERIFY(parser.parseFile(tmp.fileName()));
+
+    QCOMPARE_LT(qAbs(parser.minTimestamp() - 148.3), 1e-6);
+    QCOMPARE_LT(qAbs(parser.maxTimestamp() - 212.5), 1e-6);
+
+    const QVariantList stale = parser.fieldSamples(QStringLiteral("transponder_report.altitude"));
+    QCOMPARE(stale.size(), 1);
+    QCOMPARE_LT(qAbs(stale[0].toPointF().x() - 148.3), 1e-6);
+    QCOMPARE_LT(qAbs(stale[0].toPointF().y() - 42.0), 1e-5);
+
+    const QVariantList fresh = parser.fieldSamples(QStringLiteral("sensor_combined.gyro_rad_x"));
+    QCOMPARE(fresh.size(), 2);
+    QCOMPARE_LT(qAbs(fresh[0].toPointF().x() - 148.32), 1e-6);
 }
 
 void LogFileParserTest::_parseULogDropoutTest()
@@ -564,6 +710,15 @@ std::vector<uint8_t> makePayloadUint64Uint64(uint64_t a, uint64_t b)
     return buf;
 }
 
+// ULog payload: uint64_t timestamp followed by a nested message (e.g. vehicle_gnss.receiver)
+std::vector<uint8_t> makePayloadTimestampNested(uint64_t ts, const std::vector<uint8_t>& nested)
+{
+    std::vector<uint8_t> buf(8);
+    memcpy(buf.data(), &ts, 8);
+    buf.insert(buf.end(), nested.begin(), nested.end());
+    return buf;
+}
+
 } // anonymous namespace
 
 void LogFileParserTest::_gpsPathULogVehicleGlobalPositionTest()
@@ -661,6 +816,59 @@ void LogFileParserTest::_gpsPathULogVehicleGpsPositionLatDegTest()
     }
 }
 
+void LogFileParserTest::_gpsPathULogVehicleGnssTest()
+{
+    // PX4 logs vehicle_gnss with the selected receiver's sensor_gnss sample nested under 'receiver'.
+    // vehicle_global_position is intentionally absent to confirm fallback.
+    struct Sample
+    {
+        double lat;
+        double lon;
+    };
+
+    static const Sample samples[] = {
+        {47.397742, 8.545594},
+        {47.397800, 8.545700},
+        {47.397900, 8.545800},
+    };
+
+    const QByteArray bytes = buildULog(
+        [](ulog_cpp::Writer& w) {
+            w.messageFormat(ulog_cpp::MessageFormat{
+                "sensor_gnss",
+                {ulog_cpp::Field{"uint64_t", "timestamp"}, ulog_cpp::Field{"double", "latitude"},
+                 ulog_cpp::Field{"double", "longitude"}}});
+            w.messageFormat(ulog_cpp::MessageFormat{
+                "vehicle_gnss",
+                {ulog_cpp::Field{"uint64_t", "timestamp"}, ulog_cpp::Field{"sensor_gnss", "receiver"}}});
+        },
+        [](ulog_cpp::Writer& w) {
+            w.addLoggedMessage(ulog_cpp::AddLoggedMessage{0, 1, "vehicle_gnss"});
+            uint64_t ts = 500000ULL;
+            for (const auto& s : samples) {
+                w.data(ulog_cpp::Data{1, makePayloadTimestampNested(ts, makePayload64DoubleDouble(ts, s.lat, s.lon))});
+                ts += 500000ULL;
+            }
+        });
+
+    QTemporaryFile tmp;
+    tmp.setFileTemplate(QDir::tempPath() + QStringLiteral("/logtest_XXXXXX.ulg"));
+    QVERIFY(writeTempFile(tmp, bytes));
+
+    LogFileParser parser;
+    QVERIFY(parser.parseFile(tmp.fileName()));
+    QVERIFY(parser.parseComplete());
+
+    const QVariantList path = parser.gpsPath();
+    QCOMPARE(path.size(), static_cast<int>(std::size(samples)));
+
+    for (int i = 0; i < path.size(); i++) {
+        const QVariantMap coord = path[i].toMap();
+        QVERIFY(qAbs(coord.value(QStringLiteral("latitude")).toDouble() - samples[i].lat) < 1e-6);
+        QVERIFY(qAbs(coord.value(QStringLiteral("longitude")).toDouble() - samples[i].lon) < 1e-6);
+    }
+}
+
 void LogFileParserTest::_gpsPathAPMDataFlashPOSTest()
 {
     // Build a minimal DataFlash .bin with a POS message (format QLL).
@@ -698,6 +906,119 @@ void LogFileParserTest::_gpsPathAPMDataFlashPOSTest()
         // 'L' precision is 1e-7 degrees; allow a small rounding tolerance
         QVERIFY(qAbs(coord.value(QStringLiteral("latitude")).toDouble()  - samples[i].lat) < 1e-6);
         QVERIFY(qAbs(coord.value(QStringLiteral("longitude")).toDouble() - samples[i].lon) < 1e-6);
+    }
+}
+
+void LogFileParserTest::_gpsPathAPMDataFlashMultiInstanceTest()
+{
+    // GPS: Q(TimeUS) + B(I) + B(Status) + L(Lat) + L(Lng) + e(Alt) = 22 byte payload
+    QByteArray bytes;
+    appendBinMessage(bytes, 128, makeFmtPayloadStr(153, 25, "GPS", "QBBLLe", "TimeUS,I,Status,Lat,Lng,Alt"));
+    appendBinMessage(bytes, 128, makeFmtPayloadStr(177, 44, "FMTU", "QBNN", "TimeUS,FmtType,UnitIds,MultIds"));
+
+    QByteArray fmtu(41, '\0');
+    fmtu[8] = static_cast<char>(153);
+    memcpy(fmtu.data() + 9, "s#-DUm", 6);
+    memcpy(fmtu.data() + 25, "F--GGB", 6);
+    appendBinMessage(bytes, 177, fmtu);
+
+    const auto makeGps = [](int i, uint8_t instance, uint8_t status, double lat, double lon) {
+        QByteArray payload(22, '\0');
+        const uint64_t timeUs = static_cast<uint64_t>(i + 1) * 1000000ULL;
+        const int32_t latRaw = static_cast<int32_t>(lat * 1.0e7);
+        const int32_t lonRaw = static_cast<int32_t>(lon * 1.0e7);
+        const int32_t altRaw = 58400;
+        memcpy(payload.data(), &timeUs, 8);
+        payload[8] = static_cast<char>(instance);
+        payload[9] = static_cast<char>(status);
+        memcpy(payload.data() + 10, &latRaw, 4);
+        memcpy(payload.data() + 14, &lonRaw, 4);
+        memcpy(payload.data() + 18, &altRaw, 4);
+        return payload;
+    };
+
+    // Instance 0 never gets a 3D fix, so the path must come from instance 1
+    for (int i = 0; i < 3; i++) {
+        appendBinMessage(bytes, 153, makeGps(i, 0, 1, 10.0, 20.0));
+        appendBinMessage(bytes, 153, makeGps(i, 1, 3, -35.0 + (i * 0.001), 149.0));
+    }
+
+    QTemporaryFile tmp;
+    tmp.setFileTemplate(QDir::tempPath() + QStringLiteral("/logtest_XXXXXX.bin"));
+    QVERIFY(writeTempFile(tmp, bytes));
+
+    LogFileParser parser;
+    QVERIFY(parser.parseFile(tmp.fileName()));
+    QVERIFY(parser.parseComplete());
+
+    const QVariantList path = parser.gpsPath();
+    QCOMPARE(path.size(), 3);
+    for (int i = 0; i < path.size(); i++) {
+        const QVariantMap coord = path[i].toMap();
+        QVERIFY(qAbs(coord.value(QStringLiteral("latitude")).toDouble() - (-35.0 + (i * 0.001))) < 1e-6);
+        QVERIFY(qAbs(coord.value(QStringLiteral("longitude")).toDouble() - 149.0) < 1e-6);
+    }
+    QCOMPARE(parser.gpsAltitudeFieldName(), QStringLiteral("GPS[1].Alt"));
+}
+
+void LogFileParserTest::_parseDataFlashMultiInstanceTest()
+{
+    QByteArray bytes;
+    // IMU/BARO: Q(TimeUS) + B(I) + f = 13 byte payload
+    appendBinMessage(bytes, 128, makeFmtPayloadStr(150, 16, "IMU", "QBf", "TimeUS,I,GyrX"));
+    appendBinMessage(bytes, 128, makeFmtPayloadStr(151, 16, "BARO", "QBf", "TimeUS,I,Alt"));
+    appendBinMessage(bytes, 128, makeFmtPayloadStr(177, 44, "FMTU", "QBNN", "TimeUS,FmtType,UnitIds,MultIds"));
+
+    for (const uint8_t fmtType : {uint8_t(150), uint8_t(151)}) {
+        QByteArray fmtu(41, '\0');
+        fmtu[8] = static_cast<char>(fmtType);
+        memcpy(fmtu.data() + 9, "s#E", 3);
+        memcpy(fmtu.data() + 25, "F-0", 3);
+        appendBinMessage(bytes, 177, fmtu);
+    }
+
+    const auto makeRecord = [](int i, uint8_t instance, float value) {
+        QByteArray payload(13, '\0');
+        const uint64_t timeUs = static_cast<uint64_t>(i + 1) * 1000000ULL;
+        memcpy(payload.data(), &timeUs, 8);
+        payload[8] = static_cast<char>(instance);
+        memcpy(payload.data() + 9, &value, 4);
+        return payload;
+    };
+    for (int i = 0; i < 3; i++) {
+        appendBinMessage(bytes, 150, makeRecord(i, 0, 1.0f));
+        appendBinMessage(bytes, 150, makeRecord(i, 1, 2.0f));
+        appendBinMessage(bytes, 151, makeRecord(i, 0, 3.0f));
+    }
+
+    QTemporaryFile tmp;
+    tmp.setFileTemplate(QDir::tempPath() + QStringLiteral("/logtest_XXXXXX.bin"));
+    QVERIFY(writeTempFile(tmp, bytes));
+
+    LogFileParser parser;
+    QVERIFY(parser.parseFile(tmp.fileName()));
+    QVERIFY(parser.parseComplete());
+
+    QVERIFY(parser.availableFields().contains(QStringLiteral("IMU[0].GyrX")));
+    QVERIFY(parser.availableFields().contains(QStringLiteral("IMU[1].GyrX")));
+    QVERIFY(!parser.availableFields().contains(QStringLiteral("IMU.GyrX")));
+    QVERIFY(!parser.availableFields().contains(QStringLiteral("IMU[0].I")));
+    QVERIFY(!parser.availableFields().contains(QStringLiteral("IMU[1].I")));
+
+    QVERIFY(parser.availableFields().contains(QStringLiteral("BARO.Alt")));
+    QVERIFY(!parser.availableFields().contains(QStringLiteral("BARO[0].Alt")));
+    QVERIFY(!parser.availableFields().contains(QStringLiteral("BARO.I")));
+    QCOMPARE(parser.fieldSamples(QStringLiteral("BARO.Alt")).size(), 3);
+
+    const QVariantList instance0 = parser.fieldSamples(QStringLiteral("IMU[0].GyrX"));
+    const QVariantList instance1 = parser.fieldSamples(QStringLiteral("IMU[1].GyrX"));
+    QCOMPARE(instance0.size(), 3);
+    QCOMPARE(instance1.size(), 3);
+    for (const QVariant& v : instance0) {
+        QCOMPARE(v.toPointF().y(), 1.0);
+    }
+    for (const QVariant& v : instance1) {
+        QCOMPARE(v.toPointF().y(), 2.0);
     }
 }
 
@@ -756,6 +1077,38 @@ void LogFileParserTest::_startTimePX4FromSensorGpsTest()
         [](ulog_cpp::Writer &w) {
             w.addLoggedMessage(ulog_cpp::AddLoggedMessage{0, 1, "sensor_gps"});
             w.data(ulog_cpp::Data{1, makePayloadUint64Uint64(2000000ULL, 1672531202000000ULL)});
+        });
+
+    QTemporaryFile tmp;
+    tmp.setFileTemplate(QDir::tempPath() + QStringLiteral("/logtest_XXXXXX.ulg"));
+    QVERIFY(writeTempFile(tmp, bytes));
+
+    LogFileParser parser;
+    QVERIFY(parser.parseFile(tmp.fileName()));
+
+    const QDateTime startTime = parser.startTime();
+    QVERIFY(!startTime.isNull());
+    const QDateTime expected = QDateTime(QDate(2023, 1, 1), QTime(0, 0, 0), QTimeZone::utc());
+    QCOMPARE(startTime.toMSecsSinceEpoch(), expected.toMSecsSinceEpoch());
+}
+
+void LogFileParserTest::_startTimePX4FromVehicleGnssTest()
+{
+    // vehicle_gnss nests time_utc_usec under 'receiver'. The outer timestamp is the later publish time
+    // from the sensors module, so the start time must use receiver.timestamp.
+    const QByteArray bytes = buildULog(
+        [](ulog_cpp::Writer& w) {
+            w.messageFormat(ulog_cpp::MessageFormat{
+                "sensor_gnss",
+                {ulog_cpp::Field{"uint64_t", "timestamp"}, ulog_cpp::Field{"uint64_t", "time_utc_usec"}}});
+            w.messageFormat(ulog_cpp::MessageFormat{
+                "vehicle_gnss",
+                {ulog_cpp::Field{"uint64_t", "timestamp"}, ulog_cpp::Field{"sensor_gnss", "receiver"}}});
+        },
+        [](ulog_cpp::Writer& w) {
+            w.addLoggedMessage(ulog_cpp::AddLoggedMessage{0, 1, "vehicle_gnss"});
+            w.data(ulog_cpp::Data{
+                1, makePayloadTimestampNested(2005000ULL, makePayloadUint64Uint64(2000000ULL, 1672531202000000ULL))});
         });
 
     QTemporaryFile tmp;

@@ -27,15 +27,14 @@
 #include "MAVLinkProtocol.h"
 #include "MavlinkSettings.h"
 #include "MultiVehicleManager.h"
-#include "NTRIPManager.h"
 #include "ParameterManager.h"
 #include "PluginUIModule.h"
-#include "PositionManager.h"
 #include "QGCCommandLineParser.h"
 #include "QGCCorePlugin.h"
 #include "QGCImageProvider.h"
 #include "QGCLoggingCategory.h"
 #include "QGCLoggingCategoryManager.h"
+#include "QGCMapEngine.h"
 #include "QGCNetworkHelper.h"
 #include "QGCPluginManager.h"
 #include "QGCVersionCheck.h"
@@ -81,6 +80,10 @@ QGCApplication::QGCApplication(int& argc, char* argv[], const QGCCommandLinePars
         // Include test name or PID to prevent settings file conflicts when tests run in parallel
         if (!cli.unitTests.isEmpty()) {
             applicationName = QStringLiteral("%1_unittest_%2").arg(QGC_APP_NAME, cli.unitTests.first());
+            if (cli.unitTestShardIndex > 0) {
+                // Shards of one test also run in parallel
+                applicationName += QStringLiteral("_%1").arg(cli.unitTestShardIndex);
+            }
         } else {
             applicationName =
                 QStringLiteral("%1_unittest_%2").arg(QGC_APP_NAME).arg(QCoreApplication::applicationPid());
@@ -107,7 +110,7 @@ QGCApplication::QGCApplication(int& argc, char* argv[], const QGCCommandLinePars
                                << "Is writable?:" << settings.isWritable();
 
     if (!settings.isWritable()) {
-        qCWarning(QGCApplicationLog) << "Setings location is not writable";
+        qCWarning(QGCApplicationLog) << "Settings location is not writable";
     }
 
     // The setting will delete all settings on this boot
@@ -173,7 +176,7 @@ void QGCApplication::setLanguage()
 {
     _locale = QLocale::system();
     qCDebug(QGCApplicationLog) << "System reported locale:" << _locale << "; Name" << _locale.name()
-                               << "; Preffered (used in maps): "
+                               << "; Preferred (used in maps): "
                                << (QLocale::system().uiLanguages().length() > 0 ? QLocale::system().uiLanguages()[0]
                                                                                 : "None");
 
@@ -290,11 +293,10 @@ bool QGCApplication::_initQmlRootWindow()
     _qmlAppEngine->addImageProvider(_qgcImageProviderId, new QGCImageProvider());
     _qmlAppEngine->addImageProvider(QLatin1String(ColoredSvgImageProvider::ProviderId), new ColoredSvgImageProvider());
 
+    // RHI graphics config / forced device must be applied before the root window's scene graph initializes. Android
+    // exposes the window synchronously when the root QML shows it, so configure it as soon as its surface exists.
+    GraphicsSetup::configureMainWindowOnCreation();
     QGCCorePlugin::instance()->createRootWindow(_qmlAppEngine);
-
-    // The root QQuickWindow exists now (load() is synchronous) but its scene graph has not been
-    // initialized yet -- the only safe point to apply RHI graphics config / forced device.
-    GraphicsSetup::configureMainWindow(mainRootWindow());
 
     return mainRootWindow() != nullptr;
 }
@@ -308,10 +310,8 @@ void QGCApplication::_initForNormalAppBoot()
     AudioOutput::instance()->init(SettingsManager::instance()->appSettings()->audioVolume(),
                                   SettingsManager::instance()->appSettings()->audioMuted());
     FollowMe::instance()->init();
-    QGCPositionManager::instance()->init();
     LinkManager::instance()->init();
     GPSManager::instance()->init();
-    NTRIPManager::instance()->init();
     VideoManager::instance()->init(mainRootWindow());
 
     // Set the window icon now that custom plugin has a chance to override it
@@ -357,6 +357,7 @@ void QGCApplication::_initForNormalAppBoot()
 
     // Load known link configurations
     LinkManager::instance()->loadLinkConfigurationList();
+    QGCCorePlugin::instance()->linkConfigurationsLoaded(LinkManager::instance());
 
     // Probe for joysticks
     JoystickManager::instance()->init();
@@ -496,35 +497,6 @@ void QGCApplication::showRebootAppMessage(const QString& message, const QString&
     showAppMessage(message, title);
 }
 
-void QGCApplication::showRebootVehicleMessage(const QString& message, const QString& title)
-{
-    if (_rebootMessageDebounced()) {
-        return;
-    }
-
-    const QString dialogTitle = title.isEmpty() ? applicationName() : title;
-
-    if (runningUnitTests()) {
-        // Same log format as showAppMessage() so tests assert this via expectAppMessage()
-        qCDebug(QGCAppMessageLog) << "showAppMessage:" << dialogTitle << "-" << message;
-        if (!_uiTestMode) {
-            return;
-        }
-    }
-
-    QObject* const rootQmlObject = _rootQmlObject();
-    if (rootQmlObject) {
-        QVariant varReturn;
-        QVariant varMessage = QVariant::fromValue(message);
-        QMetaObject::invokeMethod(rootQmlObject, "_showRebootVehicleDialog", Q_RETURN_ARG(QVariant, varReturn),
-                                  Q_ARG(QVariant, dialogTitle), Q_ARG(QVariant, varMessage));
-    } else {
-        // UI isn't ready yet: fall back to the plain app message queue
-        _delayedAppMessages.append(QPair<QString, QString>(dialogTitle, message));
-        QTimer::singleShot(200, this, &QGCApplication::_showDelayedAppMessages);
-    }
-}
-
 void QGCApplication::_showDelayedAppMessages()
 {
     if (_rootQmlObject()) {
@@ -638,12 +610,6 @@ bool QGCApplication::compressEvent(QEvent* event, QObject* receiver, QPostEventL
         return QGuiApplication::compressEvent(event, receiver, postedEvents);
     }
 
-    // QMetaCallEvent::id() was removed in 6.11; its protected Data is reachable from a derived helper.
-    struct MetaCallHelper : public QMetaCallEvent {
-        int id() const { return d.method_offset_ + d.method_relative_; }
-    };
-    const auto methodId = [](const QMetaCallEvent *e) { return static_cast<const MetaCallHelper*>(e)->id(); };
-
     for (QPostEventList::iterator it = postedEvents->begin(); it != postedEvents->end(); ++it) {
         QPostEvent& cur = *it;
         if (cur.receiver != receiver || cur.event == 0 || cur.event->type() != event->type()) {
@@ -651,7 +617,7 @@ bool QGCApplication::compressEvent(QEvent* event, QObject* receiver, QPostEventL
         }
         const QMetaCallEvent* cur_mce = static_cast<QMetaCallEvent*>(cur.event);
         if (cur_mce->sender() != mce->sender() || cur_mce->signalId() != mce->signalId() ||
-            methodId(cur_mce) != methodId(mce)) {
+            cur_mce->id() != mce->id()) {
             continue;
         }
 
@@ -734,6 +700,10 @@ void QGCApplication::shutdown()
 
     QGCCorePlugin::instance()->cleanup();
 
+    // Close the tile cache database while the application object exists (the map engine is otherwise
+    // destroyed after it) and before test runs remove the cache directory holding it.
+    QGCMapEngine::closeInstance();
+
     if (_runningUnitTests || _simpleBootTest) {
         const QSettings settings;
         const QString settingsFile = settings.fileName();
@@ -745,15 +715,14 @@ void QGCApplication::shutdown()
             }
         }
 
-        // Remove the app-specific settings directory (parent of ParamCache)
-        QDir settingsAppDir(ParameterManager::parameterCacheDir());
-        settingsAppDir.cdUp();
-        if (settingsAppDir.exists()) {
-            if (settingsAppDir.removeRecursively()) {
-                qCDebug(QGCApplicationLog) << "Removed test run settings directory:" << settingsAppDir.absolutePath();
-            } else {
-                qCWarning(QGCApplicationLog)
-                    << "Failed to remove test run settings directory:" << settingsAppDir.absolutePath();
+        for (const auto location : {QStandardPaths::AppConfigLocation, QStandardPaths::CacheLocation}) {
+            QDir dir(QStandardPaths::writableLocation(location));
+            if (dir.exists()) {
+                if (dir.removeRecursively()) {
+                    qCDebug(QGCApplicationLog) << "Removed test run directory:" << dir.absolutePath();
+                } else {
+                    qCWarning(QGCApplicationLog) << "Failed to remove test run directory:" << dir.absolutePath();
+                }
             }
         }
 

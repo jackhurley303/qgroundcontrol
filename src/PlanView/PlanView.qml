@@ -31,11 +31,13 @@ Item {
     property int    _editingLayer: _layerMission
     property var    _appSettings: QGroundControl.settingsManager.appSettings
     property var    _planViewSettings: QGroundControl.settingsManager.planViewSettings
+    readonly property bool _useNewPlanPanel: _planViewSettings.useNewPlanPanel.rawValue
     property bool   _promptForPlanUsageShowing: false
     property bool   _addROIOnClick: false
     property bool   _addWaypointOnClick: false
 
     readonly property int _layerMission: PlanEditLayers.layerMission
+    readonly property int _layerPlan: PlanEditLayers.layerPlan
     readonly property int _layerFence: PlanEditLayers.layerFence
     readonly property int _layerRally: PlanEditLayers.layerRally
 
@@ -323,8 +325,11 @@ Item {
                 coordinate.altitude = coordinate.altitude.toFixed(_decimalPlaces)
 
                 switch (_editingLayer) {
+                case _layerPlan:
+                    _missionController.setHomePosition(coordinate)
+                    break
                 case _layerMission:
-                    if (_planMasterController.showCreateFromTemplate) {
+                    if (!_useNewPlanPanel && _planMasterController.showCreateFromTemplate) {
                         _missionController.setHomePosition(coordinate)
                     } else if (_addROIOnClick) {
                         _addROIOnClick = false
@@ -352,10 +357,15 @@ Item {
             MissionItemIndicatorGroup {
                 id: _missionItemIndicatorGroup
 
+                objectName: "planView_missionItemIndicators"
                 map: editorMap
                 missionItems: _root._missionController.visualItems
                 onItemSelected: (sequenceNumber) => {
+                    if (!mainWindow.allowViewSwitch()) {
+                        return
+                    }
                     _root._missionController.setCurrentPlanViewSeqNum(sequenceNumber, false)
+                    rightPanel.showItemInspector()
                 }
             }
 
@@ -369,7 +379,11 @@ Item {
                     vehicle: _planMasterController.controllerVehicle
                     indicatorGroup: _missionItemIndicatorGroup
                     onClicked: (sequenceNumber) => {
+                        if (!mainWindow.allowViewSwitch()) {
+                            return
+                        }
                         _root._missionController.setCurrentPlanViewSeqNum(sequenceNumber, false)
+                        rightPanel.showItemInspector()
                     }
                 }
             }
@@ -653,7 +667,7 @@ Item {
             width:                  layerRow.width
             height:                 _layerButtonSize
             z:                      QGroundControl.zOrderWidgets
-            visible:                !_planMasterController.showCreateFromTemplate
+            visible:                !_planMasterController.showCreateFromTemplate && !_useNewPlanPanel
 
             property bool   expanded: false
             property real   _layerButtonSize: ScreenTools.defaultFontPixelHeight * 2.0
@@ -693,14 +707,14 @@ Item {
                     width:  layerSwitcher._layerButtonSize
                     height: width
                     radius: ScreenTools.defaultBorderRadius
-                    color:  QGroundControl.globalPalette.buttonHighlight
+                    color:  QGroundControl.globalPalette.accent
 
                     QGCColoredImage {
                         anchors.centerIn:   parent
                         width:              parent.width * 0.6
                         height:             width
                         source:             PlanEditLayers.layerInfos.find(l => l.layer === _editingLayer)?.icon ?? "/res/waypoint.svg"
-                        color:              QGroundControl.globalPalette.buttonHighlightText
+                        color:              QGroundControl.globalPalette.accentText
                     }
 
                     QGCMouseArea {
@@ -719,7 +733,7 @@ Item {
                         width:   choiceRow.implicitWidth + layerSwitcher._spacing * 2
                         height:  layerSwitcher._layerButtonSize
                         radius:  ScreenTools.defaultBorderRadius
-                        color:   QGroundControl.globalPalette.button
+                        color:   QGroundControl.globalPalette.windowCard
                         visible: opacity > 0
                         opacity: layerSwitcher.expanded ? 1 : 0
 
@@ -735,13 +749,13 @@ Item {
                                 width:                  layerSwitcher._layerButtonSize * 0.6
                                 height:                 width
                                 source:                 modelData.icon
-                                color:                  QGroundControl.globalPalette.buttonText
+                                color:                  QGroundControl.globalPalette.textPrimary
                             }
 
                             QGCLabel {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text:                   modelData.name
-                                color:                  QGroundControl.globalPalette.buttonText
+                                color:                  QGroundControl.globalPalette.textPrimary
                             }
                         }
 
@@ -794,7 +808,7 @@ Item {
                     id: terrainButton
                     implicitWidth: missionStatsButtonLayout._buttonImplicitWidth
                     implicitHeight: implicitWidth
-                    color: checked ? QGroundControl.globalPalette.buttonHighlight : QGroundControl.globalPalette.button
+                    color: checked ? QGroundControl.globalPalette.accent : QGroundControl.globalPalette.windowCard
 
                     property bool checked: true
 
@@ -802,7 +816,7 @@ Item {
                         anchors.margins: missionStatsButtonLayout._buttonImageMargins
                         anchors.fill: parent
                         source: "/res/terrain.svg"
-                        color: parent.checked ? QGroundControl.globalPalette.buttonHighlightText : QGroundControl.globalPalette.buttonText
+                        color: parent.checked ? QGroundControl.globalPalette.accentText : QGroundControl.globalPalette.textPrimary
                     }
 
                     QGCMouseArea {
@@ -818,7 +832,7 @@ Item {
                     id: missionStatsButton
                     implicitWidth: missionStatsButtonLayout._buttonImplicitWidth
                     implicitHeight: implicitWidth
-                    color: checked ? QGroundControl.globalPalette.buttonHighlight : QGroundControl.globalPalette.button
+                    color: checked ? QGroundControl.globalPalette.accent : QGroundControl.globalPalette.windowCard
 
                     property bool checked: false
 
@@ -826,7 +840,7 @@ Item {
                         anchors.margins: missionStatsButtonLayout._buttonImageMargins
                         anchors.fill: parent
                         source: "/res/sliders.svg"
-                        color: parent.checked ? QGroundControl.globalPalette.buttonHighlightText : QGroundControl.globalPalette.buttonText
+                        color: parent.checked ? QGroundControl.globalPalette.accentText : QGroundControl.globalPalette.textPrimary
                     }
 
                     QGCMouseArea {
@@ -842,13 +856,13 @@ Item {
                     id: bottomStatusOpenCloseButton
                     implicitWidth: missionStatsButtonLayout._buttonImplicitWidth
                     implicitHeight: implicitWidth
-                    color: QGroundControl.globalPalette.button
+                    color: QGroundControl.globalPalette.windowCard
 
                     QGCColoredImage {
                         anchors.margins: missionStatsButtonLayout._buttonImageMargins
                         anchors.fill: parent
                         source: "/res/chevron-double-left.svg"
-                        color: QGroundControl.globalPalette.buttonText
+                        color: QGroundControl.globalPalette.textPrimary
                     }
 
                     QGCMouseArea {

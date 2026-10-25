@@ -15,7 +15,6 @@ QGCPopupDialog {
 
     property Fact   fact
     property bool   showRCToParam:  false
-    property bool   setFocus:       true    ///< true: focus is set to text field on display, false: focus not set (works around strange virtual keyboard bug with FactValueSlider
 
     property real   _editFieldWidth:            ScreenTools.defaultFontPixelWidth * 20
     property bool   _longDescriptionAvailable:  fact.longDescription != ""
@@ -79,7 +78,7 @@ QGCPopupDialog {
             text:               forceEdit.checked
                                     ? qsTr("Warning: This parameter is read-only. Force edit is enabled.")
                                     : qsTr("This parameter is read-only and cannot be modified.")
-            color:              forceEdit.checked ? qgcPal.warningText : qgcPal.text
+            color:              forceEdit.checked ? qgcPal.warningText : qgcPal.textPrimary
             visible:            fact.readOnly
         }
 
@@ -87,7 +86,7 @@ QGCPopupDialog {
             id:                 validationError
             Layout.fillWidth:   true
             wrapMode:           Text.WordWrap
-            color:              qgcPal.warningText
+            color:              qgcPal.errorText
             visible:            text !== ""
         }
 
@@ -101,7 +100,7 @@ QGCPopupDialog {
                 width:              _editFieldWidth
                 unitsLabel:         fact.units
                 showUnits:          fact.units != ""
-                focus:              setFocus && visible
+                focus:              visible
                 inputMethodHints:   (fact.typeIsString || ScreenTools.isiOS) ? // iOS numeric keyboard has no done button, we can't use it
                                         Qt.ImhNone :
                                         Qt.ImhFormattedNumbersOnly  // Forces use of virtual numeric keyboard
@@ -114,7 +113,7 @@ QGCPopupDialog {
                 model:          fact.enumStrings
                 sizeToContents: true
                 visible:        _showCombo
-                focus:          setFocus && visible
+                focus:          visible
 
                 Component.onCompleted: {
                     // We can't bind directly to fact.enumIndex since that would add an unknown value

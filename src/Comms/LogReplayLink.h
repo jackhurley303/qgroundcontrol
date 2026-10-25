@@ -124,7 +124,7 @@ signals:
     /// Emitted after seek (and on restart-from-end) with the resolved parameter values for
     /// every parameter that appeared in the tlog. resetToInitial=true means the param should
     /// be reverted to its params-file value (seek target is before its first recorded change).
-    void replaySeekParamResolved(int sysId, QList<ParamSeekValue> resolved);
+    void replaySeekParamResolved(quint32 sysId, QList<ParamSeekValue> resolved);
 
 public slots:
     void setup();
@@ -251,7 +251,7 @@ signals:
     void playbackSpeedChanged(qreal speed);
     void replayMissionUploaded(int missionType, QList<mavlink_mission_item_int_t> items);
     void replaySeekMissionResolved(QMap<int, QList<mavlink_mission_item_int_t>> resolvedByType);
-    void replaySeekParamResolved(int sysId, QList<ParamSeekValue> resolved);
+    void replaySeekParamResolved(quint32 sysId, QList<ParamSeekValue> resolved);
     void replayPlanReloadRequested();
 
 public slots:

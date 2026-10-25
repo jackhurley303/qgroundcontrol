@@ -33,6 +33,7 @@ public:
     double minimumTakeoffAltitudeMeters(Vehicle *vehicle) const override;
     void startTakeoff(Vehicle *vehicle) const override;
     void startMission(Vehicle *vehicle) const override;
+    VehicleReadiness* createVehicleReadiness(Vehicle* vehicle) const override;
     QStringList flightModes(Vehicle *vehicle) const override;
     QString flightMode(uint8_t base_mode, uint32_t custom_mode) const override;
     bool setFlightMode(const QString &flightMode, uint8_t *base_mode, uint32_t *custom_mode) const override;
@@ -116,7 +117,8 @@ private:
 
     QVariantList _toolIndicatorList;
     QList<APMCustomMode> _supportedModes;
-    QMap<int /* vehicle id */, QMap<int /* componentId */, bool /* true: component is part of ArduPilot stack */>> _ardupilotComponentMap;
+    QMap<quint32 /* vehicle id */, QMap<int /* componentId */, bool /* true: component is part of ArduPilot stack */>>
+        _ardupilotComponentMap;
 
     QMutex _adjustOutgoingMavlinkMutex;
 

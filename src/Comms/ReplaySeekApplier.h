@@ -37,7 +37,7 @@ public:
 private:
     void _onReplayMissionUploaded(int missionType, QList<mavlink_mission_item_int_t> rawItems);
     void _onSeekMissionResolved(QMap<int, QList<mavlink_mission_item_int_t>> resolvedByType);
-    void _onSeekParamResolved(int sysId, QList<ParamSeekValue> resolved);
+    void _onSeekParamResolved(quint32 sysId, QList<ParamSeekValue> resolved);
 
     LogReplayLink* _link = nullptr;
 

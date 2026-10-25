@@ -43,6 +43,7 @@ import argparse
 import sys
 from pathlib import Path
 
+import _bootstrap as _bootstrap
 from derive_plugin_ui_sdk import QmlDir, TypeEntry, _split_components, parse_qmldir
 
 QMLDIR_NAME = "QGroundControl.PluginUI.qmldir"
@@ -148,7 +149,7 @@ def _component_blocks_by_name(qmltypes_text: str) -> dict[str, str]:
     for block in _split_components(qmltypes_text[open_brace + 1 : close_brace]):
         for line in block.splitlines():
             line = line.strip()
-            if line.startswith('name:'):
+            if line.startswith("name:"):
                 name = line.split('"')[1]
                 blocks[name] = block
                 break
@@ -159,7 +160,9 @@ def _entry_shape(entry: TypeEntry) -> tuple[str, str, bool]:
     return (entry.filename, entry.version, entry.singleton)
 
 
-def diff_qmldir(golden: QmlDir, golden_text: str, current: QmlDir, current_text: str) -> tuple[list[str], list[str]]:
+def diff_qmldir(
+    golden: QmlDir, golden_text: str, current: QmlDir, current_text: str
+) -> tuple[list[str], list[str]]:
     """Return (failures, reports) comparing two roster-shaped qmldirs."""
     golden_tiers = _tier_by_name(golden, golden_text)
     current_tiers = _tier_by_name(current, current_text)
@@ -221,10 +224,18 @@ def diff_qmltypes(golden_text: str, current_text: str) -> tuple[list[str], list[
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--golden", required=True, type=Path, help="dir holding the committed snapshot")
-    parser.add_argument("--current", required=True, type=Path, help="dir holding the freshly derived module")
-    parser.add_argument("--update", action="store_true", help="overwrite the golden snapshot with --current")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--golden", required=True, type=Path, help="dir holding the committed snapshot"
+    )
+    parser.add_argument(
+        "--current", required=True, type=Path, help="dir holding the freshly derived module"
+    )
+    parser.add_argument(
+        "--update", action="store_true", help="overwrite the golden snapshot with --current"
+    )
     args = parser.parse_args(argv)
 
     golden_qmldir_path = args.golden / QMLDIR_NAME
@@ -234,8 +245,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.update:
         golden_qmldir_path.parent.mkdir(parents=True, exist_ok=True)
-        golden_qmldir_path.write_text(current_qmldir_path.read_text(encoding="utf-8"), encoding="utf-8")
-        golden_qmltypes_path.write_text(current_qmltypes_path.read_text(encoding="utf-8"), encoding="utf-8")
+        golden_qmldir_path.write_text(
+            current_qmldir_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        golden_qmltypes_path.write_text(
+            current_qmltypes_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
         print(f"Updated golden snapshot in {args.golden}")
         return 0
 

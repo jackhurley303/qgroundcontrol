@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
 from .._jinja import make_env
 from ..common.controls import (
+    qml_string,
     qml_tr,
     render_checkbox,
     render_combobox,
@@ -15,10 +15,15 @@ from ..common.controls import (
     render_textfield,
 )
 from ..common.validation import require_qml_safe_string
-from .metadata import get_fact_type, has_enum_strings
+from .metadata import get_fact_type, has_enum_strings, validate_setting
 from .model import ControlDef, PageDef, load_page_def, load_pages_data, resolve_page_def_path
 
 _env = make_env(Path(__file__).parent / "templates")
+
+# Only textfield and auto-detected controls can render a string text field
+_NON_TEXTFIELD_CONTROLS = frozenset(
+    {"component", "info", "checkbox", "combobox", "slider", "browse", "scaler"}
+)
 
 
 def _object_name(text: str) -> str:
@@ -59,6 +64,7 @@ def _qml_control(
             component=ctrl.component,
             show_when=ctrl.showWhen,
             enable_when=ctrl.enableWhen,
+            properties=ctrl.properties,
         )
     elif ctrl.control == "info":
         label_expr = qml_tr(ctrl.label, json_context) if ctrl.label else '""'
@@ -144,7 +150,7 @@ def _qml_control(
         return _wrap_with_description(control_qml, fact_ref, _vis_expr(), indent)
 
     fact_type = get_fact_type(ctrl.setting, settings_dirs)
-    extra: list[str] = [f'objectName: "settingsTextField_{ctrl.fact_name}"']
+    extra: list[str] = [f"objectName: {qml_string(f'settingsTextField_{ctrl.fact_name}')}"]
     if fact_type == "string":
         extra.append("textFieldPreferredWidth: _stringFieldWidth")
     control_qml = render_textfield(
@@ -168,9 +174,13 @@ def _qml_missing_placeholder(description: str) -> str:
 def _needs_string_field_width(page: PageDef, settings_dirs: Path | tuple[Path, ...]) -> bool:
     for grp in page.groups:
         for ctrl in grp.controls:
+            if ctrl.control in _NON_TEXTFIELD_CONTROLS:
+                continue
             fact_type = get_fact_type(ctrl.setting, settings_dirs)
-            has_enums = has_enum_strings(ctrl.setting, settings_dirs)
-            if fact_type == "string" and not has_enums:
+            if ctrl.control == "textfield":
+                if fact_type == "string":
+                    return True
+            elif fact_type == "string" and not has_enum_strings(ctrl.setting, settings_dirs):
                 return True
     return False
 
@@ -200,10 +210,6 @@ def _group_visibility_parts(grp) -> list[str]:
     return vis_parts
 
 
-def _qml_translate(context: str, text: str) -> str:
-    return f"qsTranslate({json.dumps(context)}, {json.dumps(text)})"
-
-
 def generate_page_qml(
     page: PageDef,
     settings_dirs: Path | tuple[Path, ...],
@@ -211,16 +217,15 @@ def generate_page_qml(
     page_name: str = "",
 ) -> str:
     """Generate a complete QML settings page from a page definition."""
-    _tr = (
-        (lambda s: f'qsTranslate("{json_context}", "{s}")')
-        if json_context
-        else (lambda s: f'qsTr("{s}")')
-    )
-
     bindings = [
         {"type": _binding_qml_type(expr), "name": name, "expr": expr}
         for name, expr in page.bindings.items()
     ]
+
+    for grp in page.groups:
+        for ctrl in grp.controls:
+            if ctrl.control not in ("component", "info"):
+                validate_setting(ctrl.setting, settings_dirs)
 
     group_blocks: list[str] = []
     seen_object_names: dict[str, str] = {}  # objectName -> heading that produced it
@@ -233,6 +238,7 @@ def generate_page_qml(
                 _env.get_template("group_component.qml.j2").render(
                     visible=visible_expr,
                     component=grp.component,
+                    properties=grp.properties,
                 )
             )
             continue
@@ -260,7 +266,7 @@ def generate_page_qml(
         group_blocks.append(
             _env.get_template("group_settings.qml.j2").render(
                 object_name=group_object_name,
-                heading=_tr(grp.heading) if grp.heading else None,
+                heading=qml_tr(grp.heading, json_context) if grp.heading else None,
                 heading_description=grp.headingDescription,
                 visible=visible_expr,
                 enable_when=grp.enableWhen,
@@ -341,16 +347,16 @@ def generate_pages_model_qml(pages_json_path: Path, custom_pages_dir: Path | Non
                     terms_parts.extend(c.label.lower() for c in grp.controls if c.label)
                     tr_parts: list[str] = [section_name, *grp.keywords]
                     tr_parts.extend(c.label for c in grp.controls if c.label)
-                    search_terms = [json.dumps(" ".join(dict.fromkeys(terms_parts)))]
+                    search_terms = [qml_string(" ".join(dict.fromkeys(terms_parts)))]
                     search_terms.extend(
-                        f"{_qml_translate(page_def_name, term)}.toLowerCase()"
+                        f"{qml_tr(term, page_def_name)}.toLowerCase()"
                         for term in dict.fromkeys(tr_parts)
                     )
 
                     sections.append(
                         {
                             "index": grp_idx,
-                            "name": _qml_translate(page_def_name, section_name),
+                            "name": qml_tr(section_name, page_def_name),
                             "search_terms": f"[{', '.join(search_terms)}]",
                             "visible": visible,
                         }
@@ -364,13 +370,13 @@ def generate_pages_model_qml(pages_json_path: Path, custom_pages_dir: Path | Non
                     [name.lower(), section_name.lower(), *(kw.lower() for kw in keywords)]
                 )
                 search_terms = [
-                    json.dumps(" ".join(terms)),
-                    f"{_qml_translate('SettingsPages.json', section_name)}.toLowerCase()",
+                    qml_string(" ".join(terms)),
+                    f"{qml_tr(section_name, 'SettingsPages.json')}.toLowerCase()",
                 ]
                 sections.append(
                     {
                         "index": sec_idx,
-                        "name": _qml_translate("SettingsPages.json", section_name),
+                        "name": qml_tr(section_name, "SettingsPages.json"),
                         "search_terms": f"[{', '.join(search_terms)}]",
                         "visible": "true",
                     }

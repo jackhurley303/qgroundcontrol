@@ -48,6 +48,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import _bootstrap as _bootstrap
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
 
@@ -1470,18 +1472,23 @@ def build_qml_import_paths(context: GateContext) -> list[Path]:
     return paths
 
 
-def stage_qml_modules(context: GateContext) -> list[Path]:
-    """Every .qml the plugin ships through a real QML module, in source form.
+def stage_qml_modules(context: GateContext) -> tuple[list[Path], dict[str, str]]:
+    """Every .qml the plugin ships through a real QML module, as the build's module copy.
 
     Unlike the flat prefix, a module file resolves its siblings and the module import path
-    by its own directory, so it needs no flattening to lint the shape that ships — it is
-    linted from exactly where it lives. Closes each module over its own generated qmldir
-    first (check_module_closure), which is what actually closes the S1' blind spot: without
-    it, a file excluded from the flat closure (because it lives in a module) but never
-    checked against anything else would be shipped nowhere and linted by nothing.
+    by its own directory, so it needs no flattening. It is linted from the build's module
+    directory, beside the generated qmldir: from Qt 6.12, qmllint rejects a `pragma
+    Singleton` file whose directory has no qmldir declaring it, and a module declares its
+    singletons through CMake, so the source directory has none. Returns the copies and a
+    copy -> source path map, so the output still names the source files. Closes each module
+    over its own generated qmldir first (check_module_closure), which is what actually
+    closes the S1' blind spot: without it, a file excluded from the flat closure (because it
+    lives in a module) but never checked against anything else would be shipped nowhere and
+    linted by nothing.
     """
     modules = context.manifest.qml.modules
     files: list[Path] = []
+    source_of: dict[str, str] = {}
     for module in modules:
         sources = find_qml_sources(context.scratch_plugin, [module.source_dir])
         # A sibling module's source_dir can legitimately nest inside this one's (a module
@@ -1500,8 +1507,18 @@ def stage_qml_modules(context: GateContext) -> list[Path]:
         check_module_closure(
             module.uri, module.source_dir, sources, qmldir.read_text(encoding="utf-8")
         )
-        files.extend(context.scratch_plugin / source for source in sources)
-    return files
+        for source in sources:
+            source_path = context.scratch_plugin / source
+            copy = qmldir.parent / Path(source).relative_to(module.source_dir)
+            # A stale or missing copy would lint something other than the source.
+            if not copy.is_file() or copy.read_bytes() != source_path.read_bytes():
+                raise GateError(
+                    f"{module.uri}: the build's module copy of {source} is missing or differs "
+                    f"from the source ({copy})"
+                )
+            files.append(copy)
+            source_of[str(copy)] = str(source_path)
+    return files, source_of
 
 
 def run_qmllint(context: GateContext, files: Sequence[Path]) -> tuple[int, str]:
@@ -1536,7 +1553,10 @@ class QmlLintResult:
 
 
 def lint_qml_set(
-    context: GateContext, files: Sequence[Path], flat_map: dict[str, str] | None = None
+    context: GateContext,
+    files: Sequence[Path],
+    flat_map: dict[str, str] | None = None,
+    module_map: dict[str, str] | None = None,
 ) -> QmlLintResult:
     returncode, output = run_qmllint(context, files)
     if flat_map:
@@ -1544,6 +1564,10 @@ def lint_qml_set(
         if flat_dir is not None:
             for alias, source in flat_map.items():
                 output = output.replace(str(flat_dir / alias), source)
+    if module_map:
+        # Longest first, so one copy's path never rewrites the prefix of another's.
+        for copy in sorted(module_map, key=len, reverse=True):
+            output = output.replace(copy, module_map[copy])
     unaccepted, unused = triage_qmllint_output(output, context.manifest.qml.accepted_triage)
     return QmlLintResult(
         returncode=returncode,
@@ -1572,11 +1596,11 @@ def run_qml_axis(context: GateContext) -> tuple[Path, dict[str, str]] | None:
     step("Linting QML against the published module and the guaranteed Qt subset only")
     flat_dir, flat_map = stage_flat_qml(context)
     context.qml_import_paths = build_qml_import_paths(context)
-    module_files = stage_qml_modules(context)
+    module_files, module_map = stage_qml_modules(context)
     files = [flat_dir / alias for alias in sorted(flat_map)] + module_files
     context.linted_file_count = len(files)
 
-    result = lint_qml_set(context, files, flat_map)
+    result = lint_qml_set(context, files, flat_map, module_map)
     print(result.output)
 
     if result.syntax_lines:

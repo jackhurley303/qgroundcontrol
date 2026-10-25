@@ -54,13 +54,10 @@ import shutil
 import sys
 from pathlib import Path
 
-from _bootstrap import ensure_tools_dir
-
-ensure_tools_dir(__file__)
-
+import _bootstrap as _bootstrap
 from common.file_traversal import find_repo_root
 from common.git import run_git
-from common.logging import log_error, log_info, log_ok, log_step
+from common.logging import log_error, log_info, log_ok
 from common.proc import run_captured
 from derive_pr_branch import SPECS, PRSpec, check_seam_consumers
 
@@ -131,7 +128,7 @@ _SHARED_BY_DECISION: dict[str, str] = {}
 
 
 def check_routing_coverage(mainline_ref: str, since: str, repo_root: Path) -> bool:
-    log_step(f"routing coverage since {since}")
+    log_info(f"routing coverage since {since}")
     diff = run_git("diff", "--name-only", since, mainline_ref, "--", ".", cwd=repo_root)
     if diff.returncode != 0:
         log_error(diff.stderr.strip())
@@ -192,7 +189,7 @@ def check_forbidden_terms(mainline_ref: str, repo_root: Path) -> bool:
     A raw grep of mainline would false-positive on every doc_rewrites target — those
     files legitimately mention a plugin name on mainline and only lose it once derived.
     """
-    log_step("forbidden terms on mainline HEAD (post-doc_rewrites)")
+    log_info("forbidden terms on mainline HEAD (post-doc_rewrites)")
     ok = True
     for name, spec in SPECS.items():
         scanned = spec.include_paths + spec.patch_paths
@@ -220,7 +217,7 @@ def check_forbidden_terms(mainline_ref: str, repo_root: Path) -> bool:
 
 
 def check_doc_rewrites(mainline_ref: str, repo_root: Path) -> bool:
-    log_step("doc_rewrites staleness")
+    log_info("doc_rewrites staleness")
     ok = True
     for name, spec in SPECS.items():
         for rel_path, rewrites in spec.doc_rewrites:
@@ -286,7 +283,7 @@ def check_shared_paths(
     doc_rewrites are keyed by file, so a directory both specs take can never pass that way.
     Stack those specs instead.
     """
-    log_step("paths shared by specs that are not stacked")
+    log_info("paths shared by specs that are not stacked")
     ok = True
     split = 0
     deferred = 0
@@ -335,7 +332,7 @@ def check_style(mainline_ref: str, repo_root: Path) -> bool:
     reason this only counts files absent from `upstream_ref`. What it buys is that the
     number is *visible* before submission instead of arriving as a CI comment on the PR.
     """
-    log_step("style of fork-authored routed files (advisory)")
+    log_info("style of fork-authored routed files (advisory)")
     upstream_ref = next(iter({spec.upstream_ref for spec in SPECS.values()}))
     upstream_files = set(_tracked_at(upstream_ref, repo_root))
     candidates = [
@@ -400,7 +397,7 @@ def check_seams(repo_root: Path) -> bool:
     here and it guards the worst failure mode of the three: a branch that compiles, passes
     every test, and does nothing because the code reading its seams stayed on mainline.
     """
-    log_step("seam consumers (delegated to derive_pr_branch)")
+    log_info("seam consumers (delegated to derive_pr_branch)")
     ok = True
     for name, spec in SPECS.items():
         if not spec.seam_tokens:
@@ -420,7 +417,7 @@ def check_worktree(paths: list[str], repo_root: Path) -> bool:
     at all, does it carry a forbidden term) against the files on disk, so the answer
     arrives while the edit is cheap to fix.
     """
-    log_step("worktree routing + forbidden terms")
+    log_info("worktree routing + forbidden terms")
     if not paths:
         status = run_git("status", "--porcelain", "--", ".", cwd=repo_root)
         if status.returncode != 0:

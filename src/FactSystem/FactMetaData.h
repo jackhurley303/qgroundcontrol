@@ -242,6 +242,13 @@ public:
     static constexpr const char *kDefaultGroup = QT_TRANSLATE_NOOP("FactMetaData", "Misc");
     static constexpr const char *qgcFileType = "FactMetaData";
 
+signals:
+    /// Translators and cooked units were updated to a new app units setting
+    void appSettingsUnitsChanged();
+
+private slots:
+    void _appSettingsUnitsChanged();
+
 private:
     QVariant _minForType() const { return minForType(_type); };
     QVariant _maxForType() const { return maxForType(_type); };
@@ -361,6 +368,7 @@ private:
     QString _cookedUnits;
     Translator _rawTranslator = _defaultTranslator;
     Translator _cookedTranslator = _defaultTranslator;
+    QMetaObject::Connection _appSettingsUnitsConnection;
     bool _vehicleRebootRequired = false;
     bool _qgcRebootRequired = false;
     double _rawIncrement = std::numeric_limits<double>::quiet_NaN();
@@ -399,16 +407,16 @@ private:
 
     static constexpr const char *_jsonMetaDataDefinesName = "QGC.MetaData.Defines";
     static constexpr const char *_jsonMetaDataFactsName = "QGC.MetaData.Facts";
-    static constexpr const char *_enumStringsJsonKey = "enumStrings";
-    static constexpr const char *_enumValuesJsonKey = "enumValues";
+    static constexpr QLatin1StringView _enumStringsJsonKey{"enumStrings"};
+    static constexpr QLatin1StringView _enumValuesJsonKey{"enumValues"};
 
     // This is the newer json format for enums and bitmasks. They are used by the new COMPONENT_METADATA parameter metadata for example.
-    static constexpr const char *_enumValuesArrayJsonKey = "values";
-    static constexpr const char *_enumBitmaskArrayJsonKey = "bitmask";
-    static constexpr const char *_enumValuesArrayValueJsonKey = "value";
-    static constexpr const char *_enumValuesArrayDescriptionJsonKey = "description";
-    static constexpr const char *_enumBitmaskArrayIndexJsonKey = "index";
-    static constexpr const char *_enumBitmaskArrayDescriptionJsonKey = "description";
+    static constexpr QLatin1StringView _enumValuesArrayJsonKey{"values"};
+    static constexpr QLatin1StringView _enumBitmaskArrayJsonKey{"bitmask"};
+    static constexpr QLatin1StringView _enumValuesArrayValueJsonKey{"value"};
+    static constexpr QLatin1StringView _enumValuesArrayDescriptionJsonKey{"description"};
+    static constexpr QLatin1StringView _enumBitmaskArrayIndexJsonKey{"index"};
+    static constexpr QLatin1StringView _enumBitmaskArrayDescriptionJsonKey{"description"};
 
     static constexpr const char *_rgKnownTypeStrings[] = {
         "Uint8",
@@ -444,28 +452,28 @@ private:
         valueTypeCustom,
     };
 
-    static constexpr const char *_decimalPlacesJsonKey = "decimalPlaces";
-    static constexpr const char *_maxStringLengthJsonKey = "maxStringLength";
-    static constexpr const char *_commentJsonKey = "comment";
-    static constexpr const char *_keywordsJsonKey = "keywords";
-    static constexpr const char *_nameJsonKey = "name";
-    static constexpr const char *_labelJsonKey = "label";
-    static constexpr const char *_typeJsonKey = "type";
-    static constexpr const char *_shortDescriptionJsonKey = "shortDesc";
-    static constexpr const char *_longDescriptionJsonKey = "longDesc";
-    static constexpr const char *_unitsJsonKey = "units";
-    static constexpr const char *_defaultValueJsonKey = "default";
-    static constexpr const char *_mobileDefaultValueJsonKey = "mobileDefault";
-    static constexpr const char *_minJsonKey = "min";
-    static constexpr const char *_maxJsonKey = "max";
-    static constexpr const char *_userMinJsonKey = "userMin";
-    static constexpr const char *_userMaxJsonKey = "userMax";
-    static constexpr const char *_incrementJsonKey = "increment";
-    static constexpr const char *_hasControlJsonKey = "control";
-    static constexpr const char *_qgcRebootRequiredJsonKey = "qgcRebootRequired";
-    static constexpr const char *_rebootRequiredJsonKey = "rebootRequired";
-    static constexpr const char *_categoryJsonKey = "category";
-    static constexpr const char *_groupJsonKey = "group";
-    static constexpr const char *_volatileJsonKey = "volatile";
-    static constexpr const char *_readOnlyJsonKey = "readOnly";
+    static constexpr QLatin1StringView _decimalPlacesJsonKey{"decimalPlaces"};
+    static constexpr QLatin1StringView _maxStringLengthJsonKey{"maxStringLength"};
+    static constexpr QLatin1StringView _commentJsonKey{"comment"};
+    static constexpr QLatin1StringView _keywordsJsonKey{"keywords"};
+    static constexpr QLatin1StringView _nameJsonKey{"name"};
+    static constexpr QLatin1StringView _labelJsonKey{"label"};
+    static constexpr QLatin1StringView _typeJsonKey{"type"};
+    static constexpr QLatin1StringView _shortDescriptionJsonKey{"shortDesc"};
+    static constexpr QLatin1StringView _longDescriptionJsonKey{"longDesc"};
+    static constexpr QLatin1StringView _unitsJsonKey{"units"};
+    static constexpr QLatin1StringView _defaultValueJsonKey{"default"};
+    static constexpr QLatin1StringView _mobileDefaultValueJsonKey{"mobileDefault"};
+    static constexpr QLatin1StringView _minJsonKey{"min"};
+    static constexpr QLatin1StringView _maxJsonKey{"max"};
+    static constexpr QLatin1StringView _userMinJsonKey{"userMin"};
+    static constexpr QLatin1StringView _userMaxJsonKey{"userMax"};
+    static constexpr QLatin1StringView _incrementJsonKey{"increment"};
+    static constexpr QLatin1StringView _hasControlJsonKey{"control"};
+    static constexpr QLatin1StringView _qgcRebootRequiredJsonKey{"qgcRebootRequired"};
+    static constexpr QLatin1StringView _rebootRequiredJsonKey{"rebootRequired"};
+    static constexpr QLatin1StringView _categoryJsonKey{"category"};
+    static constexpr QLatin1StringView _groupJsonKey{"group"};
+    static constexpr QLatin1StringView _volatileJsonKey{"volatile"};
+    static constexpr QLatin1StringView _readOnlyJsonKey{"readOnly"};
 };

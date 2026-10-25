@@ -155,6 +155,14 @@ SetupPage {
                 return QGroundControl.unitsConversion.degreesToRadians(geometricAngle)
             }
 
+            function _distanceLabelText() {
+                return QGroundControl.unitsConversion.metersToAppSettingsHorizontalDistanceUnitsString(controller.distance.rawValue)
+            }
+
+            function _heightLabelText() {
+                return QGroundControl.unitsConversion.metersToAppSettingsVerticalDistanceUnitsString(controller.height.rawValue)
+            }
+
             APMFollowComponentController {
                 id: controller
 
@@ -226,7 +234,8 @@ SetupPage {
                 visible:            _showMainSetup
 
                 QGCGroupBox {
-                    title:            qsTr("Follow Me Settings")
+                    Layout.fillWidth: false
+                    heading:          qsTr("Follow Me Settings")
 
                     GridLayout {
                         columns:        2
@@ -323,7 +332,7 @@ SetupPage {
                         anchors.bottom:             parent.bottom
                         anchors.horizontalCenter:   parent.horizontalCenter
                         width:                      3
-                        color:                      qgcPal.windowShade
+                        color:                      qgcPal.windowCard
                     }
 
                     Rectangle {
@@ -331,7 +340,7 @@ SetupPage {
                         anchors.right:          parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         height:                 3
-                        color:                  qgcPal.windowShade
+                        color:                  qgcPal.windowCard
                     }
 
                     QGCLabel {
@@ -391,7 +400,7 @@ SetupPage {
                             y:          vehicleIcon.height
                             height:     (parent.height / 2) - (vehicleIcon.height + (gcsIcon.height / 2))
                             width:      2
-                            color:      qgcPal.text
+                            color:      qgcPal.textPrimary
                             opacity:    0.4
 
                             Rectangle {
@@ -399,7 +408,7 @@ SetupPage {
                                 anchors.horizontalCenter:   parent.horizontalCenter
                                 width:                      ScreenTools.defaultFontPixelWidth * 2
                                 height:                     2
-                                color:                      qgcPal.text
+                                color:                      qgcPal.textPrimary
                             }
 
                             Rectangle {
@@ -407,14 +416,14 @@ SetupPage {
                                 anchors.horizontalCenter:   parent.horizontalCenter
                                 width:                      ScreenTools.defaultFontPixelWidth * 2
                                 height:                     2
-                                color:                      qgcPal.text
+                                color:                      qgcPal.textPrimary
                             }
                         }
 
                         QGCLabel {
                             id:                 distanceLabel
                             anchors.centerIn:   distanceLine
-                            text:               QGroundControl.unitsConversion.metersToAppSettingsHorizontalDistanceUnitsString(controller.distance.rawValue)
+                            text:               _distanceLabelText()
 
                             transform: Rotation {
                                 origin.x:       distanceLabel.width  / 2
@@ -469,7 +478,7 @@ SetupPage {
                             anchors.bottom:             parent.bottom
                             anchors.horizontalCenter:   parent.horizontalCenter
                             width:                      2
-                            color:                      qgcPal.text
+                            color:                      qgcPal.textPrimary
                             opacity:                    0.4
 
                             Rectangle {
@@ -477,7 +486,7 @@ SetupPage {
                                 anchors.horizontalCenter:   parent.horizontalCenter
                                 width:                      ScreenTools.defaultFontPixelWidth * 2
                                 height:                     2
-                                color:                      qgcPal.text
+                                color:                      qgcPal.textPrimary
                             }
 
                             Rectangle {
@@ -485,14 +494,14 @@ SetupPage {
                                 anchors.horizontalCenter:   parent.horizontalCenter
                                 width:                      ScreenTools.defaultFontPixelWidth * 2
                                 height:                     2
-                                color:                      qgcPal.text
+                                color:                      qgcPal.textPrimary
                             }
                         }
 
                         QGCLabel {
                             id:                 heightValueLabel
                             anchors.centerIn:   parent
-                            text:               QGroundControl.unitsConversion.metersToAppSettingsVerticalDistanceUnitsString(controller.height.rawValue)
+                            text:               _heightLabelText()
                         }
                     }
 
@@ -516,6 +525,15 @@ SetupPage {
                                 axis { x: 1; y: 0; z: 0 }
                             } ]
                     }
+                }
+            }
+
+            Connections {
+                target: QGroundControl.unitsConversion
+
+                function onUnitsChanged() {
+                    distanceLabel.text = Qt.binding(_distanceLabelText)
+                    heightValueLabel.text = Qt.binding(_heightLabelText)
                 }
             }
         }

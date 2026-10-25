@@ -22,7 +22,7 @@ Button {
 
     background: Rectangle {
         anchors.fill:   parent
-        color:          button.checked ? qgcPal.buttonHighlight : Qt.rgba(0,0,0,0)
+        color:          button.checked ? qgcPal.accent : Qt.rgba(0,0,0,0)
         border.color:   "red"
         border.width:   QGroundControl.corePlugin.showTouchAreas ? 3 : 0
     }
@@ -38,6 +38,26 @@ Button {
             width:                  height
             source:                 visible ? button.icon.source : ""
             anchors.verticalCenter: parent.verticalCenter
+
+            Rectangle {
+                objectName:         "toolbar_qgcUpdateAvailableBadge"
+                z:                  1   // VectorImage adds its rendered SVG as a later child
+                anchors.top:        parent.top
+                anchors.right:      parent.right
+                anchors.topMargin:  -height * 0.25
+                anchors.rightMargin: -width * 0.25
+                width:              ScreenTools.defaultFontPixelHeight
+                height:             width
+                radius:             width / 2
+                color:              Qt.rgba(1, 1, 1, 0.75)
+                visible:            QGroundControl.newStableVersion !== ""
+
+                QGCColoredImage {
+                    anchors.fill:   parent
+                    source:         "/res/UpdateAvailable.svg"
+                    color:          qgcPal.colorBlue
+                }
+            }
         }
         QGCColoredImage {
             visible:                !button.logo
@@ -45,7 +65,7 @@ Button {
             width:                  height
             sourceSize.height:      parent.height
             fillMode:               Image.PreserveAspectFit
-            color:                  button.checked ? qgcPal.buttonHighlightText : qgcPal.buttonText
+            color:                  button.checked ? qgcPal.accentText : qgcPal.textPrimary
             source:                 visible ? button.icon.source : ""
             anchors.verticalCenter: parent.verticalCenter
         }
@@ -53,7 +73,7 @@ Button {
             id:                     _label
             visible:                text !== ""
             text:                   button.text
-            color:                  button.checked ? qgcPal.buttonHighlightText : qgcPal.buttonText
+            color:                  button.checked ? qgcPal.accentText : qgcPal.textPrimary
             anchors.verticalCenter: parent.verticalCenter
         }
     }

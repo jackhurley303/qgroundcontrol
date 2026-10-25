@@ -8,11 +8,14 @@ qt_add_library(PlanViewModule STATIC
     PlanViewActionContext.cc
 )
 
-set_source_files_properties(PlanEditLayers.qml PROPERTIES
-    QT_QML_SINGLETON_TYPE TRUE
+set_source_files_properties(
+    PlanEditLayers.qml
+    PROPERTIES
+        QT_QML_SINGLETON_TYPE TRUE
 )
 
-qt_add_qml_module(PlanViewModule
+qt_add_qml_module(
+    PlanViewModule
     URI QGroundControl.PlanView
     VERSION 1.0
     RESOURCE_PREFIX /qml
@@ -22,22 +25,40 @@ qt_add_qml_module(PlanViewModule
         CameraSection.qml
         CorridorScanEditor.qml
         CorridorScanMapVisual.qml
+        FenceTabPage.qml
+        FenceInspector.qml
+        FenceItemList.qml
         FWLandingPatternEditor.qml
         FWLandingPatternMapVisual.qml
         GeoFenceEditor.qml
         GeoFenceMapVisuals.qml
         MissionDefaultsEditor.qml
         MissionItemEditor.qml
+        MissionItemEditorLoader.qml
         MissionItemIndexLabel.qml
+        MissionItemInspector.qml
+        MissionItemList.qml
+        MissionItemMenu.qml
+        MissionItemRow.qml
         MissionItemMapVisual.qml
         MissionItemMapVisualBase.qml
         HomePositionMapVisual.qml
         MissionItemStatus.qml
         MissionSettingsEditor.qml
         MissionStats.qml
+        MissionTabPage.qml
         PlanEditLayers.qml
         PlanEditToolbar.qml
         PlanInfoEditor.qml
+        PlanInspectorHeader.qml
+        PlanListInspector.qml
+        PlanPanel.qml
+        PlanPanelGroupHeader.qml
+        PlanPanelIconButton.qml
+        PlanPanelLogic.js
+        PlanPanelRow.qml
+        PlanPanelTabBar.qml
+        PlanTabPage.qml
         PlanToolBarIndicators.qml
         PlanTreeView.qml
         PlanView.qml
@@ -46,7 +67,10 @@ qt_add_qml_module(PlanViewModule
         PlanViewRightPanel.qml
         RallyPointEditorHeader.qml
         RallyPointItemEditor.qml
+        RallyPointList.qml
+        RallyPointInspector.qml
         RallyPointMapVisuals.qml
+        RallyTabPage.qml
         SimpleItemEditor.qml
         SimpleItemMapVisual.qml
         StructureScanEditor.qml
@@ -57,7 +81,6 @@ qt_add_qml_module(PlanViewModule
         TerrainStatus.qml
         TransectStyleComplexItemEditor.qml
         TransectStyleComplexItemStats.qml
-        TransectStyleComplexItemTabBar.qml
         TransectStyleComplexItemTerrainFollow.qml
         TransectStyleMapVisuals.qml
         TransformEditor.qml
@@ -67,14 +90,24 @@ qt_add_qml_module(PlanViewModule
 )
 
 # Files whose runtime alias differs from their on-disk filename.
-set_source_files_properties("${CMAKE_SOURCE_DIR}/resources/AdvancedSliders.svg"
-    PROPERTIES QT_RESOURCE_ALIAS "PlanSimpleItemAdvanced.svg")
-set_source_files_properties("${CMAKE_SOURCE_DIR}/resources/gear-black.svg"
-    PROPERTIES QT_RESOURCE_ALIAS "PlanSimpleItemBasic.svg")
-set_source_files_properties("${CMAKE_SOURCE_DIR}/resources/camera.svg"
-    PROPERTIES QT_RESOURCE_ALIAS "PlanSimpleItemCamera.svg")
+set_source_files_properties(
+    "${CMAKE_SOURCE_DIR}/resources/AdvancedSliders.svg"
+    PROPERTIES
+        QT_RESOURCE_ALIAS "PlanSimpleItemAdvanced.svg"
+)
+set_source_files_properties(
+    "${CMAKE_SOURCE_DIR}/resources/gear-black.svg"
+    PROPERTIES
+        QT_RESOURCE_ALIAS "PlanSimpleItemBasic.svg"
+)
+set_source_files_properties(
+    "${CMAKE_SOURCE_DIR}/resources/camera.svg"
+    PROPERTIES
+        QT_RESOURCE_ALIAS "PlanSimpleItemCamera.svg"
+)
 
-qt_add_resources(PlanViewModule planview_resources
+qt_add_resources(
+    PlanViewModule planview_resources
     PREFIX "/res"
     BASE "${CMAKE_SOURCE_DIR}/resources"
     FILES
@@ -91,7 +124,8 @@ qt_add_resources(PlanViewModule planview_resources
         "${CMAKE_SOURCE_DIR}/resources/waypoint.svg"
 )
 
-qt_add_resources(PlanViewModule planview_qmlimages
+qt_add_resources(
+    PlanViewModule planview_qmlimages
     PREFIX "/qmlimages"
     BASE "${CMAKE_SOURCE_DIR}/resources"
     FILES

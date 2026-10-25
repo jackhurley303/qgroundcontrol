@@ -34,12 +34,10 @@ Item {
         }
     }
 
-    property bool   _vehicleIsRover:        globals.activeVehicle ? globals.activeVehicle.rover : false
     property bool   _vehicleArmed:          globals.activeVehicle ? globals.activeVehicle.armed : false
-    property bool   _vehicleFlying:         globals.activeVehicle ? globals.activeVehicle.flying : false
+    property bool   _vehicleAirborne:       globals.activeVehicle ? globals.activeVehicle.airborne : false
     property bool   _disableDueToArmed:     vehicleComponent ? (!vehicleComponent.allowSetupWhileArmed && _vehicleArmed) : false
-    // FIXME: The _vehicleIsRover checkl is a hack to work around https://github.com/PX4/Firmware/issues/10969
-    property bool   _disableDueToFlying:    vehicleComponent ? (!_vehicleIsRover && !vehicleComponent.allowSetupWhileFlying && _vehicleFlying) : false
+    property bool   _disableDueToFlying:    vehicleComponent ? (!vehicleComponent.allowSetupWhileFlying && _vehicleAirborne) : false
     property string _disableReason:         _disableDueToArmed ? qsTr("armed") : qsTr("flying")
     property real   _margins:               ScreenTools.defaultFontPixelHeight * 0.5
 
@@ -53,6 +51,7 @@ Item {
     }
 
     QGCFlickable {
+        objectName:     "setupPage_flickable"
         anchors.fill:   parent
         contentWidth:   Math.max(availableWidth, pageLoader.x + pageLoader.item.width)
         contentHeight:  Math.max(availableHeight, pageLoader.y + pageLoader.item.height)

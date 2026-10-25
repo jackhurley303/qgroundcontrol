@@ -6,6 +6,8 @@ typeinfo QGroundControl.PluginUI.qmltypes
 # Without this every QColor-typed property on the published C++ types reports
 # unresolved-type to qmllint out of tree.
 depends QtQuick
+# The same for the QGeoCoordinate-typed properties (QGCPluginUIGlobal.flightMapPosition).
+depends QtPositioning
 
 # ---------------------------------------------------------------------------
 # Frozen tier — controls
@@ -16,6 +18,8 @@ QGCComboBox 1.0 QGCComboBox.qml
 QGCFileDialog 1.0 QGCFileDialog.qml
 QGCFlickable 1.0 QGCFlickable.qml
 QGCFlickableScrollIndicator 1.0 QGCFlickableScrollIndicator.qml
+QGCGroupBox 1.0 QGCGroupBox.qml
+QGCGroupBoxTab 1.0 QGCGroupBoxTab.qml
 QGCLabel 1.0 QGCLabel.qml
 QGCListView 1.0 QGCListView.qml
 QGCMenu 1.0 QGCMenu.qml
@@ -24,8 +28,6 @@ QGCMenuSeparator 1.0 QGCMenuSeparator.qml
 QGCMouseArea 1.0 QGCMouseArea.qml
 QGCPopupDialog 1.0 QGCPopupDialog.qml
 QGCPopupDialogFactory 1.0 QGCPopupDialogFactory.qml
-QGCTabBar 1.0 QGCTabBar.qml
-QGCTabButton 1.0 QGCTabButton.qml
 QGCTextField 1.0 QGCTextField.qml
 FileButton 1.0 FileButton.qml
 SectionHeader 1.0 SectionHeader.qml

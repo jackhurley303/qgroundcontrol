@@ -70,6 +70,9 @@ install(FILES
     DESTINATION "qml/QGroundControl/PluginUI"
     COMPONENT QGCPluginSDK
 )
+# The JavaScript files those bodies import by relative path.
+install(CODE "set(QGC_PLUGIN_UI_QML_BODIES \"${QGC_PLUGIN_UI_QML_BODIES}\")" COMPONENT QGCPluginSDK)
+install(SCRIPT "${CMAKE_CURRENT_LIST_DIR}/InstallPluginUIScripts.cmake" COMPONENT QGCPluginSDK)
 
 install(EXPORT QGCPluginAPITargets
     FILE QGCPluginAPITargets.cmake
@@ -147,7 +150,7 @@ install(FILES "${CMAKE_SOURCE_DIR}/plugins/example/SDK-README.md"
 
 # The out-of-tree gate itself (out-of-tree-verifier.md U2), so a third-party author runs
 # the same tool CI runs rather than a description of it. It is stdlib-only and single-file
-# precisely so it can ship here: nothing else under tools/ comes with it, and there is no
+# precisely so it can ship here: only _bootstrap.py (below) comes with it, and there is no
 # QGC checkout to fall back on. PROGRAMS, not FILES, so the shebang is usable. The schema
 # ships beside it as the human- and editor-readable statement of the manifest contract; the
 # tool validates manifests itself and never depends on it being present.
@@ -157,6 +160,13 @@ install(PROGRAMS "${CMAKE_SOURCE_DIR}/tools/verify_plugin_out_of_tree.py"
 )
 
 install(FILES "${CMAKE_SOURCE_DIR}/tools/plugin-verify.schema.json"
+    DESTINATION "tools"
+    COMPONENT QGCPluginSDK
+)
+
+# Both shipped tools import tools/_bootstrap.py, as every tools/ entry script must. It is
+# stdlib-only and written for checkouts without the rest of tools/, so it ships beside them.
+install(FILES "${CMAKE_SOURCE_DIR}/tools/_bootstrap.py"
     DESTINATION "tools"
     COMPONENT QGCPluginSDK
 )

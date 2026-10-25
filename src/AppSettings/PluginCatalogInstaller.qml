@@ -182,7 +182,7 @@ ColumnLayout {
                     Layout.fillWidth:   true
                     wrapMode:           Text.Wrap
                     font.bold:          consentColumn._strongestWarning
-                    color:              consentColumn._strongestWarning ? qgcPal.colorRed : qgcPal.text
+                    color:              consentColumn._strongestWarning ? qgcPal.colorRed : qgcPal.textPrimary
                     text:               consentColumn._strongestWarning ?
                                             qsTr("Warning: this plugin runs native code on your computer, with the same access as QGroundControl itself. Its source code is not public, and no maintainer has reviewed it. Install it only if you fully trust its author.") :
                                         consentDialog.entry.tier === "sdk" ?

@@ -17,12 +17,21 @@ class GimbalController : public QObject
     QML_UNCREATABLE("")
     Q_MOC_INCLUDE("QmlObjectListModel.h")
 
+    friend class GimbalControllerDiscoveryTest;
+
     Q_PROPERTY(Gimbal*              activeGimbal    READ activeGimbal WRITE setActiveGimbal NOTIFY activeGimbalChanged)
     Q_PROPERTY(QmlObjectListModel*  gimbals         READ gimbals                            CONSTANT)
 
 public:
     GimbalController(Vehicle *vehicle);
     ~GimbalController();
+
+    // These are public for creating unit tests
+    static constexpr int kRateResendIntervalMs = 500;     ///< Rate command resend period while an axis is moving
+    static constexpr int kTestRateResendIntervalMs = 50;  ///< Shortened rate resend period in unit tests
+    /// Minimum time between GIMBAL_MANAGER_STATUS interval requests, per gimbal
+    static constexpr int kStatusRequestSpacingMs = 1000;
+    static constexpr int kTestStatusRequestSpacingMs = 50;  ///< Shortened status request spacing in unit tests
 
     Gimbal *activeGimbal() const { return _activeGimbal; }
     QmlObjectListModel *gimbals() const { return _gimbals; }
@@ -91,7 +100,8 @@ private:
         uint8_t deviceId = 0;
     };
 
-    void _requestGimbalInformation(uint8_t compid);
+    /// @return true if a request was sent; false if skipped (another request is in flight)
+    bool _requestGimbalInformation(uint8_t compid);
     static void _requestMessageResultHandler(void* resultHandlerData, MAV_RESULT result, VehicleTypes::RequestMessageResultHandlerFailureCode_t failureCode, const mavlink_message_t& message);
     static void _requestDeviceInformationResultHandler(
         void* resultHandlerData, MAV_RESULT result, VehicleTypes::RequestMessageResultHandlerFailureCode_t failureCode,
@@ -104,6 +114,8 @@ private:
     void _checkComplete(Gimbal &gimbal, GimbalPairId pairId);
     bool _tryGetGimbalControl();
     bool _yawInVehicleFrame(uint32_t flags);
+    static bool _gcsSystemIdSupportsGimbalControl();
+    static void _showGcsSystemIdUnsupportedMessage();
 
     void _sendGimbalAttitudeRates(float pitch_rate_deg_s, float yaw_rate_deg_s);
 
@@ -121,6 +133,7 @@ private:
     QMap<GimbalPairId, Gimbal*> _potentialGimbals;
     QmlObjectListModel *_gimbals = nullptr;
     bool _initialConnectComplete = false;
+    bool _gcsSystemIdUnsupportedMessageShown = false;  ///< Rate commands retry continuously; warn only once
 
     static constexpr const char *_gimbalFactGroupNamePrefix = "gimbal";
 };

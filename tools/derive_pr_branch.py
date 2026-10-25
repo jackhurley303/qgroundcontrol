@@ -21,13 +21,10 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from _bootstrap import ensure_tools_dir
-
-ensure_tools_dir(__file__)
-
+import _bootstrap as _bootstrap
 from common.file_traversal import find_repo_root
 from common.git import run_git
-from common.logging import log_error, log_info, log_ok, log_step
+from common.logging import log_error, log_info, log_ok
 from common.proc import run_captured
 
 # .github/CONTRIBUTING.md requires Conventional Commits on every commit in a PR, and
@@ -188,6 +185,7 @@ PLUGIN_SDK = PRSpec(
         "plugins/CMakeLists.txt",
         "cmake/modules/PluginHelpers.cmake",
         "cmake/install/InstallPluginSDK.cmake",
+        "cmake/install/InstallPluginUIScripts.cmake",
         "cmake/install/QGCPluginAPIConfig.cmake.in",
         # The build-marker generator: included by PluginHelpers.cmake in-tree and
         # installed beside the config file above, so a standalone plugin calls the
@@ -211,6 +209,9 @@ PLUGIN_SDK = PRSpec(
         # an author produces packages against the same rules PluginInstaller enforces.
         "tools/pack_plugin.py",
         "tools/tests/test_pack_plugin.py",
+        # Its script tree must list every top-level tools/ script (test_common_docs). The
+        # harness scripts are not on this branch, so doc_rewrites strip their two lines.
+        "tools/README.md",
         "src/QGCApplication.h",
         "src/QGCApplication.cc",
         "src/Comms/MAVLinkProtocol.h",
@@ -435,6 +436,7 @@ PLUGIN_SDK = PRSpec(
                 "plugins/CMakeLists.txt",
                 "cmake/modules/PluginHelpers.cmake",
                 "cmake/install/InstallPluginSDK.cmake",
+                "cmake/install/InstallPluginUIScripts.cmake",
                 "cmake/install/QGCPluginBuildMarker.cmake",
                 "tools/derive_plugin_ui_sdk.py",
                 "tools/pack_plugin.py",
@@ -461,12 +463,26 @@ PLUGIN_SDK = PRSpec(
                 "tools/tests/test_verify_plugin_out_of_tree.py",
                 "tools/tests/test_check_plugin_ui_contract.py",
                 "tools/tests/test_pack_plugin.py",
+                "tools/README.md",
                 ".github/workflows/macos.yml",
                 ".pre-commit-config.yaml",
             ),
         ),
     ),
     doc_rewrites=(
+        (
+            "tools/README.md",
+            (
+                (
+                    "├── check_pr_routing.py      # Audit upstream PR routing coverage, read-only\n",
+                    "",
+                ),
+                (
+                    "├── derive_pr_branch.py      # Derive upstream PR branches from mainline\n",
+                    "",
+                ),
+            ),
+        ),
         (
             "plugins/README.md",
             (
@@ -698,7 +714,7 @@ GSTREAMER_RPATH = PRSpec(
     # wholesale take sound here.
     include_paths=(
         "cmake/GStreamer/Link.cmake",
-        "cmake/find-modules/FindGStreamer.cmake",
+        "cmake/GStreamer/Targets.cmake",
         "src/VideoManager/VideoReceiver/GStreamer/CMakeLists.txt",
     ),
 )
@@ -905,7 +921,7 @@ SPECS: dict[str, PRSpec] = {
 
 
 def _run(repo_root: Path, *args: str) -> None:
-    log_step(" ".join(args))
+    log_info(" ".join(args))
     result = run_git(*args, cwd=repo_root)
     if result.returncode != 0:
         log_error(result.stderr.strip() or result.stdout.strip())

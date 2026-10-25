@@ -43,9 +43,13 @@ LogReplayConfiguration::~LogReplayConfiguration()
 
 void LogReplayConfiguration::copyFrom(const LinkConfiguration *source)
 {
-    LinkConfiguration::copyFrom(source);
-
     const LogReplayConfiguration *logReplaySource = qobject_cast<const LogReplayConfiguration*>(source);
+    if (!logReplaySource) {
+        qCWarning(LogReplayLinkLog) << "Invalid source configuration type";
+        return;
+    }
+
+    LinkConfiguration::copyFrom(source);
 
     setLogFilename(logReplaySource->logFilename());
 }
@@ -440,7 +444,7 @@ void LogReplayWorker::movePlayhead(qreal percentComplete)
     emit replaySeekMissionResolved(resolved);
 
     for (auto sysIt = _paramTimelineByKey.constBegin(); sysIt != _paramTimelineByKey.constEnd(); ++sysIt) {
-        const int sysId = static_cast<int>(sysIt.key());
+        const quint32 sysId = static_cast<quint32>(sysIt.key());
         QList<ParamSeekValue> paramResolved;
         paramResolved.reserve(sysIt.value().size());
         for (auto keyIt = sysIt.value().constBegin(); keyIt != sysIt.value().constEnd(); ++keyIt) {
@@ -580,7 +584,7 @@ void LogReplayWorker::_recordTimelineEvent(const mavlink_message_t &msg, quint64
 void LogReplayWorker::_emitParamSeekReset()
 {
     for (auto sysIt = _paramTimelineByKey.constBegin(); sysIt != _paramTimelineByKey.constEnd(); ++sysIt) {
-        const int sysId = static_cast<int>(sysIt.key());
+        const quint32 sysId = static_cast<quint32>(sysIt.key());
         QList<ParamSeekValue> resetList;
         resetList.reserve(sysIt.value().size());
         for (auto keyIt = sysIt.value().constBegin(); keyIt != sysIt.value().constEnd(); ++keyIt) {

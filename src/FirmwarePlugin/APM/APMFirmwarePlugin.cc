@@ -7,6 +7,7 @@
 #include "APMAutoPilotPlugin.h"
 #include "APMMavlinkStreamRateSettings.h"
 #include "APMParameterMetaData.h"
+#include "APMVehicleReadiness.h"
 #include "AppMessages.h"
 #include "ArduCopterFirmwarePlugin.h"
 #include "ArduPlaneFirmwarePlugin.h"
@@ -135,7 +136,7 @@ void APMFirmwarePlugin::_handleIncomingParamValue(Vehicle *vehicle, mavlink_mess
     Q_UNUSED(vehicle);
 
     mavlink_param_value_t paramValue;
-    mavlink_param_union_t paramUnion;
+    mavlink_param_union_t paramUnion{};
 
     (void) memset(&paramValue, 0, sizeof(paramValue));
 
@@ -200,7 +201,8 @@ void APMFirmwarePlugin::_handleOutgoingParamSetThreadSafe(Vehicle* /*vehicle*/, 
 
     mavlink_msg_param_set_decode(message, &paramSet);
 
-    if (!_ardupilotComponentMap[paramSet.target_system][paramSet.target_component]) {
+    if (!_ardupilotComponentMap[mavlink_msg_get_target_sysid(message, mavlink_get_msg_entry(message->msgid))]
+                               [paramSet.target_component]) {
         // Message is targetted to non-ArduPilot firmware component, assume it uses current mavlink spec
         return;
     }
@@ -234,13 +236,10 @@ void APMFirmwarePlugin::_handleOutgoingParamSetThreadSafe(Vehicle* /*vehicle*/, 
     }
 
     _adjustOutgoingMavlinkMutex.lock();
-    mavlink_msg_param_set_encode_chan(
-        message->sysid,
-        message->compid,
-        outgoingLink->mavlinkChannel(),
-        message,
-        &paramSet
-    );
+    mavlink_msg_param_set_pack_chan(message->sysid, message->compid, outgoingLink->mavlinkChannel(), message,
+                                    mavlink_msg_get_target_sysid(message, mavlink_get_msg_entry(message->msgid)),
+                                    paramSet.target_component, paramSet.param_id, paramSet.param_value,
+                                    paramSet.param_type);
     _adjustOutgoingMavlinkMutex.unlock();
 }
 
@@ -272,13 +271,13 @@ void APMFirmwarePlugin::_handleIncomingHeartbeat(Vehicle *vehicle, mavlink_messa
     mavlink_msg_heartbeat_decode(message, &heartbeat);
 
     if (message->compid == MAV_COMP_ID_AUTOPILOT1) {
-        bool flying = false;
+        bool underway = false;
 
-        // We pull Vehicle::flying state from HEARTBEAT on ArduPilot. This is a firmware specific test.
+        // We pull Vehicle::underway state from HEARTBEAT on ArduPilot. This is a firmware specific test.
         if (vehicle->armed() && ((heartbeat.system_status == MAV_STATE_ACTIVE) || (heartbeat.system_status == MAV_STATE_CRITICAL) || (heartbeat.system_status == MAV_STATE_EMERGENCY))) {
-            flying = true;
+            underway = true;
         }
-        vehicle->_setFlying(flying);
+        vehicle->_setUnderway(underway);
     }
 
     // We need to know whether this component is part of the ArduPilot stack code or not so we can adjust mavlink quirks appropriately.
@@ -879,7 +878,6 @@ void APMFirmwarePlugin::guidedModeChangeAltitude(Vehicle *vehicle, double altitu
 
         (void) memset(&cmd, 0, sizeof(cmd));
 
-        cmd.target_system = static_cast<uint8_t>(vehicle->id());
         cmd.target_component = static_cast<uint8_t>(vehicle->defaultComponentId());
         cmd.coordinate_frame = MAV_FRAME_LOCAL_OFFSET_NED;
         cmd.type_mask = 0xFFF8; // Only x/y/z valid
@@ -887,13 +885,11 @@ void APMFirmwarePlugin::guidedModeChangeAltitude(Vehicle *vehicle, double altitu
         cmd.y = 0.0f;
         cmd.z = static_cast<float>(-(altitudeChange));
 
-        mavlink_msg_set_position_target_local_ned_encode_chan(
-            static_cast<uint8_t>(MAVLinkProtocol::instance()->getSystemId()),
-            static_cast<uint8_t>(MAVLinkProtocol::getComponentId()),
-            sharedLink->mavlinkChannel(),
-            &msg,
-            &cmd
-        );
+        mavlink_msg_set_position_target_local_ned_pack_chan(
+            MAVLinkProtocol::instance()->getSystemId(), static_cast<uint8_t>(MAVLinkProtocol::getComponentId()),
+            sharedLink->mavlinkChannel(), &msg, cmd.time_boot_ms, vehicle->id(), cmd.target_component,
+            cmd.coordinate_frame, cmd.type_mask, cmd.x, cmd.y, cmd.z, cmd.vx, cmd.vy, cmd.vz, cmd.afx, cmd.afy, cmd.afz,
+            cmd.yaw, cmd.yaw_rate);
 
         (void) vehicle->sendMessageOnLinkThreadSafe(sharedLink.get(), msg);
     }
@@ -1060,7 +1056,7 @@ bool APMFirmwarePlugin::_guidedModeTakeoff(Vehicle *vehicle, double altitudeRel)
 
 void APMFirmwarePlugin::startTakeoff(Vehicle *vehicle) const
 {
-    if (vehicle->flying()) {
+    if (vehicle->airborne()) {
         QGC::showAppMessage(tr("Unable to start takeoff: Vehicle is already in the air."));
         return;
     }
@@ -1077,10 +1073,15 @@ void APMFirmwarePlugin::startTakeoff(Vehicle *vehicle) const
     }
 }
 
+VehicleReadiness* APMFirmwarePlugin::createVehicleReadiness(Vehicle* vehicle) const
+{
+    return new APMVehicleReadiness(vehicle);
+}
+
 void APMFirmwarePlugin::startMission(Vehicle *vehicle) const
 {
-    if (vehicle->flying()) {
-        // Vehicle already in the air, we just need to switch to auto
+    if (vehicle->underway()) {
+        // Vehicle already underway, we just need to switch to auto
         if (!_setFlightModeAndValidate(vehicle, missionFlightMode())) {
             QGC::showAppMessage(tr("Unable to start mission: Vehicle failed to change to Auto mode."));
         }
@@ -1149,13 +1150,9 @@ void APMFirmwarePlugin::_handleRCChannels(Vehicle *vehicle, mavlink_message_t *m
         if (channels.rssi && (channels.rssi != 255)) {
             channels.rssi = static_cast<uint8_t>((static_cast<double>(channels.rssi) / 254.0) * 100.0);
         }
-        mavlink_msg_rc_channels_encode_chan(
-            static_cast<uint8_t>(MAVLinkProtocol::instance()->getSystemId()),
-            static_cast<uint8_t>(MAVLinkProtocol::getComponentId()),
-            sharedLink->mavlinkChannel(),
-            message,
-            &channels
-        );
+        mavlink_msg_rc_channels_encode_chan(MAVLinkProtocol::instance()->getSystemId(),
+                                            static_cast<uint8_t>(MAVLinkProtocol::getComponentId()),
+                                            sharedLink->mavlinkChannel(), message, &channels);
     }
 }
 
@@ -1170,13 +1167,9 @@ void APMFirmwarePlugin::_handleRCChannelsRaw(Vehicle *vehicle, mavlink_message_t
         if (channels.rssi) {
             channels.rssi = static_cast<uint8_t>((static_cast<double>(channels.rssi) / 255.0) * 100.0);
         }
-        mavlink_msg_rc_channels_raw_encode_chan(
-            static_cast<uint8_t>(MAVLinkProtocol::instance()->getSystemId()),
-            static_cast<uint8_t>(MAVLinkProtocol::getComponentId()),
-            sharedLink->mavlinkChannel(),
-            message,
-            &channels
-        );
+        mavlink_msg_rc_channels_raw_encode_chan(MAVLinkProtocol::instance()->getSystemId(),
+                                                static_cast<uint8_t>(MAVLinkProtocol::getComponentId()),
+                                                sharedLink->mavlinkChannel(), message, &channels);
     }
 }
 
@@ -1219,13 +1212,9 @@ void APMFirmwarePlugin::sendGCSMotionReport(Vehicle *vehicle, const FollowMe::GC
     };
 
     mavlink_message_t message{};
-    (void) mavlink_msg_global_position_int_encode_chan(
-        static_cast<uint8_t>(MAVLinkProtocol::instance()->getSystemId()),
-        static_cast<uint8_t>(MAVLinkProtocol::getComponentId()),
-        sharedLink->mavlinkChannel(),
-        &message,
-        &globalPositionInt
-    );
+    (void) mavlink_msg_global_position_int_encode_chan(MAVLinkProtocol::instance()->getSystemId(),
+                                                       static_cast<uint8_t>(MAVLinkProtocol::getComponentId()),
+                                                       sharedLink->mavlinkChannel(), &message, &globalPositionInt);
     (void) vehicle->sendMessageOnLinkThreadSafe(sharedLink.get(), message);
 }
 
@@ -1356,43 +1345,47 @@ qreal APMFirmwarePlugin::calcAltOffsetP(uint32_t atmospheric1, uint32_t atmosphe
 QPair<QMetaObject::Connection,QMetaObject::Connection> APMFirmwarePlugin::startCompensatingBaro(Vehicle *vehicle)
 {
     // TODO: Running Average?
-    const QMetaObject::Connection baroPressureUpdater = QObject::connect(QGCSensors::QGCPressure::instance(), &QGCSensors::QGCPressure::pressureUpdated, vehicle, [vehicle](qreal pressure, qreal temperature){
-        if (!vehicle || !vehicle->flying()) {
-            return;
-        }
+    const QMetaObject::Connection baroPressureUpdater = QObject::connect(
+        QGCSensors::QGCPressure::instance(), &QGCSensors::QGCPressure::pressureUpdated, vehicle,
+        [vehicle](qreal pressure, qreal temperature) {
+            if (!vehicle || !vehicle->airborne()) {
+                return;
+            }
 
-        if (qFuzzyIsNull(pressure)) {
-            return;
-        }
+            if (qFuzzyIsNull(pressure)) {
+                return;
+            }
 
-        const qreal initialPressure = vehicle->getInitialGCSPressure();
-        if (qFuzzyIsNull(initialPressure)) {
-            return;
-        }
+            const qreal initialPressure = vehicle->getInitialGCSPressure();
+            if (qFuzzyIsNull(initialPressure)) {
+                return;
+            }
 
-        const qreal initialTemperature = vehicle->getInitialGCSTemperature();
+            const qreal initialTemperature = vehicle->getInitialGCSTemperature();
 
-        qreal offset = 0.;
-        if (!qFuzzyIsNull(temperature) && !qFuzzyIsNull(initialTemperature)) {
-            offset = APMFirmwarePlugin::calcAltOffsetPT(initialPressure, initialTemperature, pressure, temperature);
-        } else {
-            offset = APMFirmwarePlugin::calcAltOffsetP(initialPressure, pressure);
-        }
+            qreal offset = 0.;
+            if (!qFuzzyIsNull(temperature) && !qFuzzyIsNull(initialTemperature)) {
+                offset = APMFirmwarePlugin::calcAltOffsetPT(initialPressure, initialTemperature, pressure, temperature);
+            } else {
+                offset = APMFirmwarePlugin::calcAltOffsetP(initialPressure, pressure);
+            }
 
-        APMFirmwarePlugin::_setBaroAltOffset(vehicle, offset);
-    });
+            APMFirmwarePlugin::_setBaroAltOffset(vehicle, offset);
+        });
 
-    const QMetaObject::Connection baroTempUpdater = connect(QGCSensors::QGCAmbientTemperature::instance(), &QGCSensors::QGCAmbientTemperature::temperatureUpdated, vehicle, [vehicle](qreal temperature){
-        if (!vehicle || !vehicle->flying()) {
-           return;
-        }
+    const QMetaObject::Connection baroTempUpdater =
+        connect(QGCSensors::QGCAmbientTemperature::instance(), &QGCSensors::QGCAmbientTemperature::temperatureUpdated,
+                vehicle, [vehicle](qreal temperature) {
+                    if (!vehicle || !vehicle->airborne()) {
+                        return;
+                    }
 
-        if (qFuzzyIsNull(temperature)) {
-            return;
-        }
+                    if (qFuzzyIsNull(temperature)) {
+                        return;
+                    }
 
-        APMFirmwarePlugin::_setBaroGndTemp(vehicle, temperature);
-    });
+                    APMFirmwarePlugin::_setBaroGndTemp(vehicle, temperature);
+                });
 
     return QPair<QMetaObject::Connection,QMetaObject::Connection>(baroPressureUpdater, baroTempUpdater);
 }
@@ -1423,8 +1416,6 @@ QVariant APMFirmwarePlugin::expandedToolbarIndicatorSource(const Vehicle* vehicl
         return QVariant::fromValue(QUrl::fromUserInput("qrc:/qml/QGroundControl/FirmwarePlugin/APM/APMBatteryIndicator.qml"));
     } else if (indicatorName == "FlightMode" && vehicle->multiRotor()) {
         return QVariant::fromValue(QUrl::fromUserInput("qrc:/qml/QGroundControl/FirmwarePlugin/APM/APMFlightModeIndicator.qml"));
-    } else if (indicatorName == "MainStatus") {
-        return QVariant::fromValue(QUrl::fromUserInput("qrc:/qml/QGroundControl/FirmwarePlugin/APM/APMMainStatusIndicator.qml"));
     }
 
     return QVariant();

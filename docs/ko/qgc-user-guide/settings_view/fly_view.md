@@ -4,7 +4,7 @@ Settings that control the behavior and appearance of the [Fly View](../fly_view/
 
 ## General
 
-- **Use preflight checklist** — enable the pre-flight checklist tool in the Fly View
+- **Use preflight checklist** — enable the pre-flight checklist tab in the main status dropdown
 - **Enforce checklist** — prevent arming until all checklist items are complete
 - **Enable multi-vehicle panel** — show the multi-vehicle list when more than one vehicle is connected
 - **Keep Map Centered On Vehicle** — prevent the map from drifting away from the vehicle position
@@ -12,6 +12,7 @@ Settings that control the behavior and appearance of the [Fly View](../fly_view/
 - **Show simple camera controls (DIGICAM_CONTROL)** — show basic camera trigger controls for autopilot-connected cameras
 - **Update return to home position based on device location** — send the GCS position as the vehicle's home/RTL point
 - **Enable automatic mission start/resume popups** — show mission start and resume prompts automatically
+- **Allow Force Arm** — show a **Force Arm** button in the [Flight Status](../fly_view/fly_view_toolbar.md#flight-status) dropdown. Force arming bypasses pre-arm checks, use with caution.
 
 ## Guided Commands
 

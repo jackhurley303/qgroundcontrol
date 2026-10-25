@@ -13,6 +13,8 @@ private slots:
     void cleanup() final;
 
     void _testMissionPlannerFileLoad();
+    void _testManualTestPlansLoad_data();
+    void _testManualTestPlansLoad();
     void _testTakeoffTextFileLoad_data();
     void _testTakeoffTextFileLoad();
     void _testActiveVehicleChanged();
@@ -44,18 +46,19 @@ private slots:
 
     void _testPlanCreatorsFiltered();
 
+    void _testEditMarksDirtyForSave_data();
+    void _testEditMarksDirtyForSave();
+
 private:
-    enum DirtyScenario {
-        UploadPreservesSaveDirtyTrue,
-        UploadPreservesSaveDirtyFalse,
+    enum DirtyScenario
+    {
+        UploadPreservesSaveDirty,
         UploadFalseOnPlanClear,
         UploadTrueWhenSaveTrue,
         UploadTrueOnNewPlanLoad,
-        SaveToFilePreservesUploadDirtyTrue,
-        SaveToFilePreservesUploadDirtyFalse,
+        SaveToFilePreservesUploadDirty,
         SaveFalseOnSuccessfulLoad,
-        ClearSaveDirtyPreservesUploadTrue,
-        ClearSaveDirtyPreservesUploadFalse,
+        ClearSaveDirtyPreservesUpload,
         DownloadWithItemsNotDirtyForSave,
         DownloadEmptyNotDirtyForSave,
     };

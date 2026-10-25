@@ -90,8 +90,33 @@ qt_generate_deploy_qml_app_script(
     ${_deploy_exclude_plugins}
 )
 
+# macdeployqt spawns install_name_tool/otool/strip tens of thousands of times by bare name; the
+# /usr/bin xcrun shims add ~6 ms per spawn, so resolve the active toolchain directly for the deploy.
+if(MACOS)
+    install(
+        CODE [[
+        set(_qgc_saved_path "$ENV{PATH}")
+        execute_process(
+            COMMAND xcrun --find install_name_tool
+            OUTPUT_VARIABLE _qgc_install_name_tool
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE _qgc_xcrun_rc
+            ERROR_QUIET
+        )
+        if(_qgc_xcrun_rc EQUAL 0 AND EXISTS "${_qgc_install_name_tool}")
+            cmake_path(GET _qgc_install_name_tool PARENT_PATH _qgc_toolchain_bin)
+            set(ENV{PATH} "${_qgc_toolchain_bin}:$ENV{PATH}")
+        endif()
+    ]]
+    )
+endif()
+
 install(SCRIPT "${_deploy_script}")
 message(STATUS "QGC: Qt deployment script: ${_deploy_script}")
+
+if(MACOS)
+    install(CODE [[set(ENV{PATH} "${_qgc_saved_path}")]])
+endif()
 
 # Strip unused SQL-driver/TIFF plugins whose missing backing libs would abort
 # CPackDeb's dpkg-shlibdeps. The default Runtime component makes this run for
@@ -122,15 +147,13 @@ endif()
 # Runs after Qt deploy to survive any rpath rewriting by macdeployqt.
 set(_qgc_gst_framework_bundle "")
 if(MACOS AND TARGET GStreamer::Layout)
-    get_target_property(_qgc_gst_framework_bundle GStreamer::Layout GSTREAMER_FRAMEWORK_BUNDLE)
-    if(_qgc_gst_framework_bundle STREQUAL "_qgc_gst_framework_bundle-NOTFOUND")
-        set(_qgc_gst_framework_bundle "")
-    endif()
+    gstreamer_layout_get(FRAMEWORK_BUNDLE _qgc_gst_framework_bundle)
 endif()
 if(MACOS AND _qgc_gst_framework_bundle)
     install(
         CODE "
-        set(_binary \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_PROJECT_NAME}.app/Contents/MacOS/${CMAKE_PROJECT_NAME}\")
+        set(_bundle \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_PROJECT_NAME}.app\")
+        set(_binary \"\${_bundle}/Contents/MacOS/${CMAKE_PROJECT_NAME}\")
         if(EXISTS \"\${_binary}\")
             execute_process(
                 COMMAND install_name_tool -add_rpath

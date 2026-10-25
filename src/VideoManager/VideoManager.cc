@@ -29,7 +29,6 @@
 #include <QtCore/QFutureWatcher>
 #include <QtCore/QRunnable>
 #include <QtCore/QTimer>
-#include <QtQml/QQmlEngine>
 #include <QtQuick/QQuickItem>
 #include <QtQuick/QQuickWindow>
 
@@ -40,6 +39,11 @@ static constexpr const char *kFileExtension[VideoReceiver::FILE_FORMAT_MAX + 1] 
     "mov",
     "mp4"
 };
+
+// Stall timeout for every source but RTSP, whose timeout is a setting.
+static constexpr uint32_t kDefaultStreamTimeoutSec = 3;
+// Pause between the stop and the start of a requested restart.
+static constexpr std::chrono::seconds kRestartDelay{1};
 
 Q_APPLICATION_STATIC(VideoManager, _videoManagerInstance);
 
@@ -308,8 +312,14 @@ void VideoManager::_createVideoReceivers()
 
 void VideoManager::cleanup()
 {
-    for (VideoReceiver *receiver : std::as_const(_videoReceivers)) {
+    // Receivers must die here, not in ~VideoManager: that runs inside ~QCoreApplication, where queued events are no
+    // longer delivered, so a receiver's worker thread never gets its quit task and the destructor waits forever.
+    const QList<VideoReceiver*> receivers = _videoReceivers;
+    _videoReceivers.clear();
+    _pendingRestarts.clear();
+    for (VideoReceiver* receiver : receivers) {
         QGCCorePlugin::instance()->releaseVideoSink(receiver->sink());
+        delete receiver;
     }
 }
 
@@ -401,8 +411,21 @@ void VideoManager::grabImage(const QString &imageFile)
     emit imageFileChanged(_imageFile);
 
     for (VideoReceiver *receiver : std::as_const(_videoReceivers)) {
-        receiver->takeScreenshot(_imageFile);
-        // QSharedPointer<QQuickItemGrabResult> result = receiver->widget()->grabToImage(const QSize &targetSize = QSize())
+        if (!receiver->started()) {
+            continue;
+        }
+        // As with recordings, streams other than the main one get their name before the extension.
+        QString streamImageFile = _imageFile;
+        if (receiver->name() != QStringLiteral("videoContent")) {
+            const qsizetype dot = streamImageFile.lastIndexOf(QLatin1Char('.'));
+            const QString tag = QLatin1Char('.') + receiver->name();
+            if (dot > streamImageFile.lastIndexOf(QLatin1Char('/'))) {
+                streamImageFile.insert(dot, tag);
+            } else {
+                streamImageFile.append(tag);
+            }
+        }
+        receiver->takeScreenshot(streamImageFile);
     }
 }
 
@@ -800,8 +823,9 @@ void VideoManager::_restartVideo(VideoReceiver *receiver)
     qCDebug(VideoManagerLog) << "Restart video receiver" << receiver->name();
 
     if (receiver->started()) {
-        _stopReceiver(receiver);
-        // onStopComplete Signal Will Restart It
+        // Before stop(): a receiver may complete it synchronously, and onStopComplete restarts only on request.
+        _pendingRestarts.insert(receiver);
+        receiver->stop();
     } else {
         _startReceiver(receiver);
     }
@@ -814,9 +838,9 @@ void VideoManager::_stopReceiver(VideoReceiver *receiver)
         return;
     }
 
-    if (receiver->started()) {
-        receiver->stop();
-    }
+    _pendingRestarts.remove(receiver);
+    // Also when not started: a receiver that stopped itself after a failure may still be waiting to reconnect.
+    receiver->stop();
 }
 
 void VideoManager::stopVideo()
@@ -844,9 +868,45 @@ void VideoManager::_startReceiver(VideoReceiver *receiver)
     }
 
     const QString source = _videoSettings->videoSource()->rawValue().toString();
-    const uint32_t timeout = ((source == VideoSettings::videoSourceRTSP) ? _videoSettings->rtspTimeout()->rawValue().toUInt() : 3);
+    const uint32_t timeout =
+        ((source == VideoSettings::videoSourceRTSP) ? _videoSettings->rtspTimeout()->rawValue().toUInt()
+                                                    : kDefaultStreamTimeoutSec);
 
     receiver->start(timeout);
+}
+
+void VideoManager::_connectReceiverLifecycle(VideoReceiver* receiver)
+{
+    // Retrying after a failure is the receiver's job (GstVideoReceiver reconnects with backoff while autoReconnect is
+    // set); restarting here as well would defeat its backoff and ignore autoReconnect.
+    // The receiver is the context so calls queued from its worker thread are dropped when it is deleted.
+    (void) connect(receiver, &VideoReceiver::onStartComplete, receiver, [receiver](VideoReceiver::STATUS status) {
+        qCDebug(VideoManagerLog) << "Video" << receiver->name() << "Start complete, status:" << status;
+        if (status == VideoReceiver::STATUS_OK) {
+            receiver->setStarted(true);
+            if (receiver->sink()) {
+                receiver->startDecoding(receiver->sink());
+            }
+        }
+    });
+
+    (void) connect(receiver, &VideoReceiver::onStopComplete, receiver, [this, receiver](VideoReceiver::STATUS status) {
+        qCDebug(VideoManagerLog) << "Stop complete" << receiver->name()
+                                 << QGCNetworkHelper::redactedUrlForLogging(receiver->uri()) << ", status:" << status;
+        receiver->setStarted(false);
+        if (!_pendingRestarts.remove(receiver)) {
+            return;
+        }
+        if (status == VideoReceiver::STATUS_INVALID_URL) {
+            qCDebug(VideoManagerLog) << "Invalid video URL. Not restarting";
+            return;
+        }
+        QTimer::singleShot(kRestartDelay, receiver, [this, receiver]() {
+            qCDebug(VideoManagerLog) << "Restarting video receiver" << receiver->name()
+                                     << QGCNetworkHelper::redactedUrlForLogging(receiver->uri());
+            _startReceiver(receiver);
+        });
+    });
 }
 
 void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *window)
@@ -879,44 +939,10 @@ void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *win
 
     VideoBackend::attachSink(receiver, sink, widget);
 
-    (void) connect(receiver, &VideoReceiver::onStartComplete, this, [this, receiver](VideoReceiver::STATUS status) {
-        qCDebug(VideoManagerLog) << "Video" << receiver->name() << "Start complete, status:" << status;
-        switch (status) {
-        case VideoReceiver::STATUS_OK:
-            receiver->setStarted(true);
-            if (receiver->sink()) {
-                receiver->startDecoding(receiver->sink());
-            }
-            break;
-        case VideoReceiver::STATUS_INVALID_URL:
-        case VideoReceiver::STATUS_INVALID_STATE:
-            break;
-        default:
-            // Rate limit restarts on start failure.
-            QTimer::singleShot(1000, receiver, [this, receiver]() {
-                _restartVideo(receiver);
-            });
-            break;
-        }
-    });
+    _connectReceiverLifecycle(receiver);
 
-    (void) connect(receiver, &VideoReceiver::onStopComplete, this, [this, receiver](VideoReceiver::STATUS status) {
-        qCDebug(VideoManagerLog) << "Stop complete" << receiver->name()
-                                << QGCNetworkHelper::redactedUrlForLogging(receiver->uri())
-                                << ", status:" << status;
-        receiver->setStarted(false);
-        if (status == VideoReceiver::STATUS_INVALID_URL) {
-            qCDebug(VideoManagerLog) << "Invalid video URL. Not restarting";
-        } else {
-            QTimer::singleShot(1000, receiver, [this, receiver]() {
-                qCDebug(VideoManagerLog) << "Restarting video receiver" << receiver->name()
-                                        << QGCNetworkHelper::redactedUrlForLogging(receiver->uri());
-                _startReceiver(receiver);
-            });
-        }
-    });
-
-    (void) connect(receiver, &VideoReceiver::streamingChanged, this, [this, receiver](bool active) {
+    // Receiver context, as in _connectReceiverLifecycle()
+    (void) connect(receiver, &VideoReceiver::streamingChanged, receiver, [this, receiver](bool active) {
         qCDebug(VideoManagerLog) << "Video" << receiver->name() << "streaming changed, active:" << (active ? "yes" : "no");
         if (!receiver->isThermal()) {
             _streaming = active;
@@ -924,7 +950,7 @@ void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *win
         }
     });
 
-    (void) connect(receiver, &VideoReceiver::decodingChanged, this, [this, receiver](bool active) {
+    (void) connect(receiver, &VideoReceiver::decodingChanged, receiver, [this, receiver](bool active) {
         qCDebug(VideoManagerLog) << "Video" << receiver->name() << "decoding changed, active:" << (active ? "yes" : "no");
         if (!receiver->isThermal()) {
             _decoding = active;
@@ -932,7 +958,7 @@ void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *win
         }
     });
 
-    (void) connect(receiver, &VideoReceiver::recordingChanged, this, [this, receiver](bool active) {
+    (void) connect(receiver, &VideoReceiver::recordingChanged, receiver, [this, receiver](bool active) {
         qCDebug(VideoManagerLog) << "Video" << receiver->name() << "recording changed, active:" << (active ? "yes" : "no");
         if (!receiver->isThermal()) {
             _recording = active;
@@ -943,14 +969,14 @@ void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *win
         }
     });
 
-    (void) connect(receiver, &VideoReceiver::recordingStarted, this, [this, receiver](const QString &filename) {
+    (void) connect(receiver, &VideoReceiver::recordingStarted, receiver, [this, receiver](const QString& filename) {
         qCDebug(VideoManagerLog) << "Video" << receiver->name() << "recording started";
         if (!receiver->isThermal()) {
             _subtitleWriter->startCapturingTelemetry(filename, videoSize());
         }
     });
 
-    (void) connect(receiver, &VideoReceiver::videoSizeChanged, this, [this, receiver](QSize size) {
+    (void) connect(receiver, &VideoReceiver::videoSizeChanged, receiver, [this, receiver](QSize size) {
         qCDebug(VideoManagerLog) << "Video" << receiver->name() << "resized. New resolution:" << size.width() << "x" << size.height();
         if (!receiver->isThermal()) {
             _videoSize = size;
@@ -959,15 +985,16 @@ void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *win
         }
     });
 
-    (void) connect(receiver, &VideoReceiver::onTakeScreenshotComplete, this, [receiver](VideoReceiver::STATUS status) {
-        if (status == VideoReceiver::STATUS_OK) {
-            qCDebug(VideoManagerLog) << "Video" << receiver->name() << "screenshot taken";
-        } else {
-            qCWarning(VideoManagerLog) << "Video" << receiver->name() << "screenshot failed";
-        }
-    });
+    (void) connect(receiver, &VideoReceiver::onTakeScreenshotComplete, receiver,
+                   [receiver](VideoReceiver::STATUS status) {
+                       if (status == VideoReceiver::STATUS_OK) {
+                           qCDebug(VideoManagerLog) << "Video" << receiver->name() << "screenshot taken";
+                       } else {
+                           qCWarning(VideoManagerLog) << "Video" << receiver->name() << "screenshot failed";
+                       }
+                   });
 
-    (void) connect(receiver, &VideoReceiver::videoStreamInfoChanged, this, [this, receiver]() {
+    (void) connect(receiver, &VideoReceiver::videoStreamInfoChanged, receiver, [this, receiver]() {
         const QGCVideoStreamInfo *videoStreamInfo = receiver->videoStreamInfo();
         qCDebug(VideoManagerLog) << "Video" << receiver->name() << "stream info:" << (videoStreamInfo ? "received" : "lost");
 

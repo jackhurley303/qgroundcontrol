@@ -17,7 +17,7 @@ import QGroundControl.FactControls
 /// The Browse section of the Plugins page: the catalog URL, one card per catalog plugin, and a
 /// detail view with the screenshots and release notes. Installing goes through `installer`,
 /// the PluginCatalogInstaller that owns the consent dialog.
-SettingsGroupLayout {
+QGCGroupBox {
     id: root
 
     Layout.fillWidth:       true
@@ -204,7 +204,7 @@ SettingsGroupLayout {
                         text:               root._verifiedText(modelData)
                         visible:            text !== ""
                         font.pointSize:     ScreenTools.smallFontPointSize
-                        color:              modelData.verified ? qgcPal.colorGreen : qgcPal.text
+                        color:              modelData.verified ? qgcPal.colorGreen : qgcPal.textPrimary
                     }
                 }
 
@@ -288,7 +288,7 @@ SettingsGroupLayout {
                 objectName:         "pluginCatalogDetailVerified"
                 text:               root._detail ? root._verifiedText(root._detail) : ""
                 visible:            text !== ""
-                color:              root._detail && root._detail.verified ? qgcPal.colorGreen : qgcPal.text
+                color:              root._detail && root._detail.verified ? qgcPal.colorGreen : qgcPal.textPrimary
             }
         }
 

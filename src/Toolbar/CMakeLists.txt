@@ -5,8 +5,7 @@ qt_add_qml_module(
     URI QGroundControl.Toolbar
     VERSION 1.0
     RESOURCE_PREFIX /qml
-    QML_FILES ArmedIndicator.qml
-              BatteryIndicator.qml
+    QML_FILES BatteryIndicator.qml
               EscIndicator.qml
               EscIndicatorPage.qml
               FlightModeIndicator.qml
@@ -17,9 +16,8 @@ qt_add_qml_module(
               GimbalIndicator.qml
               GPSIndicator.qml
               GPSIndicatorPage.qml
-              GPSReceiverSettings.qml
-              GPSResilienceIndicator.qml
               JoystickIndicator.qml
+              MainStatusChecklistHost.qml
               MainStatusIndicator.qml
               MainStatusIndicatorOfflinePage.qml
               ModeIndicator.qml
@@ -29,11 +27,11 @@ qt_add_qml_module(
               RCRSSIIndicator.qml
               RemoteIDIndicator.qml
               RemoteIDIndicatorPage.qml
-              RTKGPSIndicator.qml
               SelectViewDropdown.qml
+              SeverityPill.qml
               SignalStrength.qml
+              StatusPill.qml
               TelemetryRSSIIndicator.qml
-              VehicleGPSIndicator.qml
               VehicleMessageList.qml
     NO_PLUGIN
 )
@@ -43,7 +41,7 @@ qt_add_resources(
     PREFIX "/res"
     BASE "${CMAKE_SOURCE_DIR}/resources"
     FILES "${CMAKE_SOURCE_DIR}/resources/FlyingPaperPlane.svg" "${CMAKE_SOURCE_DIR}/resources/GearWithPaperPlane.svg"
-          "${CMAKE_SOURCE_DIR}/resources/OpenDoor.svg" "${CMAKE_SOURCE_DIR}/resources/VehicleMessages.png"
+          "${CMAKE_SOURCE_DIR}/resources/OpenDoor.svg"
 )
 
 qt_add_resources(
@@ -65,9 +63,6 @@ qt_add_resources(
           "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/Disconnect.svg"
           "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/EscIndicator.svg"
           "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/Gears.svg"
-          "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/Gps.svg"
-          "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/GpsAuthentication.svg"
-          "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/GpsInterference.svg"
           "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/Hamburger.svg"
           "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/HamburgerThin.svg"
           "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/Joystick.png"
@@ -84,7 +79,6 @@ qt_add_resources(
           "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/RidIconMan.svg"
           "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/RidIconText.svg"
           "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/roi.svg"
-          "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/RTK.svg"
           "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/Signal0.svg"
           "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/Signal100.svg"
           "${CMAKE_SOURCE_DIR}/src/Toolbar/Images/Signal20.svg"

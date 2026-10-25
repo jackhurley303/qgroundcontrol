@@ -33,6 +33,8 @@ import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple, NoReturn
 
+import _bootstrap as _bootstrap
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 

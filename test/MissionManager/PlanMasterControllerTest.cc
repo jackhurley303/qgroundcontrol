@@ -1,22 +1,29 @@
 #include "PlanMasterControllerTest.h"
 
-#include "AppSettings.h"
-#include "SurveyPlanCreator.h"
-#include "MissionManager.h"
-#include "MultiSignalSpy.h"
-#include "MultiVehicleManager.h"
-#include "PlanMasterController.h"
-#include "QmlObjectListModel.h"
-#include "SettingsManager.h"
-#include "TakeoffMissionItem.h"
-#include "Vehicle.h"
-
 #include <QtCore/QDateTime>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QRegularExpression>
 #include <QtCore/QTemporaryDir>
 #include <QtTest/QSignalSpy>
+
+#include "AppSettings.h"
+#include "GeoFenceController.h"
+#include "MissionController.h"
+#include "MissionManager.h"
+#include "MultiSignalSpy.h"
+#include "MultiVehicleManager.h"
+#include "PlanMasterController.h"
+#include "QGCMapCircle.h"
+#include "QGCMapPolygon.h"
+#include "QmlObjectListModel.h"
+#include "RallyPoint.h"
+#include "RallyPointController.h"
+#include "SettingsManager.h"
+#include "SimpleMissionItem.h"
+#include "SurveyPlanCreator.h"
+#include "TakeoffMissionItem.h"
+#include "Vehicle.h"
 
 void PlanMasterControllerTest::init()
 {
@@ -39,6 +46,29 @@ void PlanMasterControllerTest::_testMissionPlannerFileLoad()
 {
     _masterController->loadFromFile(":/unittest/MissionPlanner.waypoints");
     QCOMPARE(_masterController->missionController()->visualItems()->count(), 6);
+}
+
+void PlanMasterControllerTest::_testManualTestPlansLoad_data()
+{
+    QTest::addColumn<QString>("planPath");
+
+    const QDir plansDir(QStringLiteral(":/unittest/manualTestPlans"));
+    const QStringList planFiles = plansDir.entryList({QStringLiteral("*.plan")}, QDir::Files);
+    QVERIFY(!planFiles.isEmpty());
+    for (const QString& planFile : planFiles) {
+        QTest::newRow(qPrintable(planFile)) << plansDir.filePath(planFile);
+    }
+}
+
+// test/plans are hand-loaded for manual testing, so they must stay loadable
+void PlanMasterControllerTest::_testManualTestPlansLoad()
+{
+    QFETCH(QString, planPath);
+
+    _masterController->loadFromFile(planPath);
+
+    QCOMPARE(_masterController->currentPlanFile(), planPath);
+    QVERIFY(_masterController->missionController()->visualItems()->count() > 1);
 }
 
 void PlanMasterControllerTest::_testTakeoffTextFileLoad_data()
@@ -104,9 +134,10 @@ void PlanMasterControllerTest::_testTakeoffTextFileLoad()
 void PlanMasterControllerTest::_testActiveVehicleChanged()
 {
     // The test emits missionManager->error() twice to verify signal propagation.
-    // Each emission triggers a showAppMessage debug log via PlanMasterController.
+    // Each emission triggers a showAppMessage debug log via PlanMasterController and a Vehicle warning.
     ignoreLogMessage("API.QGCApplication.AppMessage", QtDebugMsg,
                      QRegularExpression("Mission transfer failed"));
+    ignoreLogMessage("Vehicle.Vehicle", QtWarningMsg, QRegularExpression("Mission transfer failed"));
     // There was a defect where the PlanMasterController would, upon a new active vehicle,
     // overzelously disconnect all subscribers interested in the outgoing active vechicle.
     Vehicle* outgoingManagerVehicle = _masterController->managerVehicle();
@@ -162,18 +193,15 @@ void PlanMasterControllerTest::_testDirtyFlagsMatrix_data()
     };
 
     const QList<ScenarioExpectation> scenarioExpectations = {
-        { UploadPreservesSaveDirtyFalse,      "upload completion keeps save false",  DirtyStateUnchanged, DirtyStateFalse },
-        { UploadPreservesSaveDirtyTrue,       "upload completion keeps save true",   DirtyStateUnchanged, DirtyStateFalse },
-        { UploadFalseOnPlanClear,             "upload false on clear",               DirtyStateFalse,     DirtyStateFalse },
-        { UploadTrueWhenSaveTrue,             "upload true when save true",          DirtyStateTrue,      DirtyStateTrue },
-        { UploadTrueOnNewPlanLoad,            "upload true on new plan load",        DirtyStateFalse,     DirtyStateTrue },
-        { SaveToFilePreservesUploadDirtyTrue, "saveToFile keeps upload true",        DirtyStateFalse,     DirtyStateUnchanged },
-        { SaveToFilePreservesUploadDirtyFalse,"saveToFile keeps upload false",       DirtyStateFalse,     DirtyStateUnchanged },
-        { SaveFalseOnSuccessfulLoad,          "save false on successful load",       DirtyStateFalse,     DirtyStateTrue },
-        { ClearSaveDirtyPreservesUploadTrue,  "clear save dirty keeps upload true",  DirtyStateFalse,     DirtyStateUnchanged },
-        { ClearSaveDirtyPreservesUploadFalse, "clear save dirty keeps upload false", DirtyStateFalse,     DirtyStateUnchanged },
-        { DownloadWithItemsNotDirtyForSave,   "download with items stays clean",     DirtyStateFalse,     DirtyStateFalse },
-        { DownloadEmptyNotDirtyForSave,       "download empty keeps save clean",     DirtyStateFalse,     DirtyStateFalse },
+        {UploadPreservesSaveDirty, "upload completion keeps save dirty", DirtyStateUnchanged, DirtyStateFalse},
+        {UploadFalseOnPlanClear, "upload false on clear", DirtyStateFalse, DirtyStateFalse},
+        {UploadTrueWhenSaveTrue, "upload true when save true", DirtyStateTrue, DirtyStateTrue},
+        {UploadTrueOnNewPlanLoad, "upload true on new plan load", DirtyStateFalse, DirtyStateTrue},
+        {SaveToFilePreservesUploadDirty, "saveToFile keeps upload dirty", DirtyStateFalse, DirtyStateUnchanged},
+        {SaveFalseOnSuccessfulLoad, "save false on successful load", DirtyStateFalse, DirtyStateTrue},
+        {ClearSaveDirtyPreservesUpload, "clear save dirty keeps upload", DirtyStateFalse, DirtyStateUnchanged},
+        {DownloadWithItemsNotDirtyForSave, "download with items stays clean", DirtyStateFalse, DirtyStateFalse},
+        {DownloadEmptyNotDirtyForSave, "download empty keeps save clean", DirtyStateFalse, DirtyStateFalse},
     };
 
     const QList<DirtyState> initialStates = {
@@ -246,58 +274,44 @@ void PlanMasterControllerTest::_testDirtyFlagsMatrix()
     QSignalSpy dirtyForUploadChangedSpy(_masterController, &PlanMasterController::dirtyForUploadChanged);
 
     switch (scenario) {
-    case UploadPreservesSaveDirtyFalse: {
-        _masterController->_sendSequence = PlanMasterController::SyncSequence::RallyPoints;
-        _masterController->_sendRallyPointsComplete();
-        break;
-    }
-    case UploadPreservesSaveDirtyTrue: {
-        _masterController->_sendSequence = PlanMasterController::SyncSequence::RallyPoints;
-        _masterController->_sendRallyPointsComplete();
-        break;
-    }
-    case UploadFalseOnPlanClear:
-        _masterController->removeAll();
-        break;
-    case UploadTrueWhenSaveTrue:
-        _masterController->_setDirtyForSave(true);
-        break;
-    case UploadTrueOnNewPlanLoad:
-        _masterController->loadFromFile(":/unittest/MissionPlanner.waypoints");
-        break;
-    case SaveToFilePreservesUploadDirtyTrue: {
-        const QString saveFile = QDir::temp().filePath(QStringLiteral("qgc_planmaster_test_%1.plan").arg(QDateTime::currentMSecsSinceEpoch()));
-        QVERIFY(_masterController->saveToFile(saveFile));
-        QFile::remove(saveFile);
-        break;
-    }
-    case SaveToFilePreservesUploadDirtyFalse: {
-        const QString saveFile = QDir::temp().filePath(QStringLiteral("qgc_planmaster_test_%1.plan").arg(QDateTime::currentMSecsSinceEpoch()));
-        QVERIFY(_masterController->saveToFile(saveFile));
-        QFile::remove(saveFile);
-        break;
-    }
-    case SaveFalseOnSuccessfulLoad:
-        _masterController->loadFromFile(":/unittest/MissionPlanner.waypoints");
-        break;
-    case ClearSaveDirtyPreservesUploadTrue:
-        _masterController->_setDirtyForSave(false);
-        break;
-    case ClearSaveDirtyPreservesUploadFalse:
-        _masterController->_setDirtyForSave(false);
-        break;
-    case DownloadWithItemsNotDirtyForSave: {
-        QVERIFY(_masterController->containsItems());
-        _masterController->_loadSequence = PlanMasterController::SyncSequence::RallyPoints;
-        _masterController->_loadRallyPointsComplete();
-        break;
-    }
-    case DownloadEmptyNotDirtyForSave: {
-        QVERIFY(!_masterController->containsItems());
-        _masterController->_loadSequence = PlanMasterController::SyncSequence::RallyPoints;
-        _masterController->_loadRallyPointsComplete();
-        break;
-    }
+        case UploadPreservesSaveDirty:
+            _masterController->_sendSequence = PlanMasterController::SyncSequence::RallyPoints;
+            _masterController->_sendRallyPointsComplete();
+            break;
+        case UploadFalseOnPlanClear:
+            _masterController->removeAll();
+            break;
+        case UploadTrueWhenSaveTrue:
+            _masterController->_setDirtyForSave(true);
+            break;
+        case UploadTrueOnNewPlanLoad:
+            _masterController->loadFromFile(":/unittest/MissionPlanner.waypoints");
+            break;
+        case SaveToFilePreservesUploadDirty: {
+            const QString saveFile = QDir::temp().filePath(
+                QStringLiteral("qgc_planmaster_test_%1.plan").arg(QDateTime::currentMSecsSinceEpoch()));
+            QVERIFY(_masterController->saveToFile(saveFile));
+            QFile::remove(saveFile);
+            break;
+        }
+        case SaveFalseOnSuccessfulLoad:
+            _masterController->loadFromFile(":/unittest/MissionPlanner.waypoints");
+            break;
+        case ClearSaveDirtyPreservesUpload:
+            _masterController->_setDirtyForSave(false);
+            break;
+        case DownloadWithItemsNotDirtyForSave: {
+            QVERIFY(_masterController->containsItems());
+            _masterController->_loadSequence = PlanMasterController::SyncSequence::RallyPoints;
+            _masterController->_loadRallyPointsComplete();
+            break;
+        }
+        case DownloadEmptyNotDirtyForSave: {
+            QVERIFY(!_masterController->containsItems());
+            _masterController->_loadSequence = PlanMasterController::SyncSequence::RallyPoints;
+            _masterController->_loadRallyPointsComplete();
+            break;
+        }
     }
 
     const auto resolveExpected = [](int expectedState, bool unchangedValue) -> bool {
@@ -651,6 +665,83 @@ void PlanMasterControllerTest::_testPlanCreatorsFiltered()
     QVERIFY(fixedWingCount > 0);
 
     QCOMPARE(fixedWingCount, multiRotorCount - 1);
+}
+
+void PlanMasterControllerTest::_testEditMarksDirtyForSave_data()
+{
+    QTest::addColumn<bool>("reloadAfterSave");
+    QTest::addColumn<QString>("editTarget");
+
+    for (const bool reload : {false, true}) {
+        for (const QString& target :
+             {QStringLiteral("waypoint"), QStringLiteral("fencePolygon"), QStringLiteral("fenceCircle"),
+              QStringLiteral("rallyPoint"), QStringLiteral("rallyPointFact")}) {
+            QTest::newRow(qPrintable(QStringLiteral("%1, %2").arg(reload ? "after load" : "after save", target)))
+                << reload << target;
+        }
+    }
+}
+
+void PlanMasterControllerTest::_testEditMarksDirtyForSave()
+{
+    QFETCH(bool, reloadAfterSave);
+    QFETCH(QString, editTarget);
+
+    const QGeoCoordinate center(47.3977, 8.5456);
+    MissionController* const missionController = _masterController->missionController();
+    GeoFenceController* const geoFenceController = _masterController->geoFenceController();
+    RallyPointController* const rallyPointController = _masterController->rallyPointController();
+    missionController->setHomePosition(center);
+    QVERIFY(missionController->insertSimpleMissionItem(center.atDistanceAndAzimuth(200, 0), 1, false));
+    geoFenceController->addInclusionPolygon(center.atDistanceAndAzimuth(500, 315),
+                                            center.atDistanceAndAzimuth(500, 135));
+    geoFenceController->addInclusionCircle(center.atDistanceAndAzimuth(300, 315),
+                                           center.atDistanceAndAzimuth(300, 135));
+    rallyPointController->addPoint(center.atDistanceAndAzimuth(100, 180));
+    QVERIFY(_masterController->dirtyForSave());
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString planFile = tempDir.filePath(QStringLiteral("edit.plan"));
+    QVERIFY(_masterController->saveToFile(planFile));
+    if (reloadAfterSave) {
+        _masterController->removeAll();
+        _masterController->loadFromFile(planFile);
+        QCOMPARE(missionController->visualItems()->count(), 2);
+        QCOMPARE(geoFenceController->polygons()->count(), 1);
+        QCOMPARE(geoFenceController->circles()->count(), 1);
+        QCOMPARE(rallyPointController->points()->count(), 1);
+    }
+    QVERIFY(!_masterController->dirtyForSave());
+
+    if (editTarget == QStringLiteral("waypoint")) {
+        SimpleMissionItem* const waypoint = missionController->visualItems()->value<SimpleMissionItem*>(1);
+        QVERIFY(waypoint);
+        waypoint->altitude()->setRawValue(waypoint->altitude()->rawValue().toDouble() + 10);
+    } else if (editTarget == QStringLiteral("fencePolygon")) {
+        QGCMapPolygon* const polygon = geoFenceController->polygons()->value<QGCMapPolygon*>(0);
+        QVERIFY(polygon);
+        polygon->adjustVertex(0, polygon->vertexCoordinate(0).atDistanceAndAzimuth(50, 0));
+    } else if (editTarget == QStringLiteral("fenceCircle")) {
+        QGCMapCircle* const circle = geoFenceController->circles()->value<QGCMapCircle*>(0);
+        QVERIFY(circle);
+        circle->radius()->setRawValue(circle->radius()->rawValue().toDouble() + 50);
+    } else if (editTarget == QStringLiteral("rallyPointFact")) {
+        // The rally point editor writes these Facts directly
+        RallyPoint* const rallyPoint = rallyPointController->points()->value<RallyPoint*>(0);
+        QVERIFY(rallyPoint);
+        const QVariantList textFieldFacts = rallyPoint->property("textFieldFacts").toList();
+        QCOMPARE(textFieldFacts.count(), 3);
+        Fact* const altitudeFact = textFieldFacts[2].value<Fact*>();
+        QVERIFY(altitudeFact);
+        altitudeFact->setRawValue(altitudeFact->rawValue().toDouble() + 10);
+    } else {
+        RallyPoint* const rallyPoint = rallyPointController->points()->value<RallyPoint*>(0);
+        QVERIFY(rallyPoint);
+        rallyPoint->setCoordinate(rallyPoint->coordinate().atDistanceAndAzimuth(50, 0));
+    }
+
+    QVERIFY(_masterController->dirtyForSave());
 }
 
 #include "UnitTest.h"

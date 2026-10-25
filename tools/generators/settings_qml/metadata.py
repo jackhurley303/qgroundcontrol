@@ -7,16 +7,23 @@ the past (e.g. the stale "Joystick" → "joystickSettings" entry).
 
 from __future__ import annotations
 
-import json
 import re
 import sys
 from functools import cache
 from pathlib import Path
 
+from common.io import read_json
+
 _ACCESSOR_RE = re.compile(r"Q_PROPERTY\s*\(\s*QObject\s*\*\s*(\w+Settings)\s+READ")
 
 # Accessors are QML property names; anything else fails resolution in generated pages.
 _QML_ID_RE = re.compile(r"[a-z_][A-Za-z0-9_]*")
+
+# Stock groups instantiated per object (e.g. one JoystickSettings per joystick), never SettingsManager singletons
+_PER_INSTANCE_STEMS = frozenset({"Joystick"})
+
+# Facts whose metadata is built in C++ rather than SettingsGroup.json (e.g. UnitsSettings)
+_CPP_FACT_RE = re.compile(r"DECLARE_SETTINGSFACT_NO_FUNC\s*\(\s*(\w+)Settings\s*,\s*(\w+)\s*\)")
 
 
 def stem_to_accessor(stem: str) -> str:
@@ -71,13 +78,13 @@ def _load_settings_metadata(settings_dirs: tuple[Path, ...]) -> dict[str, dict]:
             stem = json_path.name.replace(".SettingsGroup.json", "")
             accessor = stem_to_accessor(stem)
             if dir_index == 0:
-                if valid and accessor not in valid:
-                    print(
-                        f"warning: {json_path.name} maps to {accessor!r} but no matching "
-                        f"Q_PROPERTY exists in SettingsManager.h; skipping.",
-                        file=sys.stderr,
-                    )
+                if stem in _PER_INSTANCE_STEMS:
                     continue
+                if valid and accessor not in valid:
+                    raise ValueError(
+                        f"{json_path}: maps to {accessor!r} but no matching Q_PROPERTY exists in "
+                        f"SettingsManager.h"
+                    )
             elif accessor in valid:
                 # Custom groups register at runtime; they can't shadow a stock Q_PROPERTY
                 raise ValueError(
@@ -96,8 +103,7 @@ def _load_settings_metadata(settings_dirs: tuple[Path, ...]) -> dict[str, dict]:
                         f"is already used by another custom settings group"
                     )
                 custom_accessors.add(accessor)
-            with open(json_path, encoding="utf-8") as f:
-                data = json.load(f)
+            data = read_json(json_path)
             for fact in data.get("QGC.MetaData.Facts", []):
                 metadata[f"{accessor}.{fact['name']}"] = fact
     return metadata
@@ -113,13 +119,44 @@ def load_settings_metadata(settings_dirs: Path | tuple[Path, ...]) -> dict[str, 
     return _load_settings_metadata(_as_dirs(settings_dirs))
 
 
+@cache
+def _cpp_defined_settings(settings_dirs: tuple[Path, ...]) -> frozenset[str]:
+    settings: set[str] = set()
+    for settings_dir in settings_dirs:
+        for cc_path in sorted(settings_dir.glob("*.cc")):
+            for stem, name in _CPP_FACT_RE.findall(cc_path.read_text(encoding="utf-8")):
+                if stem not in _PER_INSTANCE_STEMS:
+                    settings.add(f"{stem_to_accessor(stem)}.{name}")
+    return frozenset(settings)
+
+
+def validate_setting(setting: str, settings_dirs: Path | tuple[Path, ...]) -> None:
+    """Raise unless `setting` is declared in SettingsGroup.json or via DECLARE_SETTINGSFACT_NO_FUNC."""
+    dirs = _as_dirs(settings_dirs)
+    if setting not in _load_settings_metadata(dirs) and setting not in _cpp_defined_settings(dirs):
+        raise ValueError(
+            f"Unknown setting {setting!r}: no matching fact in any SettingsGroup.json "
+            f"or DECLARE_SETTINGSFACT_NO_FUNC"
+        )
+
+
+def _fact(setting: str, settings_dirs: Path | tuple[Path, ...]) -> dict:
+    dirs = _as_dirs(settings_dirs)
+    fact = _load_settings_metadata(dirs).get(setting)
+    if fact is None:
+        validate_setting(setting, dirs)
+        raise ValueError(
+            f"Setting {setting!r} is C++-defined and has no SettingsGroup.json type metadata; "
+            f"give its control an explicit 'control' other than 'textfield'"
+        )
+    return fact
+
+
 def get_fact_type(setting: str, settings_dirs: Path | tuple[Path, ...]) -> str:
     """Look up the declared type for a `<accessor>.<factName>` setting; default 'string'."""
-    fact = load_settings_metadata(settings_dirs).get(setting, {})
-    return fact.get("type", "string").lower()
+    return _fact(setting, settings_dirs).get("type", "string").lower()
 
 
 def has_enum_strings(setting: str, settings_dirs: Path | tuple[Path, ...]) -> bool:
     """True when the fact metadata declares enumStrings."""
-    fact = load_settings_metadata(settings_dirs).get(setting, {})
-    return bool(fact.get("enumStrings", ""))
+    return bool(_fact(setting, settings_dirs).get("enumStrings", ""))

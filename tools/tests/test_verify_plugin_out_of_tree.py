@@ -428,8 +428,8 @@ def test_the_guaranteed_component_set_matches_the_hosts_cmakelists():
     # when the repo is present, the two must agree exactly.
     text = (REPO_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
     match = re.search(
-        r"find_package\(Qt6\s*\n\s*\$\{QGC_QT_MINIMUM_VERSION\}[^\n]*\n\s*REQUIRED\s*\n"
-        r"\s*COMPONENTS\s*\n(?P<required>.*?)\n\s*OPTIONAL_COMPONENTS\s*\n(?P<optional>.*?)\n\)",
+        r"find_package\(\s*Qt6\s+\$\{QGC_QT_MINIMUM_VERSION\}[^\n]*\bREQUIRED\s*\n"
+        r"\s*COMPONENTS\s*\n(?P<required>.*?)\n\s*OPTIONAL_COMPONENTS\s+(?P<optional>.*?)\n\)",
         text,
         re.DOTALL,
     )

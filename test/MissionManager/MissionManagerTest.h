@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MissionControllerManagerTest.h"
+#include "MockLinkMissionItemHandler.h"
 
 class MissionManagerTest : public MissionControllerManagerTest
 {
@@ -18,7 +19,7 @@ private:
     void _roundTripItems(MockLinkMissionItemHandler::FailureMode_t failureMode, MAV_MISSION_RESULT failureAckResult,
                          bool shouldFail);
     void _writeItems(MockLinkMissionItemHandler::FailureMode_t failureMode, MAV_MISSION_RESULT failureAckResult,
-                     bool shouldFail);
+                     bool shouldFail, int expectedErrorCode = -1);
     void _testWriteFailureHandlingWorker();
     void _testReadFailureHandlingWorker();
 

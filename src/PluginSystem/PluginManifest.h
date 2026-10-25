@@ -26,7 +26,7 @@ struct HostInfo
 /// tier qml packages (no binary, no C++ ABI — D1). Bumped when that QML-visible surface
 /// changes incompatibly. A manifest's "qmlApiVersion", when declared, is checked against
 /// this; undeclared is unchecked (mirrors apiVersion's qml-tier looseness, F9).
-inline constexpr int QGCPluginQmlApiLevel = 1;
+inline constexpr int QGCPluginQmlApiLevel = 2;
 
 /// Value type describing a plugin's identity, compatibility range, and contributions,
 /// as declared in its qgcplugin.json manifest. Parsing and validation are pure data

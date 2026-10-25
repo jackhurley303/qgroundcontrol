@@ -133,6 +133,11 @@ const QmlObjectListModel *QGCCorePlugin::customMapItems()
     return _emptyCustomMapItems;
 }
 
+const QmlObjectListModel* QGCCorePlugin::customGeoMapItems()
+{
+    return _emptyCustomMapItems;
+}
+
 void QGCCorePlugin::adjustSettingMetaData(const QString &settingsGroup, FactMetaData &metaData, bool &userVisible)
 {
 #ifdef Q_OS_ANDROID
@@ -342,11 +347,9 @@ void QGCCorePlugin::releaseVideoSink(void *sink)
 
 const QVariantList &QGCCorePlugin::toolBarIndicators()
 {
-    static const QVariantList toolBarIndicatorList = QVariantList(
-        {
-            QVariant::fromValue(QUrl::fromUserInput(QStringLiteral("qrc:/qml/QGroundControl/Toolbar/RTKGPSIndicator.qml"))),
-        }
-    );
+    static const QVariantList toolBarIndicatorList = QVariantList({
+        QVariant::fromValue(QUrl::fromUserInput(QStringLiteral("qrc:/qml/QGroundControl/Toolbar/GPSIndicator.qml"))),
+    });
 
     return toolBarIndicatorList;
 }

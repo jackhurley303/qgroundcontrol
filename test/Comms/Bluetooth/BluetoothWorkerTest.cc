@@ -35,14 +35,17 @@ void BluetoothWorkerTest::init()
     ignoreLogMessage("qt.bluetooth.bluez", QtInfoMsg,
                      QRegularExpression(QStringLiteral("Missing CAP_NET_ADMIN")));
     ignoreLogMessage("qt.bluetooth.bluez", QtWarningMsg,
-                     QRegularExpression(QStringLiteral(
-                         "Cannot open HCI socket|Cannot determine bluetoothd version|"
-                         "Disabling Qt Bluetooth LE feature|Cannot find Bluez 5 adapter")));
+                     QRegularExpression(QStringLiteral("Cannot open HCI socket|Cannot determine bluetoothd version|"
+                                                       "Disabling Qt Bluetooth LE feature|Cannot find Bluez 5 adapter|"
+                                                       "Invalid address to remote address passed")));
+    ignoreLogMessage("qt.bluetooth.darwin", QtWarningMsg,
+                     QRegularExpression(QStringLiteral("no valid device found|Default Bluetooth controller is OFF")));
     ignoreLogMessage("Comms.Bluetooth.BluetoothBleWorker", QtWarningMsg,
                      QRegularExpression(QStringLiteral("BLE Controller error")));
     ignoreLogMessage("Comms.Bluetooth.BluetoothClassicWorker", QtWarningMsg,
                      QRegularExpression(QStringLiteral(
-                         "Cannot find valid Bluetooth adapter|Socket error|No suitable classic service found")));
+                         "Cannot find valid Bluetooth adapter|Socket error|No suitable classic service found|"
+                         "Device is powered off")));
 }
 
 void BluetoothWorkerTest::_testFactoryCreatesClassicWorker()

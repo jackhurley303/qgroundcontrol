@@ -3,7 +3,8 @@
 # Tests for serial port detection and communication links
 # ============================================================================
 
-target_sources(${CMAKE_PROJECT_NAME}
+target_sources(
+    QGCUnitTests
     PRIVATE
         LinkConfigurationTest.cc
         LinkConfigurationTest.h
@@ -13,6 +14,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         LogReplayLinkControllerTest.h
         LogReplayLinkTest.cc
         LogReplayLinkTest.h
+        MAVLinkSystemIdTest.cc
+        MAVLinkSystemIdTest.h
         MAVLinkV1TrafficTest.cc
         MAVLinkV1TrafficTest.h
         ReplaySeekApplierTest.cc
@@ -29,6 +32,7 @@ add_qgc_test(LinkConfigurationTest LABELS Unit Comms RESOURCE_LOCK Settings Temp
 add_qgc_test(LinkManagerTest LABELS Integration Comms SERIAL)
 add_qgc_test(LogReplayLinkControllerTest LABELS Unit Comms)
 add_qgc_test(LogReplayLinkTest LABELS Unit Comms)
+add_qgc_test(MAVLinkSystemIdTest LABELS Integration Comms)
 add_qgc_test(MAVLinkV1TrafficTest LABELS Integration Comms)
 add_qgc_test(ReplaySeekApplierTest LABELS Integration Comms Vehicle RESOURCE_LOCK MockLink)
 

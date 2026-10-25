@@ -136,7 +136,7 @@ QVariantMap QGCParameterDiffServiceImpl::diffParametersFromFile(int vehicleId, c
 
         if (fields.size() == 5) {
             // QGC tab-delimited: VehicleId ComponentId Name Value Type
-            const int fileVehicleId = fields.at(0).toInt();
+            const quint32 fileVehicleId = fields.at(0).toUInt();
             componentId = fields.at(1).toInt();
             paramName = fields.at(2);
             fileValueStr = fields.at(3);

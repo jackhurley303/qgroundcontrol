@@ -60,7 +60,6 @@ ApplicationWindow {
                 nextPromptIdIndex++
             } else {
                 currentDialog = null
-                showPreFlightChecklistIfNeeded()
             }
         }
     }
@@ -101,7 +100,6 @@ ApplicationWindow {
     signal disarmVehicleRequest
     signal vtolTransitionToFwdFlightRequest
     signal vtolTransitionToMRFlightRequest
-    signal showPreFlightChecklistIfNeeded
 
     //-------------------------------------------------------------------------
     //-- Global Scope Functions
@@ -200,19 +198,6 @@ ApplicationWindow {
         _showMessageDialogWorker(mainWindow, dialogTitle, dialogText)
     }
 
-    // This variant is only meant to be called by QGCApplication. Ok reboots the active vehicle.
-    function _showRebootVehicleDialog(dialogTitle, dialogText) {
-        _showMessageDialogWorker(mainWindow, dialogTitle,
-                                 dialogText + " " + qsTr("Click Ok to reboot the vehicle now."),
-                                 Dialog.Ok | Dialog.Cancel,
-                                 function() {
-                                     const activeVehicle = QGroundControl.multiVehicleManager.activeVehicle
-                                     if (activeVehicle) {
-                                         activeVehicle.rebootVehicle()
-                                     }
-                                 })
-    }
-
     Connections {
         target: QGroundControl
 
@@ -262,13 +247,35 @@ ApplicationWindow {
         return true
     }
 
-    function checkForUnsavedMission() {
+    function _hasUnsavedMission() {
         // Only warn when edits are neither saved to disk nor uploaded to the vehicle.
         // If either happened the edits are recoverable, so closing loses nothing.
         // With no active vehicle an upload can't have happened, so treat the plan as
         // not uploaded regardless of dirtyForUpload.
-        if (planView._planMasterController.dirtyForSave &&
-                (planView._planMasterController.dirtyForUpload || !QGroundControl.multiVehicleManager.activeVehicle)) {
+        return planView._planMasterController.dirtyForSave &&
+                (planView._planMasterController.dirtyForUpload || !QGroundControl.multiVehicleManager.activeVehicle)
+    }
+
+    function _hasPendingParameterWrites() {
+        for (var index=0; index<QGroundControl.multiVehicleManager.vehicles.count; index++) {
+            if (QGroundControl.multiVehicleManager.vehicles.get(index).parameterManager.pendingWrites) {
+                return true
+            }
+        }
+        return false
+    }
+
+    function _hasActiveConnections() {
+        return !!QGroundControl.multiVehicleManager.activeVehicle
+    }
+
+    /// True when closing would show at least one close-check warning
+    function _closeNeedsConfirmation() {
+        return _hasUnsavedMission() || _hasPendingParameterWrites() || _hasActiveConnections()
+    }
+
+    function checkForUnsavedMission() {
+        if (_hasUnsavedMission()) {
             let accepted = false
             _reentrantCloseGuard = true
             _showMessageDialogWorker(mainWindow, qsTr("Unsaved Mission"),
@@ -284,24 +291,22 @@ ApplicationWindow {
     }
 
     function checkForPendingParameterWrites() {
-        for (var index=0; index<QGroundControl.multiVehicleManager.vehicles.count; index++) {
-            if (QGroundControl.multiVehicleManager.vehicles.get(index).parameterManager.pendingWrites) {
-                let accepted = false
-                _reentrantCloseGuard = true
-                _showMessageDialogWorker(mainWindow, qsTr("Pending Parameter Updates"),
-                    qsTr("You have pending parameter updates to a vehicle. If you close you will lose changes. Are you sure you want to close?"),
-                    Dialog.Yes | Dialog.No,
-                    function() { accepted = true; _closeChecksToSkip |= _skipPendingParameterWritesCheckMask; performCloseChecks() },
-                    function() { if (!accepted) _reentrantCloseGuard = false },
-                    true /* bypassNavigationCheck */)
-                return false
-            }
+        if (_hasPendingParameterWrites()) {
+            let accepted = false
+            _reentrantCloseGuard = true
+            _showMessageDialogWorker(mainWindow, qsTr("Pending Parameter Updates"),
+                qsTr("You have pending parameter updates to a vehicle. If you close you will lose changes. Are you sure you want to close?"),
+                Dialog.Yes | Dialog.No,
+                function() { accepted = true; _closeChecksToSkip |= _skipPendingParameterWritesCheckMask; performCloseChecks() },
+                function() { if (!accepted) _reentrantCloseGuard = false },
+                true /* bypassNavigationCheck */)
+            return false
         }
         return true
     }
 
     function checkForActiveConnections() {
-        if (QGroundControl.multiVehicleManager.activeVehicle) {
+        if (_hasActiveConnections()) {
             let accepted = false
             _reentrantCloseGuard = true
             _showMessageDialogWorker(mainWindow, qsTr("Active Vehicle Connections"),
@@ -327,15 +332,26 @@ ApplicationWindow {
         }
     }
 
+    // Since Qt 6.12 an unhandled Android back press backgrounds the app without a close event.
+    // Route back through the close checks while they would warn; open popups still take back first.
+    Shortcut {
+        objectName:     "androidBackShortcut"
+        sequences:      [ "Back" ]
+        enabled:        Qt.platform.os === "android" && mainWindow._closeNeedsConfirmation()
+        onActivated:    mainWindow.close()
+    }
+
     background: Rectangle {
         anchors.fill:   parent
         color:          QGroundControl.globalPalette.window
     }
 
+    // Disabled under the tool drawer: pointer handlers (e.g. GeoMap DragHandler) still get presses through it and steal drags
     FlyView {
         id:                     flyView
         objectName:             "mainView_fly"
         anchors.fill:           parent
+        enabled:                !toolDrawer.visible
     }
 
     PlanView {
@@ -343,6 +359,7 @@ ApplicationWindow {
         objectName:     "mainView_plan"
         anchors.fill:   parent
         visible:        false
+        enabled:        !toolDrawer.visible
     }
 
     footer: LogReplayStatusBar {
@@ -531,12 +548,21 @@ ApplicationWindow {
         if (suppressCriticalVehicleMessages) {
             return
         }
-        if (criticalVehicleMessagePopup.visible || QGroundControl.videoManager.fullScreen) {
-            // We received additional warning message while an older warning message was still displayed.
-            // When the user close the older one drop the message indicator tool so they can see the rest of them.
+        if (criticalVehicleMessagePopup.visible) {
+            // Once a message is held back, later ones are too so the shown messages stay in order
+            if (!criticalVehicleMessagePopup.additionalCriticalMessagesReceived && criticalVehicleMessagePopup.appendMessageIfRoom(message)) {
+                criticalVehicleMessageDismissTimer.restart()
+            } else if (!criticalVehicleMessagePopup.additionalCriticalMessagesReceived) {
+                // When the user closes the popup drop the message indicator tool so they can see the rest.
+                criticalVehicleMessagePopup.additionalCriticalMessagesReceived = true
+                // Leave time to act on the new "Click to see more" prompt
+                criticalVehicleMessageDismissTimer.restart()
+            }
+        } else if (QGroundControl.videoManager.fullScreen) {
             criticalVehicleMessagePopup.additionalCriticalMessagesReceived = true
         } else {
             criticalVehicleMessagePopup.criticalVehicleMessage      = message
+            criticalVehicleMessagePopup.shownMessageCount           = 1
             criticalVehicleMessagePopup.additionalCriticalMessagesReceived = false
             criticalVehicleMessagePopup.open()
         }
@@ -546,34 +572,54 @@ ApplicationWindow {
     Popup {
         id:                 criticalVehicleMessagePopup
         objectName:         "criticalVehicleMessage_popup"
-        y:                  ScreenTools.toolbarHeight + ScreenTools.defaultFontPixelHeight
+        y:                  ScreenTools.toolbarHeight + ScreenTools.defaultFontPixelHeight - topInset
         x:                  Math.round((mainWindow.width - width) * 0.5)
         width:              mainWindow.width  * 0.55
-        height:             criticalVehicleMessageText.contentHeight + ScreenTools.defaultFontPixelHeight * 2
+        height:             criticalVehicleMessageText.contentHeight + _chromeHeight
+        topInset:           vehicleWarningHeading.height / 2
+        topPadding:         padding + topInset
         modal:              false
         closePolicy:        Popup.CloseOnPressOutside
 
         property alias  criticalVehicleMessage:             criticalVehicleMessageText.text
         property bool   additionalCriticalMessagesReceived: false
+        property int    shownMessageCount:                  0
+        readonly property int maxShownMessages:             5
+
+        readonly property real _chromeHeight:   topInset + ScreenTools.defaultFontPixelHeight
+        readonly property real _maxHeight:      mainWindow.height - y - ScreenTools.defaultFontPixelHeight
+
+        function appendMessageIfRoom(message) {
+            if (shownMessageCount >= maxShownMessages) {
+                return false
+            }
+            const previousMessages = criticalVehicleMessage
+            criticalVehicleMessage += "<br/>" + message
+            if (criticalVehicleMessageText.contentHeight + _chromeHeight > _maxHeight) {
+                criticalVehicleMessage = previousMessages
+                return false
+            }
+            shownMessageCount++
+            return true
+        }
 
         function acknowledge() {
             close()
             if (additionalCriticalMessagesReceived) {
                 additionalCriticalMessagesReceived = false
-                flyView.dropMainStatusIndicatorTool()
-            } else if (QGroundControl.multiVehicleManager.activeVehicle) {
-                QGroundControl.multiVehicleManager.activeVehicle.resetErrorLevelMessages()
+                flyView.dropMainStatusIndicatorTool(true /* showMessages */)
             }
         }
 
         background: Rectangle {
-            anchors.fill:   parent
             color:          qgcPal.alertBackground
             radius:         ScreenTools.defaultFontPixelHeight * 0.5
             border.color:   qgcPal.alertBorder
             border.width:   2
 
             Rectangle {
+                id:                         vehicleWarningHeading
+                objectName:                 "criticalVehicleMessage_heading"
                 anchors.horizontalCenter:   parent.horizontalCenter
                 anchors.top:                parent.top
                 anchors.topMargin:          -(height / 2)
@@ -581,7 +627,7 @@ ApplicationWindow {
                 radius:                     ScreenTools.defaultFontPixelHeight * 0.25
                 border.color:               qgcPal.alertBorder
                 border.width:               1
-                width:                      vehicleWarningLabel.contentWidth + _margins
+                width:                      Math.min(vehicleWarningLabel.implicitWidth + _margins, parent.width - ScreenTools.defaultFontPixelHeight)
                 height:                     vehicleWarningLabel.contentHeight + _margins
 
                 property real _margins: ScreenTools.defaultFontPixelHeight * 0.25
@@ -589,34 +635,22 @@ ApplicationWindow {
                 QGCLabel {
                     id:                 vehicleWarningLabel
                     anchors.centerIn:   parent
-                    text:               qsTr("Vehicle Error")
+                    width:              parent.width - parent._margins
+                    horizontalAlignment: Text.AlignHCenter
+                    elide:              Text.ElideRight
+                    text:               criticalVehicleMessagePopup.additionalCriticalMessagesReceived ?
+                                            qsTr("Vehicle Alert - Click to see more") :
+                                            qsTr("Vehicle Alert")
                     font.pointSize:     ScreenTools.smallFontPointSize
                     color:              qgcPal.alertText
                 }
             }
 
-            Rectangle {
-                id:                         additionalErrorsIndicator
-                anchors.horizontalCenter:   parent.horizontalCenter
-                anchors.bottom:             parent.bottom
-                anchors.bottomMargin:       -(height / 2)
-                color:                      qgcPal.alertBackground
-                radius:                     ScreenTools.defaultFontPixelHeight * 0.25
-                border.color:               qgcPal.alertBorder
-                border.width:               1
-                width:                      additionalErrorsLabel.contentWidth + _margins
-                height:                     additionalErrorsLabel.contentHeight + _margins
-                visible:                    criticalVehicleMessagePopup.additionalCriticalMessagesReceived
-
-                property real _margins: ScreenTools.defaultFontPixelHeight * 0.25
-
-                QGCLabel {
-                    id:                 additionalErrorsLabel
-                    anchors.centerIn:   parent
-                    text:               qsTr("Additional errors received")
-                    font.pointSize:     ScreenTools.smallFontPointSize
-                    color:              qgcPal.alertText
-                }
+            // Extends over the heading's overhang so clicking the heading acknowledges too
+            MouseArea {
+                anchors.fill:       parent
+                anchors.topMargin:  -criticalVehicleMessagePopup.topInset
+                onClicked:          criticalVehicleMessagePopup.acknowledge()
             }
         }
 
@@ -630,9 +664,13 @@ ApplicationWindow {
             textFormat:         TextEdit.RichText
         }
 
-        MouseArea {
-            anchors.fill: parent
-            onClicked: criticalVehicleMessagePopup.acknowledge()
+        // Plain close, not acknowledge(): a timeout must not drop the status indicator drawer.
+        Timer {
+            id:             criticalVehicleMessageDismissTimer
+            objectName:     "criticalVehicleMessage_dismissTimer"
+            interval:       10000
+            running:        criticalVehicleMessagePopup.visible
+            onTriggered:    criticalVehicleMessagePopup.close()
         }
     }
 
@@ -647,6 +685,16 @@ ApplicationWindow {
 
     function closeIndicatorDrawer() {
         indicatorDrawer.close()
+    }
+
+    // Fires before the active vehicle is cleared, so drawer contents never see it go null
+    Connections {
+        target: QGroundControl.multiVehicleManager
+        function onActiveVehicleAvailableChanged(activeVehicleAvailable) {
+            if (!activeVehicleAvailable) {
+                closeIndicatorDrawer()
+            }
+        }
     }
 
     Popup {
@@ -668,8 +716,12 @@ ApplicationWindow {
 
         property bool _expanded:    false
         property real _margins:     ScreenTools.defaultFontPixelHeight / 4
+        property bool _fillWindow:  indicatorDrawerLoader.item ? indicatorDrawerLoader.item.fillWindow === true : false
 
         function calcXPosition() {
+            if (_fillWindow) {
+                return _margins
+            }
             if (indicatorItem) {
                 var xCenter = indicatorItem.mapToItem(mainWindow.contentItem, indicatorItem.width / 2, 0).x
                 return Math.max(_margins, Math.min(xCenter - (contentItem.implicitWidth / 2), mainWindow.contentItem.width - contentItem.implicitWidth - _margins - (indicatorDrawer.padding * 2) - (ScreenTools.defaultFontPixelHeight / 2)))
@@ -693,6 +745,7 @@ ApplicationWindow {
                 id:             backgroundRect
                 anchors.fill:   parent
                 color:          QGroundControl.globalPalette.window
+                border.color:   QGroundControl.globalPalette.borderSubtle
                 radius:         indicatorDrawer._margins
                 opacity:        0.85
             }
@@ -704,14 +757,14 @@ ApplicationWindow {
                 width:                      ScreenTools.largeFontPixelHeight
                 height:                     width
                 radius:                     width / 2
-                color:                      QGroundControl.globalPalette.button
-                border.color:               QGroundControl.globalPalette.buttonText
+                color:                      QGroundControl.globalPalette.windowCard
+                border.color:               QGroundControl.globalPalette.textPrimary
                 visible:                    indicatorDrawerLoader.item && indicatorDrawerLoader.item._showExpand && !indicatorDrawer._expanded
 
                 QGCLabel {
                     anchors.centerIn:   parent
                     text:               ">"
-                    color:              QGroundControl.globalPalette.buttonText
+                    color:              QGroundControl.globalPalette.textPrimary
                 }
 
                 QGCMouseArea {
@@ -723,14 +776,18 @@ ApplicationWindow {
 
         contentItem: QGCFlickable {
             id:             indicatorDrawerLoaderFlickable
-            implicitWidth:  Math.min(mainWindow.contentItem.width - (2 * indicatorDrawer._margins) - (indicatorDrawer.padding * 2), indicatorDrawerLoader.width)
-            implicitHeight: Math.min(mainWindow.contentItem.height - ScreenTools.toolbarHeight - (2 * indicatorDrawer._margins) - (indicatorDrawer.padding * 2), indicatorDrawerLoader.height)
+            implicitWidth:  indicatorDrawer._fillWindow ? _availableWidth : Math.min(_availableWidth, indicatorDrawerLoader.width)
+            implicitHeight: indicatorDrawer._fillWindow ? _availableHeight : Math.min(_availableHeight, indicatorDrawerLoader.height)
             contentWidth:   indicatorDrawerLoader.width
             contentHeight:  indicatorDrawerLoader.height
+
+            property real _availableWidth:  mainWindow.contentItem.width - (2 * indicatorDrawer._margins) - (indicatorDrawer.padding * 2)
+            property real _availableHeight: mainWindow.contentItem.height - ScreenTools.toolbarHeight - (2 * indicatorDrawer._margins) - (indicatorDrawer.padding * 2)
 
             Loader {
                 id:         indicatorDrawerLoader
                 objectName: "indicatorDrawerLoader"
+                width:      indicatorDrawer._fillWindow ? indicatorDrawerLoaderFlickable.width : undefined
 
                 Binding {
                     target:     indicatorDrawerLoader.item

@@ -26,7 +26,7 @@ PerimeterScanComplexItem::PerimeterScanComplexItem(PlanMasterController *masterC
     _altitudeFact.setRawValue(
         SettingsManager::instance()->appSettings()->defaultMissionItemAltitude()->rawValue());
 
-    connect(&_altitudeFact, &Fact::valueChanged, this, [this]() {
+    connect(&_altitudeFact, &Fact::rawValueChanged, this, [this]() {
         _setDirty();
         emit amslEntryAltChanged(amslEntryAlt());
         emit amslExitAltChanged(amslExitAlt());
@@ -148,6 +148,12 @@ void PerimeterScanComplexItem::setCoordinate(const QGeoCoordinate & /* coord */)
 void PerimeterScanComplexItem::applyNewAltitude(double newAltitude)
 {
     _altitudeFact.setRawValue(newAltitude);
+}
+
+bool PerimeterScanComplexItem::usesAltitudeFrame(QGroundControlQmlGlobal::AltitudeFrame altitudeFrame) const
+{
+    // Perimeter altitude is always relative to home
+    return altitudeFrame == QGroundControlQmlGlobal::AltitudeFrameRelative;
 }
 
 void PerimeterScanComplexItem::setMissionFlightStatus(MissionFlightStatus_t &missionFlightStatus)

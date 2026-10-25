@@ -17,7 +17,7 @@ Rectangle {
 
     property bool xAxisShowLocalTime: QGroundControl.settingsManager.logViewerSettings.xAxisShowLocalTime.rawValue
 
-    color: qgcPal.windowShade
+    color: qgcPal.windowCard
     radius: ScreenTools.defaultFontPixelWidth * 0.5
     Layout.preferredWidth: mainLayout.implicitWidth + (mainLayout.anchors.margins * 2)
 
@@ -57,7 +57,7 @@ Rectangle {
         }
 
         const groupedMap = {}
-        const fields = logParser.plottableFields
+        const fields = logViewerController.plottableFields
         for (let i = 0; i < fields.length; i++) {
             const fullName = String(fields[i])
             const splitIndex = fullName.indexOf(".")
@@ -73,12 +73,12 @@ Rectangle {
             groupedMap[groupName].push({ fullName: fullName, shortName: shortName })
         }
 
-        const groups = Object.keys(groupedMap).sort()
+        // Insertion order follows the controller's numeric-aware field order
+        const groups = Object.keys(groupedMap)
         const rows = []
         for (let g = 0; g < groups.length; g++) {
             const groupName = groups[g]
             rows.push({ rowType: "group", group: groupName })
-            groupedMap[groupName].sort((a, b) => String(a.shortName).localeCompare(String(b.shortName)))
             for (let s = 0; s < groupedMap[groupName].length; s++) {
                 rows.push({
                     rowType: "field",
@@ -124,7 +124,6 @@ Rectangle {
         id: _groupRowComponent
 
         Item {
-            width: _maxFieldRowWidth
             implicitWidth: _groupLayout.implicitWidth
             implicitHeight: _groupLayout.implicitHeight
 
@@ -138,7 +137,7 @@ Rectangle {
                     Layout.preferredWidth: _groupLabel.height * 0.5
                     Layout.preferredHeight: _groupLabel.height * 0.5
                     source: "/qmlimages/arrow-down.png"
-                    color: qgcPal.text
+                    color: qgcPal.textPrimary
                     fillMode: Image.PreserveAspectFit
                     rotation: (String(control._fieldSearchText).trim().length > 0 || control._isGroupExpanded(rowData.group)) ? 0 : -90
                 }
@@ -162,7 +161,6 @@ Rectangle {
 
         QGCCheckBoxSlider {
             id: _fieldSlider
-            width: _maxFieldRowWidth
             checked: logViewerController.selectedFields.indexOf(rowData.fullName) !== -1
             text: rowData.shortName ? " " + String(rowData.shortName) : ""
             onClicked: logViewerController.setFieldSelected(rowData.fullName, checked)
@@ -225,8 +223,7 @@ Rectangle {
             QGCTextField {
                 id: _fieldSearchField
                 Layout.fillWidth: true
-                textColor: qgcPal.textFieldText
-                placeholderTextColor: Qt.rgba(qgcPal.textFieldText.r, qgcPal.textFieldText.g, qgcPal.textFieldText.b, 0.7)
+                textColor: qgcPal.textPrimary
                 placeholderText: qsTr("Search fields")
 
                 onTextChanged: {
@@ -261,12 +258,14 @@ Rectangle {
         QGCListView {
             id: _fieldsListView
             Layout.fillHeight: true
+            Layout.fillWidth: true
             Layout.preferredWidth: _maxFieldRowWidth + ScreenTools.defaultFontPixelWidth
             visible: _isFirmwareLog
             model: _filteredFieldRows
             spacing: ScreenTools.defaultFontPixelHeight * 0.25
 
             delegate: Loader {
+                width: _fieldsListView.width - ScreenTools.defaultFontPixelWidth
                 sourceComponent: modelData.rowType === "group" ? _groupRowComponent : _fieldRowComponent
                 property var rowData: modelData
             }

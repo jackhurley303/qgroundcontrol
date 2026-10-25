@@ -13,7 +13,7 @@ Rectangle {
     id:         _root
     height:     visible ? (editorColumn.height + (_margin * 2)) : 0
     width:      availableWidth
-    color:      qgcPal.windowShadeDark
+    color:      qgcPal.windowPanel
     radius:     _radius
 
     required property var missionItem
@@ -41,6 +41,14 @@ Rectangle {
     function polygonAdjustStarted() { }
     function polygonAdjustFinished() { }
 
+    function _topLayerAltText() {
+        return QGroundControl.unitsConversion.metersToAppSettingsVerticalDistanceUnitsString(missionItem.topFlightAlt)
+    }
+
+    function _bottomLayerAltText() {
+        return QGroundControl.unitsConversion.metersToAppSettingsVerticalDistanceUnitsString(missionItem.bottomFlightAlt)
+    }
+
     QGCPalette { id: qgcPal; colorGroupEnabled: true }
 
     ColumnLayout {
@@ -59,25 +67,14 @@ Rectangle {
                 visible:        !missionItem.structurePolygon.isValid || missionItem.wizardMode
             }
 
-        ColumnLayout {
+        QGCGroupBox {
             Layout.fillWidth:   true
-            spacing:        _margin
-            visible:        !wizardLabel.visible
+            contentSpacing:     _margin
+            showDividers:       false
+            visible:            !wizardLabel.visible
 
-            QGCTabBar {
-                id:             tabBar
-                Layout.fillWidth:   true
-
-                Component.onCompleted: currentIndex = 0
-
-                QGCTabButton { text: qsTr("Grid") }
-                QGCTabButton { text: qsTr("Camera") }
-            }
-
-            ColumnLayout {
-                Layout.fillWidth:   true
-                spacing:            _margin
-                visible:            tabBar.currentIndex == 0
+            QGCGroupBoxTab {
+                title: qsTr("Grid")
 
                 QGCLabel {
                     Layout.fillWidth:   true
@@ -190,10 +187,10 @@ Rectangle {
                     QGCLabel { text: missionItem.cameraCalc.adjustedFootprintFrontal.valueString + " " + QGroundControl.unitsConversion.appSettingsHorizontalDistanceUnitsString }
 
                     QGCLabel { text: qsTr("Top Layer Alt") }
-                    QGCLabel { text: QGroundControl.unitsConversion.metersToAppSettingsVerticalDistanceUnitsString(missionItem.topFlightAlt) }
+                    QGCLabel { id: topLayerAltLabel; text: _topLayerAltText() }
 
                     QGCLabel { text: qsTr("Bottom Layer Alt") }
-                    QGCLabel { text: QGroundControl.unitsConversion.metersToAppSettingsVerticalDistanceUnitsString(missionItem.bottomFlightAlt) }
+                    QGCLabel { id: bottomLayerAltLabel; text: _bottomLayerAltText() }
 
                     QGCLabel { text: qsTr("Photo Count") }
                     QGCLabel { text: missionItem.cameraShots }
@@ -204,18 +201,25 @@ Rectangle {
                     QGCLabel { text: qsTr("Trigger Distance") }
                     QGCLabel { text: missionItem.cameraCalc.adjustedFootprintSide.valueString + " " + QGroundControl.unitsConversion.appSettingsHorizontalDistanceUnitsString }
                 }
-            } // Grid Column
+            } // Grid Tab
 
-            ColumnLayout {
-                Layout.fillWidth:   true
-                spacing:            _margin
-                visible:            tabBar.currentIndex == 1
+            QGCGroupBoxTab {
+                title: qsTr("Camera")
 
                 CameraCalcCamera {
                     Layout.fillWidth:   true
                     cameraCalc: missionItem.cameraCalc
                 }
             }
+        }
+    }
+
+    Connections {
+        target: QGroundControl.unitsConversion
+
+        function onUnitsChanged() {
+            topLayerAltLabel.text = Qt.binding(_topLayerAltText)
+            bottomLayerAltLabel.text = Qt.binding(_bottomLayerAltText)
         }
     }
 }

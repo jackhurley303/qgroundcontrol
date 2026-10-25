@@ -62,7 +62,7 @@ SettingsPage {
         vehicleEditDialogFactory.open({ editingEntry: entry, _isNew: entry === null })
     }
 
-    SettingsGroupLayout {
+    QGCGroupBox {
         Layout.fillWidth:       true
         Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 60
         heading:                qsTr("Vehicles")
@@ -109,7 +109,7 @@ SettingsPage {
                         Layout.fillWidth:   true
                         text:               root._textForValue(root._mavTypeOptions, object.mavType)
                         font.pointSize:     ScreenTools.smallFontPointSize
-                        color:              qgcPal.text
+                        color:              qgcPal.textPrimary
                     }
                 }
 
@@ -847,7 +847,7 @@ SettingsPage {
                                 fillMode:               Image.PreserveAspectFit
                                 mipmap:                 true
                                 smooth:                 true
-                                color:                  qgcPal.text
+                                color:                  qgcPal.textPrimary
                                 source:                 "/res/TrashDelete.svg"
 
                                 QGCMouseArea {
@@ -980,7 +980,7 @@ SettingsPage {
                                 fillMode:               Image.PreserveAspectFit
                                 mipmap:                 true
                                 smooth:                 true
-                                color:                  qgcPal.text
+                                color:                  qgcPal.textPrimary
                                 source:                 "/res/TrashDelete.svg"
 
                                 QGCMouseArea {
@@ -1016,8 +1016,8 @@ SettingsPage {
                         Layout.fillWidth:       true
                         Layout.preferredHeight: ScreenTools.defaultFontPixelHeight * 4
                         font.pointSize:         ScreenTools.defaultFontPointSize
-                        color:                  qgcPal.textFieldText
-                        background:             Rectangle { color: qgcPal.textField }
+                        color:                  qgcPal.textPrimary
+                        background:             Rectangle { color: qgcPal.windowInset }
                         onEditingFinished:      editDialog._notes = text
                     }
                 }

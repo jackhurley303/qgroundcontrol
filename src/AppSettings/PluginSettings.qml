@@ -54,7 +54,7 @@ SettingsPage {
         id: catalogInstaller
     }
 
-    SettingsGroupLayout {
+    QGCGroupBox {
         Layout.fillWidth:   true
         heading:            qsTr("Installed")
         visible:            root.sectionFilter !== 1
@@ -128,7 +128,7 @@ SettingsPage {
                             case "NeedsApproval":
                                 return qgcPal.colorOrange
                             default:
-                                return qgcPal.text
+                                return qgcPal.textPrimary
                             }
                         }
                     }
@@ -138,7 +138,7 @@ SettingsPage {
                         text:               modelData.buildText
                         wrapMode:           Text.WordWrap
                         font.pointSize:     ScreenTools.smallFontPointSize
-                        color:              qgcPal.text
+                        color:              qgcPal.textPrimary
                         visible:            modelData.buildText.length > 0
 
                         // The full marker is the identity; the line above is only its

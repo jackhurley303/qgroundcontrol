@@ -67,7 +67,7 @@ SetupPage {
             property bool   _compassAutoRot:                _compassAutoRotAvailable ? _compassAutoRotFact.rawValue == 2 : false
             property bool   _showSimpleAccelCalOption:      false
             property bool   _doSimpleAccelCal:              false
-            property var    _gcsPosition:                    QGroundControl.qgcPositionManger.gcsPosition
+            property var    _gcsPosition:                    QGroundControl.positionManager.gcsPosition
             property var    _mapPosition:                    QGroundControl.flightMapPosition
 
             function showOrientationsDialog(calType) {
@@ -308,14 +308,6 @@ SetupPage {
                                             qsTr("- Red indicates a compass which should not be used.\n\n") +
                                             qsTr("YOU MUST REBOOT YOUR VEHICLE AFTER EACH CALIBRATION.")
                         }
-
-                        QGCButton {
-                            text:       qsTr("Reboot Vehicle")
-                            onClicked: {
-                                controller.vehicle.rebootVehicle()
-                                postOnboardCompassCalibrationDialog.close()
-                            }
-                        }
                     }
                 }
             }
@@ -343,14 +335,6 @@ SetupPage {
                             anchors.right:  parent.right
                             wrapMode:       Text.WordWrap
                             text:           qsTr("YOU MUST REBOOT YOUR VEHICLE AFTER EACH CALIBRATION.")
-                        }
-
-                        QGCButton {
-                            text:       qsTr("Reboot Vehicle")
-                            onClicked: {
-                                controller.vehicle.rebootVehicle()
-                                postCalibrationDialog.close()
-                            }
                         }
                     }
                 }
@@ -606,14 +590,14 @@ SetupPage {
                                 id:         northCalLat
                                 visible:    !useGcsPositionCheckbox.checked && !useMapPositionCheckbox.checked && northCalibrationCheckBox.checked
                                 text:       "0.00"
-                                textColor:  isNaN(parseFloat(text)) ? qgcPal.warningText: qgcPal.textFieldText
+                                textColor:  isNaN(parseFloat(text)) ? qgcPal.errorText : qgcPal.textPrimary
                                 enabled:    !useGcsPositionCheckbox.checked
                             }
                             FactTextField {
                                 id:         northCalLon
                                 visible:    !useGcsPositionCheckbox.checked && !useMapPositionCheckbox.checked && northCalibrationCheckBox.checked
                                 text:       "0.00"
-                                textColor:  isNaN(parseFloat(text)) ? qgcPal.warningText: qgcPal.textFieldText
+                                textColor:  isNaN(parseFloat(text)) ? qgcPal.errorText : qgcPal.textPrimary
                                 enabled:    !useGcsPositionCheckbox.checked
                             }
 
@@ -833,15 +817,15 @@ SetupPage {
                         anchors.fill:   parent
                         readOnly:       true
                         text:           statusTextAreaDefaultText
-                        color:          qgcPal.text
-                        background:     Rectangle { color: qgcPal.windowShade }
+                        color:          qgcPal.textPrimary
+                        background:     Rectangle { color: qgcPal.windowCard }
                     }
 
                     Rectangle {
                         id:             orientationCalArea
                         anchors.fill:   parent
                         visible:        controller.showOrientationCalArea
-                        color:          qgcPal.windowShade
+                        color:          qgcPal.windowCard
 
                         QGCLabel {
                             id:                 orientationCalAreaHelpText

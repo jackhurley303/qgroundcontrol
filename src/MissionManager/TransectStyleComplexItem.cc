@@ -38,16 +38,16 @@ TransectStyleComplexItem::TransectStyleComplexItem(PlanMasterController* masterC
     connect(this, &TransectStyleComplexItem::_updateFlightPathSegmentsSignal, this, &TransectStyleComplexItem::_updateFlightPathSegmentsDontCallDirectly,   Qt::QueuedConnection);
     qgcApp()->addCompressedSignal(QMetaMethod::fromSignal(&TransectStyleComplexItem::_updateFlightPathSegmentsSignal));
 
-    connect(&_turnAroundDistanceFact,                   &Fact::valueChanged,                this, &TransectStyleComplexItem::_rebuildTransects);
-    connect(&_hoverAndCaptureFact,                      &Fact::valueChanged,                this, &TransectStyleComplexItem::_rebuildTransects);
-    connect(&_refly90DegreesFact,                       &Fact::valueChanged,                this, &TransectStyleComplexItem::_rebuildTransects);
-    connect(&_terrainAdjustMaxClimbRateFact,            &Fact::valueChanged,                this, &TransectStyleComplexItem::_rebuildTransects);
-    connect(&_terrainAdjustMaxDescentRateFact,          &Fact::valueChanged,                this, &TransectStyleComplexItem::_rebuildTransects);
-    connect(&_terrainAdjustToleranceFact,               &Fact::valueChanged,                this, &TransectStyleComplexItem::_rebuildTransects);
+    connect(&_turnAroundDistanceFact,                   &Fact::rawValueChanged,             this, &TransectStyleComplexItem::_rebuildTransects);
+    connect(&_hoverAndCaptureFact,                      &Fact::rawValueChanged,             this, &TransectStyleComplexItem::_rebuildTransects);
+    connect(&_refly90DegreesFact,                       &Fact::rawValueChanged,             this, &TransectStyleComplexItem::_rebuildTransects);
+    connect(&_terrainAdjustMaxClimbRateFact,            &Fact::rawValueChanged,             this, &TransectStyleComplexItem::_rebuildTransects);
+    connect(&_terrainAdjustMaxDescentRateFact,          &Fact::rawValueChanged,             this, &TransectStyleComplexItem::_rebuildTransects);
+    connect(&_terrainAdjustToleranceFact,               &Fact::rawValueChanged,             this, &TransectStyleComplexItem::_rebuildTransects);
     connect(&_surveyAreaPolygon,                        &QGCMapPolygon::pathChanged,        this, &TransectStyleComplexItem::_rebuildTransects);
-    connect(&_cameraTriggerInTurnAroundFact,            &Fact::valueChanged,                this, &TransectStyleComplexItem::_rebuildTransects);
-    connect(_cameraCalc.adjustedFootprintSide(),        &Fact::valueChanged,                this, &TransectStyleComplexItem::_rebuildTransects);
-    connect(_cameraCalc.adjustedFootprintFrontal(),     &Fact::valueChanged,                this, &TransectStyleComplexItem::_rebuildTransects);
+    connect(&_cameraTriggerInTurnAroundFact,            &Fact::rawValueChanged,             this, &TransectStyleComplexItem::_rebuildTransects);
+    connect(_cameraCalc.adjustedFootprintSide(),        &Fact::rawValueChanged,             this, &TransectStyleComplexItem::_rebuildTransects);
+    connect(_cameraCalc.adjustedFootprintFrontal(),     &Fact::rawValueChanged,             this, &TransectStyleComplexItem::_rebuildTransects);
     connect(_cameraCalc.distanceToSurface(),            &Fact::rawValueChanged,             this, &TransectStyleComplexItem::_rebuildTransects);
     connect(&_cameraCalc,                               &CameraCalc::distanceModeChanged,   this, &TransectStyleComplexItem::_rebuildTransects);
 
@@ -61,13 +61,13 @@ TransectStyleComplexItem::TransectStyleComplexItem(PlanMasterController* masterC
     connect(&_refly90DegreesFact,                       &Fact::valueChanged,            this, &TransectStyleComplexItem::greatestDistanceToChanged);
     connect(&_surveyAreaPolygon,                        &QGCMapPolygon::pathChanged,    this, &TransectStyleComplexItem::greatestDistanceToChanged);
 
-    connect(&_turnAroundDistanceFact,                   &Fact::valueChanged,            this, &TransectStyleComplexItem::_setDirty);
-    connect(&_cameraTriggerInTurnAroundFact,            &Fact::valueChanged,            this, &TransectStyleComplexItem::_setDirty);
-    connect(&_hoverAndCaptureFact,                      &Fact::valueChanged,            this, &TransectStyleComplexItem::_setDirty);
-    connect(&_refly90DegreesFact,                       &Fact::valueChanged,            this, &TransectStyleComplexItem::_setDirty);
-    connect(&_terrainAdjustMaxClimbRateFact,            &Fact::valueChanged,            this, &TransectStyleComplexItem::_setDirty);
-    connect(&_terrainAdjustMaxDescentRateFact,          &Fact::valueChanged,            this, &TransectStyleComplexItem::_setDirty);
-    connect(&_terrainAdjustToleranceFact,               &Fact::valueChanged,            this, &TransectStyleComplexItem::_setDirty);
+    connect(&_turnAroundDistanceFact,                   &Fact::rawValueChanged,         this, &TransectStyleComplexItem::_setDirty);
+    connect(&_cameraTriggerInTurnAroundFact,            &Fact::rawValueChanged,         this, &TransectStyleComplexItem::_setDirty);
+    connect(&_hoverAndCaptureFact,                      &Fact::rawValueChanged,         this, &TransectStyleComplexItem::_setDirty);
+    connect(&_refly90DegreesFact,                       &Fact::rawValueChanged,         this, &TransectStyleComplexItem::_setDirty);
+    connect(&_terrainAdjustMaxClimbRateFact,            &Fact::rawValueChanged,         this, &TransectStyleComplexItem::_setDirty);
+    connect(&_terrainAdjustMaxDescentRateFact,          &Fact::rawValueChanged,         this, &TransectStyleComplexItem::_setDirty);
+    connect(&_terrainAdjustToleranceFact,               &Fact::rawValueChanged,         this, &TransectStyleComplexItem::_setDirty);
     connect(&_surveyAreaPolygon,                        &QGCMapPolygon::pathChanged,    this, &TransectStyleComplexItem::_setDirty);
 
     connect(&_surveyAreaPolygon,                        &QGCMapPolygon::dirtyChanged,   this, &TransectStyleComplexItem::_setIfDirty);
@@ -251,6 +251,8 @@ bool TransectStyleComplexItem::_load(const QJsonObject& complexObject, bool forP
         if (!GeoJsonHelper::loadGeoCoordinateArray(innerObject[_jsonVisualTransectPointsKey], false /* altitudeRequired */, _visualTransectPoints, errorString)) {
             return false;
         }
+        _visualTransectEntryIndices.clear();
+        _visualTransectExitIndices.clear();
         _entryCoordinate = _visualTransectPoints.count() ? _visualTransectPoints.first().value<QGeoCoordinate>() : QGeoCoordinate();
         _exitCoordinate = _visualTransectPoints.count() ? _visualTransectPoints.last().value<QGeoCoordinate>() : QGeoCoordinate();
         _isIncomplete = false;
@@ -387,6 +389,12 @@ bool TransectStyleComplexItem::_hasTurnaround(void) const
     return _turnAroundDistance() > 0;
 }
 
+int TransectStyleComplexItem::_distanceTriggerImageCount(double transectLength, double triggerDistance)
+{
+    // Starting and stopping distance triggering each take an image, with distance triggered images in between
+    return qCeil(transectLength / triggerDistance) + 1;
+}
+
 double TransectStyleComplexItem::_turnAroundDistance(void) const
 {
     return _turnAroundDistanceFact.rawValue().toDouble();
@@ -439,8 +447,15 @@ void TransectStyleComplexItem::_rebuildTransects(void)
     double top = 0.;
     // Generate the visuals transect representation
     _visualTransectPoints.clear();
+    _visualTransectEntryIndices.clear();
+    _visualTransectExitIndices.clear();
     for (const QList<CoordInfo_t>& transect: _transects) {
         for (const CoordInfo_t& coordInfo: transect) {
+            if (coordInfo.coordType == CoordTypeSurveyEntry) {
+                _visualTransectEntryIndices.append(_visualTransectPoints.count());
+            } else if (coordInfo.coordType == CoordTypeSurveyExit) {
+                _visualTransectExitIndices.append(_visualTransectPoints.count());
+            }
             _visualTransectPoints.append(QVariant::fromValue(coordInfo.coord));
             double lat = coordInfo.coord.latitude()  + 90.0;
             double lon = coordInfo.coord.longitude() + 180.0;
@@ -1322,14 +1337,22 @@ void TransectStyleComplexItem::_appendLoadedMissionItems(QList<MissionItem*>& it
     }
 }
 
+QList<QList<QGeoCoordinate>> TransectStyleComplexItem::_surveyAreaBoundaries(void) const
+{
+    return {_surveyAreaPolygon.coordinateList()};
+}
+
 void TransectStyleComplexItem::addKMLVisuals(KMLPlanDomDocument& domDocument)
 {
     // We add the survey area polygon as a Placemark
 
-    QDomElement placemarkElement = domDocument.addPlacemark(QStringLiteral("Survey Area"), true);
-    QDomElement polygonElement = _surveyAreaPolygon.kmlPolygonElement(domDocument);
+    const QList<QList<QGeoCoordinate>> boundaries = _surveyAreaBoundaries();
+    if (boundaries.isEmpty() || boundaries.first().isEmpty()) {
+        return;
+    }
 
-    placemarkElement.appendChild(polygonElement);
+    QDomElement placemarkElement = domDocument.addPlacemark(QStringLiteral("Survey Area"), true);
+    domDocument.addPolygon(placemarkElement, boundaries.first(), boundaries.mid(1));
     domDocument.addTextElement(placemarkElement, "styleUrl", QStringLiteral("#%1").arg(domDocument.surveyPolygonStyleName));
     domDocument.appendChildToRoot(placemarkElement);
 }
@@ -1443,6 +1466,11 @@ void TransectStyleComplexItem::applyNewAltitude(double newAltitude)
 {
     _cameraCalc.valueSetIsDistance()->setRawValue(true);
     _cameraCalc.distanceToSurface()->setRawValue(newAltitude);
+}
+
+bool TransectStyleComplexItem::usesAltitudeFrame(QGroundControlQmlGlobal::AltitudeFrame altitudeFrame) const
+{
+    return altitudeFrame == _cameraCalc.distanceMode();
 }
 
 double TransectStyleComplexItem::minAMSLAltitude(void) const

@@ -45,27 +45,24 @@ QString _px4NavStateName(int state)
     }
 }
 
-bool _isNumericScalarField(const ulog_cpp::Field &field)
+bool _isNumericBasicType(ulog_cpp::Field::BasicType type)
 {
-    if (field.arrayLength() >= 0) {
-        return false; // arrays excluded from plottable fields
-    }
     using BT = ulog_cpp::Field::BasicType;
-    switch (field.type().type) {
-    case BT::INT8:
-    case BT::UINT8:
-    case BT::INT16:
-    case BT::UINT16:
-    case BT::INT32:
-    case BT::UINT32:
-    case BT::INT64:
-    case BT::UINT64:
-    case BT::FLOAT:
-    case BT::DOUBLE:
-    case BT::BOOL:
-        return true;
-    default:
-        return false;
+    switch (type) {
+        case BT::INT8:
+        case BT::UINT8:
+        case BT::INT16:
+        case BT::UINT16:
+        case BT::INT32:
+        case BT::UINT32:
+        case BT::INT64:
+        case BT::UINT64:
+        case BT::FLOAT:
+        case BT::DOUBLE:
+        case BT::BOOL:
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -86,6 +83,11 @@ void ULogFullHandler::error(const std::string &msg, bool is_recoverable)
         }
     }
     qCWarning(ULogFullHandlerLog) << "ULog parse error:" << errorMessage;
+}
+
+void ULogFullHandler::fileHeader(const ulog_cpp::FileHeader& header)
+{
+    _logStartSecs = static_cast<double>(header.header().timestamp) / 1e6;
 }
 
 void ULogFullHandler::messageFormat(const ulog_cpp::MessageFormat &message_format)
@@ -137,19 +139,40 @@ void ULogFullHandler::data(const ulog_cpp::Data &data)
         if (sub.format->fieldMap().count("timestamp") > 0) {
             const uint64_t tsUs = view.at("timestamp").as<uint64_t>();
             timestampSecs = static_cast<double>(tsUs) / 1e6;
+            // The logger writes each topic's last value at log start with its original, older timestamp
+            if (timestampSecs < _logStartSecs) {
+                timestampSecs = _logStartSecs;
+                _staleSampleCount++;
+            }
             _lastTimestampSecs = timestampSecs;
         }
 
-        // Extract GPS UTC start time from first valid sensor_gps/vehicle_gps_position sample.
+        // Extract GPS UTC start time from the first GNSS sample that has one.
         // Define QGC_NO_LOG_START_TIME at build time to suppress this for UI testing.
 #ifndef QGC_NO_LOG_START_TIME
         if (_result.startTime.isNull() && timestampSecs >= 0.0) {
-            if ((sub.topicName == "sensor_gps" || sub.topicName == "vehicle_gps_position")
-                    && sub.format->fieldMap().count("time_utc_usec") > 0) {
-                const uint64_t utcUsec = view.at("time_utc_usec").as<uint64_t>();
-                const uint64_t tsUs   = view.at("timestamp").as<uint64_t>();
-                if (utcUsec > 0 && utcUsec >= tsUs) {
-                    const qint64 startMs = static_cast<qint64>((utcUsec - tsUs) / 1000);
+            const auto& fieldMap = sub.format->fieldMap();
+            uint64_t utcUsec = 0;
+            uint64_t utcTimestampUs = 0;
+            if ((sub.topicName == "sensor_gnss" || sub.topicName == "sensor_gps" ||
+                 sub.topicName == "vehicle_gps_position") &&
+                fieldMap.count("time_utc_usec") > 0) {
+                utcUsec = view.at("time_utc_usec").as<uint64_t>();
+                utcTimestampUs = view.at("timestamp").as<uint64_t>();
+            } else if (sub.topicName == "vehicle_gnss" && fieldMap.count("receiver") > 0) {
+                // vehicle_gnss nests the receiver's sensor_gnss sample. Its outer timestamp is the later publish
+                // time from the sensors module, so pair the UTC time with the receiver's own timestamp.
+                const auto& receiver = fieldMap.at("receiver");
+                if (receiver->type().type == ulog_cpp::Field::BasicType::NESTED && receiver->definitionResolved() &&
+                    receiver->nestedFormat()->fieldMap().count("time_utc_usec") > 0 &&
+                    receiver->nestedFormat()->fieldMap().count("timestamp") > 0) {
+                    utcUsec = view.at(receiver)["time_utc_usec"].as<uint64_t>();
+                    utcTimestampUs = view.at(receiver)["timestamp"].as<uint64_t>();
+                }
+            }
+            if (utcUsec > 0) {
+                if (utcUsec >= utcTimestampUs) {
+                    const qint64 startMs = static_cast<qint64>((utcUsec - utcTimestampUs) / 1000);
                     _result.startTime = QDateTime::fromMSecsSinceEpoch(startMs, QTimeZone::utc());
                 }
             }
@@ -174,15 +197,7 @@ void ULogFullHandler::data(const ulog_cpp::Data &data)
             }
 
             const QString fieldName = prefix + QString::fromStdString(field->name());
-            _fieldSet.insert(fieldName);
-
-            if (!_isNumericScalarField(*field) || timestampSecs < 0.0) {
-                continue;
-            }
-
-            const double value = view.at(field).as<double>();
-            _result.fieldSamples[fieldName].append(QPointF(timestampSecs, value));
-            _plottableFieldSet.insert(fieldName);
+            _collectFieldSamples(fieldName, *field, view.at(field), timestampSecs);
         }
 
         _result.sampleCount++;
@@ -196,6 +211,53 @@ void ULogFullHandler::data(const ulog_cpp::Data &data)
     } catch (const std::exception &e) {
         qCWarning(ULogFullHandlerLog) << "Failed to decode data message:" << e.what();
     }
+}
+
+void ULogFullHandler::_collectFieldSamples(const QString& fieldName, const ulog_cpp::Field& field,
+                                           const ulog_cpp::Value& value, double timestampSecs)
+{
+    if (field.arrayLength() < 0) {
+        _collectElementSamples(fieldName, field, value, timestampSecs);
+        return;
+    }
+
+    // char arrays are strings, not per-element signals
+    if (field.type().type == ulog_cpp::Field::BasicType::CHAR) {
+        _fieldSet.insert(fieldName);
+        return;
+    }
+
+    for (int i = 0; i < field.arrayLength(); i++) {
+        _collectElementSamples(QStringLiteral("%1[%2]").arg(fieldName).arg(i), field, value[static_cast<size_t>(i)],
+                               timestampSecs);
+    }
+}
+
+void ULogFullHandler::_collectElementSamples(const QString& fieldName, const ulog_cpp::Field& field,
+                                             const ulog_cpp::Value& value, double timestampSecs)
+{
+    if (field.type().type == ulog_cpp::Field::BasicType::NESTED) {
+        for (const auto& nestedField : field.nestedFormat()->fields()) {
+            if (nestedField->name().rfind("_padding", 0) == 0) {
+                continue;
+            }
+            if (!nestedField->definitionResolved()) {
+                continue;
+            }
+            const QString nestedFieldName = fieldName + QLatin1Char('.') + QString::fromStdString(nestedField->name());
+            _collectFieldSamples(nestedFieldName, *nestedField, value[*nestedField], timestampSecs);
+        }
+        return;
+    }
+
+    _fieldSet.insert(fieldName);
+
+    if (!_isNumericBasicType(field.type().type) || (timestampSecs < 0.0)) {
+        return;
+    }
+
+    _result.fieldSamples[fieldName].append(QPointF(timestampSecs, value.as<double>()));
+    _plottableFieldSet.insert(fieldName);
 }
 
 void ULogFullHandler::logging(const ulog_cpp::Logging &logging)
@@ -291,6 +353,11 @@ void ULogFullHandler::dropout(const ulog_cpp::Dropout &dropout)
 
 void ULogFullHandler::finalize()
 {
+    if (_staleSampleCount > 0) {
+        qCDebug(ULogFullHandlerLog) << "Moved" << _staleSampleCount << "samples older than log start to"
+                                    << _logStartSecs << "s";
+    }
+
     // Detect vehicle type from vehicle_status.vehicle_type
     // PX4 vehicle_type enum: 0=Unknown, 1=Rotary Wing, 2=Fixed Wing, 3=Rover, 4=Airship
     const auto vehicleTypeIt = _result.fieldSamples.constFind(QStringLiteral("vehicle_status.vehicle_type"));

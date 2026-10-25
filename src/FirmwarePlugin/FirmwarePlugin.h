@@ -19,6 +19,7 @@ class FactMetaData;
 class MavlinkCameraControlInterface;
 class QGCCameraManager;
 class Autotune;
+class VehicleReadiness;
 class LinkInterface;
 class FactGroup;
 class ParameterMetaData;
@@ -374,6 +375,12 @@ public:
     /// Used to check if running firmware is latest stable version.
     virtual void checkIfIsLatestStable(Vehicle *vehicle) const;
 
+    /// Settings key identifying the stable firmware stream (firmware + vehicle class) for this vehicle
+    static QString stableFirmwareSettingsKey(const Vehicle* vehicle);
+
+    /// @return true if latestVersion is newer than seenVersion (or seenVersion is empty/unparseable)
+    static bool isStableFirmwareVersionUnseen(const QString& latestVersion, const QString& seenVersion);
+
     /// Used to check if running current version is equal or higher than the one being compared.
     /// returns 1 if current > compare, 0 if current == compare, -1 if current < compare
     int versionCompare(const Vehicle *vehicle, const QString &compare) const;
@@ -392,6 +399,10 @@ public:
 
     /// Creates Autotune object.
     virtual Autotune *createAutotune(Vehicle *vehicle) const;
+
+    /// Creates the vehicle's guided action readiness. The base readiness does not know which flight modes the guided
+    /// actions use, so firmware with takeoff or mission modes returns a subclass that declares them.
+    virtual VehicleReadiness* createVehicleReadiness(Vehicle* vehicle) const;
 
     /// Update Available flight modes received from vehicle
     virtual void updateAvailableFlightModes(FlightModeList &flightModeList) { _updateFlightModeList(flightModeList); }
@@ -423,7 +434,8 @@ protected:
     virtual QString _getLatestVersionFileUrl(Vehicle* /*vehicle*/) const { return QString(); }
 
     /// Callback to process file with latest release information
-    virtual void _versionFileDownloadFinished(const QString &remoteFile, const QString &localFile, const Vehicle *vehicle) const;
+    virtual void _versionFileDownloadFinished(const QString& remoteFile, const QString& localFile,
+                                              Vehicle* vehicle) const;
 
     /// Returns regex QString to extract version information from text
     virtual QString _versionRegex() const { return QString(); }

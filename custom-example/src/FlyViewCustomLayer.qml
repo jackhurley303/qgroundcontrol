@@ -7,9 +7,15 @@ import QGroundControl.Controls
 import Custom.Widgets
 
 Item {
-    property var parentToolInsets                       // These insets tell you what screen real estate is available for positioning the controls in your overlay
-    property var totalToolInsets:   _totalToolInsets    // The insets updated for the custom overlay additions
+    property var occluders      // FlyViewOccluders: where the upstream widgets are, use these to position your controls
     property var mapControl
+
+    // Rects of the controls in this layer which cover the map, so the map keeps the vehicle out from under them
+    property var customOccluders: [
+        exampleRectangle.visible ? Qt.rect(exampleRectangle.x, exampleRectangle.y, exampleRectangle.width, exampleRectangle.height) : Qt.rect(0, 0, 0, 0),
+        Qt.rect(compassBar.x, headingIndicator.y, compassBar.width, compassArrowIndicator.y + compassArrowIndicator.height - headingIndicator.y),
+        Qt.rect(compassBackground.x, attitudeIndicator.y, attitudeIndicator.x + attitudeIndicator.width - compassBackground.x, attitudeIndicator.height)
+    ]
 
     readonly property string noGPS:         qsTr("NO GPS")
     readonly property real   indicatorValueWidth:   ScreenTools.defaultFontPixelWidth * 7
@@ -18,7 +24,7 @@ Item {
     property real   _indicatorDiameter:     ScreenTools.defaultFontPixelWidth * 18
     property real   _indicatorsHeight:      ScreenTools.defaultFontPixelHeight
     property var    _sepColor:              qgcPal.globalTheme === QGCPalette.Light ? Qt.rgba(0,0,0,0.5) : Qt.rgba(1,1,1,0.5)
-    property color  _indicatorsColor:       qgcPal.text
+    property color  _indicatorsColor:       qgcPal.textPrimary
     property bool   _isVehicleGps:          _activeVehicle ? _activeVehicle.gps.count.rawValue > 1 && _activeVehicle.gps.hdop.rawValue < 1.4 : false
     property string _altitude:              _activeVehicle ? (isNaN(_activeVehicle.altitudeRelative.value) ? "0.0" : _activeVehicle.altitudeRelative.value.toFixed(1)) + ' ' + _activeVehicle.altitudeRelative.units : "0.0"
     property string _distanceStr:           isNaN(_distance) ? "0" : _distance.toFixed(0) + ' ' + QGroundControl.unitsConversion.appSettingsHorizontalDistanceUnitsString
@@ -39,40 +45,21 @@ Item {
         return hours+':'+minutes+':'+seconds;
     }
 
-    QGCToolInsets {
-        id:                     _totalToolInsets
-        leftEdgeTopInset:       parentToolInsets.leftEdgeTopInset
-        leftEdgeCenterInset:    exampleRectangle.leftEdgeCenterInset
-        leftEdgeBottomInset:    parentToolInsets.leftEdgeBottomInset
-        rightEdgeTopInset:      parentToolInsets.rightEdgeTopInset
-        rightEdgeCenterInset:   parentToolInsets.rightEdgeCenterInset
-        rightEdgeBottomInset:   parent.width - compassBackground.x
-        topEdgeLeftInset:       parentToolInsets.topEdgeLeftInset
-        topEdgeCenterInset:     compassArrowIndicator.y + compassArrowIndicator.height
-        topEdgeRightInset:      parentToolInsets.topEdgeRightInset
-        bottomEdgeLeftInset:    parentToolInsets.bottomEdgeLeftInset
-        bottomEdgeCenterInset:  parentToolInsets.bottomEdgeCenterInset
-        bottomEdgeRightInset:   parent.height - attitudeIndicator.y
-    }
-
-    // This is an example of how you can use parent tool insets to position an element on the custom fly view layer
-    // - we use parent topEdgeLeftInset to position the widget below the toolstrip
-    // - we use parent bottomEdgeLeftInset to dodge the virtual joystick if enabled
-    // - we use the parent leftEdgeTopInset to size our element to the same width as the ToolStripAction
-    // - we export the width of this element as the leftEdgeCenterInset so that the map will recenter if the vehicle flys behind this element
+    // This is an example of how you can use the upstream occluders to position an element on the custom fly view layer
+    // - we position the element below the toolstrip and size it to the same width
+    // - we keep the element above the PiP view and virtual joystick if they are shown
+    // - we add the element to customOccluders so that the map will recenter if the vehicle flies behind this element
     Rectangle {
         id: exampleRectangle
-        visible: false // to see this example, set this to true. To view insets, enable the insets viewer FlyView.qml
+        visible: false // to see this example, set this to true. To view occluders, enable the occluder viewer in FlyView.qml
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        anchors.topMargin: parentToolInsets.topEdgeLeftInset + _toolsMargin
-        anchors.bottomMargin: parentToolInsets.bottomEdgeLeftInset + _toolsMargin
+        anchors.topMargin: occluders.toolStrip.y + occluders.toolStrip.height + _toolsMargin
+        anchors.bottomMargin: parent.height - Math.min(occluders.pipView.y, occluders.virtualJoystickLeft.y) + _toolsMargin
         anchors.leftMargin: _toolsMargin
-        width: parentToolInsets.leftEdgeTopInset - _toolsMargin
+        width: occluders.toolStrip.width - _toolsMargin
         color: 'red'
-
-        property real leftEdgeCenterInset: visible ? x + width : 0
     }
 
     //-------------------------------------------------------------------------
@@ -122,13 +109,13 @@ Item {
         id:                         headingIndicator
         height:                     ScreenTools.defaultFontPixelHeight
         width:                      ScreenTools.defaultFontPixelWidth * 4
-        color:                      qgcPal.windowShadeDark
+        color:                      qgcPal.windowPanel
         anchors.top:                compassBar.top
         anchors.topMargin:          -headingIndicator.height / 2
         anchors.horizontalCenter:   parent.horizontalCenter
         QGCLabel {
             text:                   _heading
-            color:                  qgcPal.text
+            color:                  qgcPal.textPrimary
             font.pointSize:         ScreenTools.smallFontPointSize
             anchors.centerIn:       parent
         }
@@ -163,7 +150,7 @@ Item {
             width:                  height
             height:                 parent.height - (northLabelBackground.height / 2) - (headingLabelBackground.height / 2)
             radius:                 height / 2
-            border.color:           qgcPal.text
+            border.color:           qgcPal.textPrimary
             border.width:           1
             color:                  Qt.rgba(0,0,0,0)
         }
@@ -176,13 +163,13 @@ Item {
             width:                      northLabel.contentWidth * 1.5
             height:                     northLabel.contentHeight * 1.5
             radius:                     ScreenTools.defaultFontPixelWidth  * 0.25
-            color:                      qgcPal.windowShade
+            color:                      qgcPal.windowCard
 
             QGCLabel {
                 id:                 northLabel
                 anchors.centerIn:   parent
                 text:               "N"
-                color:              qgcPal.text
+                color:              qgcPal.textPrimary
                 font.pointSize:     ScreenTools.smallFontPointSize
             }
         }
@@ -211,13 +198,13 @@ Item {
             width:                      headingLabel.contentWidth * 1.5
             height:                     headingLabel.contentHeight * 1.5
             radius:                     ScreenTools.defaultFontPixelWidth  * 0.25
-            color:                      qgcPal.windowShade
+            color:                      qgcPal.windowCard
 
             QGCLabel {
                 id:                 headingLabel
                 anchors.centerIn:   parent
                 text:               _heading
-                color:              qgcPal.text
+                color:              qgcPal.textPrimary
                 font.pointSize:     ScreenTools.smallFontPointSize
             }
         }
@@ -225,14 +212,14 @@ Item {
 
     Rectangle {
         id:                     attitudeIndicator
-        anchors.bottomMargin:   _toolsMargin + parentToolInsets.bottomEdgeRightInset
+        anchors.bottomMargin:   _toolsMargin + parent.height - Math.min(occluders.bottomRight.y, occluders.virtualJoystickRight.y)
         anchors.rightMargin:    _toolsMargin
         anchors.bottom:         parent.bottom
         anchors.right:          parent.right
         height:                 ScreenTools.defaultFontPixelHeight * 6
         width:                  height
         radius:                 height * 0.5
-        color:                  qgcPal.windowShade
+        color:                  qgcPal.windowCard
 
         CustomAttitudeWidget {
             size:               parent.height * 0.95

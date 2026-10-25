@@ -1,28 +1,32 @@
 #include "FirmwarePlugin.h"
+
+#include <QtCore/QDir>
+#include <QtCore/QFile>
+#include <QtCore/QRegularExpression>
+#include <QtCore/QSettings>
+#include <QtCore/QStandardPaths>
+#include <QtCore/QThread>
+
+#include "AppMessages.h"
 #include "AutoPilotPlugin.h"
 #include "Autotune.h"
 #include "GenericAutoPilotPlugin.h"
 #include "MAVLinkLib.h"
 #include "MAVLinkProtocol.h"
 #include "ParameterMetaData.h"
-#include "AppMessages.h"
 #include "QGCApplication.h"
 #include "QGCCameraManager.h"
+#include "QGCCompression.h"
 #include "QGCFileDownload.h"
+#include "QGCFileHelper.h"
 #include "QGCLoggingCategory.h"
+#include "QGCMAVLink.h"
+#include "QGCVersionCheck.h"
 #include "Vehicle.h"
-#include "VehicleLinkManager.h"
 #include "VehicleCameraControl.h"
 #include "VehicleComponent.h"
-
-#include "QGCCompression.h"
-#include "QGCFileHelper.h"
-
-#include <QtCore/QDir>
-#include <QtCore/QFile>
-#include <QtCore/QRegularExpression>
-#include <QtCore/QStandardPaths>
-#include <QtCore/QThread>
+#include "VehicleLinkManager.h"
+#include "VehicleReadiness.h"
 
 QGC_LOGGING_CATEGORY(FirmwarePluginLog, "FirmwarePlugin.FirmwarePlugin")
 
@@ -239,8 +243,6 @@ const QVariantList &FirmwarePlugin::toolIndicators(const Vehicle*)
     //-- Default list of indicators for all vehicles.
     if (_toolIndicatorList.isEmpty()) {
         _toolIndicatorList = QVariantList({
-            QVariant::fromValue(QUrl::fromUserInput("qrc:/qml/QGroundControl/Toolbar/VehicleGPSIndicator.qml")),
-            QVariant::fromValue(QUrl::fromUserInput("qrc:/qml/QGroundControl/Toolbar/GPSResilienceIndicator.qml")),
             QVariant::fromValue(QUrl::fromUserInput("qrc:/qml/QGroundControl/Toolbar/TelemetryRSSIIndicator.qml")),
             QVariant::fromValue(QUrl::fromUserInput("qrc:/qml/QGroundControl/Toolbar/RCRSSIIndicator.qml")),
             QVariant::fromValue(QUrl::fromUserInput("qrc:/qml/QGroundControl/Toolbar/BatteryIndicator.qml")),
@@ -366,7 +368,8 @@ void FirmwarePlugin::checkIfIsLatestStable(Vehicle *vehicle) const
     }
 }
 
-void FirmwarePlugin::_versionFileDownloadFinished(const QString &remoteFile, const QString &localFile, const Vehicle *vehicle) const
+void FirmwarePlugin::_versionFileDownloadFinished(const QString& remoteFile, const QString& localFile,
+                                                  Vehicle* vehicle) const
 {
     qCDebug(FirmwarePluginLog) << "Download complete" << remoteFile << localFile;
     // Now read the version file and pull out the version string
@@ -399,8 +402,32 @@ void FirmwarePlugin::_versionFileDownloadFinished(const QString &remoteFile, con
         const QString currentVersionNumber = QStringLiteral("%1.%2.%3").arg(vehicle->firmwareMajorVersion())
                                                                        .arg(vehicle->firmwareMinorVersion())
                                                                        .arg(vehicle->firmwarePatchVersion());
+        vehicle->setNewStableFirmwareVersion(version);
+
+        QSettings settings;
+        settings.beginGroup(QStringLiteral("LastNotifiedStableFirmware"));
+        const QString settingsKey = stableFirmwareSettingsKey(vehicle);
+        if (!isStableFirmwareVersionUnseen(version, settings.value(settingsKey).toString())) {
+            return;
+        }
+        settings.setValue(settingsKey, version);
+
         QGC::showAppMessage(tr("Vehicle is not running latest stable firmware! Running %1, latest stable is %2.").arg(currentVersionNumber, version));
     }
+}
+
+QString FirmwarePlugin::stableFirmwareSettingsKey(const Vehicle* vehicle)
+{
+    return QStringLiteral("%1_%2").arg(QString::fromLatin1(QGCMAVLink::firmwareClassToCanonicalString(
+                                           QGCMAVLink::firmwareClass(vehicle->firmwareType()))),
+                                       QString::fromLatin1(QGCMAVLink::vehicleClassToCanonicalString(
+                                           QGCMAVLink::vehicleClass(vehicle->vehicleType()))));
+}
+
+bool FirmwarePlugin::isStableFirmwareVersionUnseen(const QString& latestVersion, const QString& seenVersion)
+{
+    // Firmware version strings lack the "v" prefix QGCVersionCheck parses
+    return QGCVersionCheck::shouldNotify(QStringLiteral("v") + latestVersion, QStringLiteral("v") + seenVersion);
 }
 
 int FirmwarePlugin::versionCompare(const Vehicle *vehicle, int major, int minor, int patch) const
@@ -463,13 +490,9 @@ void FirmwarePlugin::sendGCSMotionReport(Vehicle *vehicle, const FollowMe::GCSMo
     follow_target.vel[1] = static_cast<float>(motionReport.vyMetersPerSec);
 
     mavlink_message_t message{};
-    mavlink_msg_follow_target_encode_chan(
-        static_cast<uint8_t>(MAVLinkProtocol::instance()->getSystemId()),
-        static_cast<uint8_t>(MAVLinkProtocol::getComponentId()),
-        sharedLink->mavlinkChannel(),
-        &message,
-        &follow_target
-    );
+    mavlink_msg_follow_target_encode_chan(MAVLinkProtocol::instance()->getSystemId(),
+                                          static_cast<uint8_t>(MAVLinkProtocol::getComponentId()),
+                                          sharedLink->mavlinkChannel(), &message, &follow_target);
 
     (void) vehicle->sendMessageOnLinkThreadSafe(sharedLink.get(), message);
 }
@@ -477,6 +500,11 @@ void FirmwarePlugin::sendGCSMotionReport(Vehicle *vehicle, const FollowMe::GCSMo
 Autotune *FirmwarePlugin::createAutotune(Vehicle *vehicle) const
 {
     return new Autotune(vehicle);
+}
+
+VehicleReadiness* FirmwarePlugin::createVehicleReadiness(Vehicle* vehicle) const
+{
+    return new VehicleReadiness(vehicle);
 }
 
 void FirmwarePlugin::_updateFlightModeList(FlightModeList &flightModeList)
@@ -547,6 +575,12 @@ QString FirmwarePlugin::_cachedParameterMetaDataFile(const Vehicle *vehicle) con
     }
 
     const QString internalFile = _internalParameterMetaDataFile(vehicle);
+    // Tests always use the bundled file; resolving its version parses the whole file.
+    if (QGC::runningUnitTests()) {
+        qCDebug(FirmwarePluginLog) << "Using internal parameter metadata:" << internalFile;
+        return internalFile;
+    }
+
     QVersionNumber internalVersion = ParameterMetaData::versionFromFileName(internalFile);
     if (internalVersion.isNull()) {
         internalVersion = ParameterMetaData::versionFromMetaDataFile(internalFile);
@@ -554,7 +588,7 @@ QString FirmwarePlugin::_cachedParameterMetaDataFile(const Vehicle *vehicle) con
 
     // Without a known internal version we can't safely compare against
     // cache — use the bundled file to avoid stale overrides.
-    if (internalVersion.isNull() || QGC::runningUnitTests()) {
+    if (internalVersion.isNull()) {
         qCDebug(FirmwarePluginLog) << "Using internal parameter metadata:" << internalFile;
         return internalFile;
     }

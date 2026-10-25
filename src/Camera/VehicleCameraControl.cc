@@ -146,8 +146,10 @@ VehicleCameraControl::VehicleCameraControl(const mavlink_camera_information_t *i
     // FOV current. The delay also coalesces bursts of zoom/focus commands into a
     // single request.
     constexpr int kCameraSettingsRefreshDelayMsecs = 1000;
+    constexpr int kTestCameraSettingsRefreshDelayMsecs = 50;
     _cameraSettingsRefreshTimer.setSingleShot(true);
-    _cameraSettingsRefreshTimer.setInterval(kCameraSettingsRefreshDelayMsecs);
+    _cameraSettingsRefreshTimer.setInterval(QGC::runningUnitTests() ? kTestCameraSettingsRefreshDelayMsecs
+                                                                    : kCameraSettingsRefreshDelayMsecs);
     connect(&_cameraSettingsRefreshTimer, &QTimer::timeout, this, [this]() {
         _cameraSettingsRetries = 0; // Start a fresh request/retry cycle
         _requestCameraSettings();
@@ -758,7 +760,7 @@ void VehicleCameraControl::factChanged(Fact* pFact)
     _updateRanges(pFact);
 }
 
-void VehicleCameraControl::_mavCommandResult(int vehicleId, int component, int command, int result, int failureCode)
+void VehicleCameraControl::_mavCommandResult(quint32 vehicleId, int component, int command, int result, int failureCode)
 {
     Q_UNUSED(failureCode);
 
@@ -1267,12 +1269,8 @@ void VehicleCameraControl::_requestAllParameters()
     if (sharedLink) {
         mavlink_message_t msg;
         mavlink_msg_param_ext_request_list_pack_chan(
-                    static_cast<uint8_t>(MAVLinkProtocol::instance()->getSystemId()),
-                    static_cast<uint8_t>(MAVLinkProtocol::getComponentId()),
-                    sharedLink->mavlinkChannel(),
-                    &msg,
-                    static_cast<uint8_t>(_vehicle->id()),
-                    static_cast<uint8_t>(compID()));
+            MAVLinkProtocol::instance()->getSystemId(), static_cast<uint8_t>(MAVLinkProtocol::getComponentId()),
+            sharedLink->mavlinkChannel(), &msg, _vehicle->id(), static_cast<uint8_t>(compID()));
         _vehicle->sendMessageOnLinkThreadSafe(sharedLink.get(), msg);
     }
     qCDebug(VehicleCameraControlVerboseLog) << "Request all parameters";

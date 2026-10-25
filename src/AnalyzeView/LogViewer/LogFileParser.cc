@@ -470,21 +470,28 @@ QVariantList LogFileParser::gpsPath() const
         double      statusMinValue;
     };
 
+    // clang-format off
     static const CandidatePair candidates[] = {
         // PX4 ULog — vehicle_global_position (EKF-fused position, double degrees)
         { "vehicle_global_position.lat",           "vehicle_global_position.lon",           "vehicle_global_position.alt",            nullptr,       0 },
         { "vehicle_global_position.latitude_deg",  "vehicle_global_position.longitude_deg", "vehicle_global_position.alt",            nullptr,       0 },
-        // PX4 ULog — vehicle_gps_position / sensor_gps (newer firmware uses latitude_deg)
+        // PX4 ULog — vehicle_gnss (receiver sample nested under 'receiver') / sensor_gnss
+        { "vehicle_gnss.receiver.latitude",        "vehicle_gnss.receiver.longitude",       "vehicle_gnss.receiver.altitude_msl",     nullptr,       0 },
+        { "sensor_gnss.latitude",                  "sensor_gnss.longitude",                 "sensor_gnss.altitude_msl",               nullptr,       0 },
+        // PX4 ULog — vehicle_gps_position / sensor_gps, renamed to vehicle_gnss / sensor_gnss
         { "vehicle_gps_position.latitude_deg",     "vehicle_gps_position.longitude_deg",    "vehicle_gps_position.altitude_msl_m",    nullptr,       0 },
         { "vehicle_gps_position[0].latitude_deg",  "vehicle_gps_position[0].longitude_deg", "vehicle_gps_position[0].altitude_msl_m", nullptr,       0 },
         { "sensor_gps.latitude_deg",               "sensor_gps.longitude_deg",              "sensor_gps.altitude_msl_m",              nullptr,       0 },
         { "sensor_gps[0].latitude_deg",            "sensor_gps[0].longitude_deg",           "sensor_gps[0].altitude_msl_m",           nullptr,       0 },
         // APM DataFlash — GPS message (Status >= 3 = 3D fix; 'L' type already divided by 1e7)
+        { "GPS[0].Lat",                            "GPS[0].Lng",                            "GPS[0].Alt",                             "GPS[0].Status", 3 },
+        { "GPS[1].Lat",                            "GPS[1].Lng",                            "GPS[1].Alt",                             "GPS[1].Status", 3 },
         { "GPS.Lat",                               "GPS.Lng",                               "GPS.Alt",                                "GPS.Status",  3 },
         { "GPS2.Lat",                              "GPS2.Lng",                              "GPS2.Alt",                               "GPS2.Status", 3 },
         // APM DataFlash — POS message (EKF-fused; no status field, 'L' type already divided by 1e7)
         { "POS.Lat",                               "POS.Lng",                               "POS.Alt",                                nullptr,       0 },
     };
+    // clang-format on
 
     for (const auto &c : candidates) {
         const auto latIt = _fieldSamples.constFind(QLatin1String(c.latField));
