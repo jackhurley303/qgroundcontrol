@@ -18,6 +18,7 @@ private slots:
     void _flags_test();
     void _contributesQml_test();
     void _relativeUrlsResolvedPackageRelative_test();
+    void _relativeUrlsResolveWithDriveLetterPackageDir_test();
     void _qrcAndHostResourceUrlsPassThrough_test();
     void _relativeUrlWithoutPackageContextPassesThrough_test();
     void _absoluteSchemeUrlsPassThroughEvenInPackageContext_test();

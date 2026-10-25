@@ -4,6 +4,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
+#include <QtCore/QUrl>
 
 #include "PluginManifest.h"
 #include "QGCPlugin.h"
@@ -252,7 +253,8 @@ void PluginLoaderGateTest::_inspectQmlPackageActivatesWithoutBinary_test()
     QCOMPARE(info.manifest.tier, PluginManifest::Tier::Qml);
     QCOMPARE(info.packageDir, packageDir);
     QCOMPARE(info.contributions.toolMenuItem[QStringLiteral("source")].toString(),
-             QStringLiteral("file://%1/qml/View.qml").arg(packageDir));
+             QUrl::fromLocalFile(packageDir + QStringLiteral("/qml/View.qml")).toString());
+    QVERIFY(QUrl(info.contributions.toolMenuItem[QStringLiteral("source")].toString()).isLocalFile());
 
     QGCPluginLoader::activate(info);
     QCOMPARE(info.state, PluginState::Active);

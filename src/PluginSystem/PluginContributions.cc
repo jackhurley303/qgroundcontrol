@@ -8,12 +8,15 @@
  ****************************************************************************/
 
 #include "PluginContributions.h"
-#include "PluginJsonUtils.h"
-#include "PluginManifest.h"
 
+#include <QtCore/QDir>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
 #include <QtCore/QPointF>
+#include <QtCore/QUrl>
+
+#include "PluginJsonUtils.h"
+#include "PluginManifest.h"
 
 using PluginJson::requireStringField;
 
@@ -100,7 +103,7 @@ QString resolveUrl(const QString &url, const QString &packageDir)
         || url.contains(QStringLiteral("://")) || packageDir.isEmpty()) {
         return url;
     }
-    return QStringLiteral("file://%1/%2").arg(packageDir, url);
+    return QUrl::fromLocalFile(QDir::fromNativeSeparators(packageDir) + QLatin1Char('/') + url).toString();
 }
 
 bool parseToolMenu(const QJsonObject &contributes, const PluginManifest &manifest, const QString &packageDir, QVariantMap *itemOut, QString *errorOut)

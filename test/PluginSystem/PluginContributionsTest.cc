@@ -297,6 +297,24 @@ void PluginContributionsTest::_relativeUrlsResolvedPackageRelative_test()
              QStringLiteral("file:///Users/test/plugins/org.test.contrib/qml/ContribDock.qml"));
 }
 
+void PluginContributionsTest::_relativeUrlsResolveWithDriveLetterPackageDir_test()
+{
+    // A drive-letter path must become file:///C:/..., not file://C:/... (host "c").
+    QJsonObject toolMenu;
+    toolMenu[QStringLiteral("title")] = QStringLiteral("Contrib");
+    toolMenu[QStringLiteral("source")] = QStringLiteral("qml/ContribView.qml");
+    QJsonObject contributes;
+    contributes[QStringLiteral("toolMenu")] = toolMenu;
+
+    QString error;
+    const PluginContributions contributions = PluginContributions::fromManifest(
+        manifestWithContributes(contributes), QStringLiteral("C:/Users/test/plugins/org.test.contrib"), &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+
+    QCOMPARE(contributions.toolMenuItem[QStringLiteral("source")].toString(),
+             QStringLiteral("file:///C:/Users/test/plugins/org.test.contrib/qml/ContribView.qml"));
+}
+
 void PluginContributionsTest::_qrcAndHostResourceUrlsPassThrough_test()
 {
     QJsonObject toolMenu;

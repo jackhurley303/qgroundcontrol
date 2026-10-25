@@ -20,7 +20,7 @@ class PluginManifest;
 ///
 /// URL rule: "qrc:/..." URLs and resource paths ("/...") refer to compiled-in
 /// resources and pass through verbatim. Any other (relative) URL is package-relative,
-/// resolved against packageDir into a "file://<packageDir>/<url>" URL; with no package
+/// resolved against packageDir into a file: URL (QUrl::fromLocalFile); with no package
 /// context (packageDir empty — the dev-loop bare-dylib path), a relative URL passes
 /// through unresolved.
 ///
