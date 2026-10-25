@@ -35,7 +35,7 @@ class PluginManifest;
 ///                            "dock": "qrc:/qml/ExampleDockItem.qml",
 ///                            "defaultWidth": 35,                        // font-width units, 0 = framework default
 ///                            "defaultHeight": 18,                       // font-height units, 0 = framework default
-///                            "defaultPosition": [0.0, 0.0] },           // [x, y] fractions, [-1, -1] = framework default
+///                            "defaultPosition": [0.0, 0.0] },           // x/y fractions, [-1, -1] = framework default
 ///         "planViewPanel": { ... same keys as flyViewPanel ... },
 ///         "replay": false,           // plugin provides a QGCReplayExtension
 ///         "telemetryLogging": false  // plugin claims exclusive tlog-logging control
