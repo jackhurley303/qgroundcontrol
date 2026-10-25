@@ -337,6 +337,11 @@ PLUGIN_SDK = PRSpec(
         # consuming the seam. Test data that mirrors a production symbol trips greps
         # written against production.
         "tools/tests/test_check_pr_routing.py",
+        # Catalog QML owned by the stacked PLUGIN_CATALOG spec. Their doc comments name
+        # QGCPluginManager.knownPlugins; neither file is on this branch, and neither reads the
+        # seam in code.
+        "src/AppSettings/PluginCatalogInstalledExtras.qml",
+        "src/AppSettings/PluginCatalogUpdateButton.qml",
     ),
     # Six commits instead of one 165-file blob. The order is a reading order for a reviewer
     # who has never seen this work: the ABI boundary first, then the system behind it, then
