@@ -43,8 +43,9 @@ struct PluginCatalogPackage
 /// One published version of a catalog plugin.
 struct PluginCatalogVersion
 {
-    /// The version's compatibility facts in manifest form (the index's `author` fills `vendor`),
-    /// so the catalog applies the same check an installed plugin passes.
+    /// The version's compatibility facts in manifest form (the index's `author` fills `vendor`, and
+    /// an sdk version's optional `qtVersion` fills `qtVersion`), so the catalog applies the same
+    /// check an installed plugin passes.
     PluginManifest manifest;
     QString released;
     QString notes;

@@ -253,6 +253,7 @@ PluginLoadInfo QGCPluginLoader::inspect(const QString& filePath)
         info.errorString = error;
         return info;
     }
+    info.manifest.readQtBuildFacts(envelope);
 
     // Tier qml has no binary at all (D1) — a compiled file declaring it is a tier
     // mismatch, not a plugin the loader should silently half-load (activate() would
@@ -339,6 +340,21 @@ PluginLoadInfo QGCPluginLoader::inspectPackage(const QString& packageDir)
             return info;
         }
         info.filePath = binaries.first();
+
+        // qgcplugin.json says nothing about how the binary was built; the binary's own Qt metadata
+        // header does, and QPluginLoader::metaData() reads it without loading the library.
+        QPluginLoader binaryLoader(info.filePath);
+        const QJsonObject envelope = binaryLoader.metaData();
+        if (envelope.isEmpty()) {
+            const QString loaderError = binaryLoader.errorString();
+            info.state = PluginState::Failed;
+            info.errorString = loaderError.isEmpty() ? QStringLiteral("no plugin metadata found") : loaderError;
+            return info;
+        }
+        info.manifest.readQtBuildFacts(envelope);
+        if (!validateHostCompatibility(info)) {
+            return info;
+        }
     }
 
     if (!deriveContributions(info)) {
@@ -419,6 +435,12 @@ HostInfo QGCPluginLoader::hostInfo()
     host.apiVersion = QGCPluginApiVersion;
     host.buildId = QStringLiteral(QGC_GIT_HASH);
     host.qmlApiVersion = QGCPluginQmlApiLevel;
+    host.qtVersion = QVersionNumber::fromString(QString::fromLatin1(qVersion()));
+#if defined(QT_NO_DEBUG)
+    host.debugBuild = false;
+#else
+    host.debugBuild = true;
+#endif
     return host;
 }
 

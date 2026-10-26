@@ -147,6 +147,17 @@ bool parseVersion(const QJsonObject& json, const PluginCatalogEntry& entry, Plug
         return false;
     }
 
+    // The build Qt describes the package's binary, not its qgcplugin.json, so the manifest parser
+    // never reads it. Only an sdk binary has one.
+    const QJsonValue qtVersionValue = json.value(QStringLiteral("qtVersion"));
+    if (tier == PluginManifest::Tier::Sdk && !qtVersionValue.isUndefined()) {
+        versionOut->manifest.qtVersion = parseStrictVersion(qtVersionValue.toString());
+        if (versionOut->manifest.qtVersion.segmentCount() < 2) {
+            *errorOut = QStringLiteral("'qtVersion' must be a version string such as \"6.12\"");
+            return false;
+        }
+    }
+
     const QJsonObject hostVersion = json.value(QStringLiteral("hostVersion")).toObject();
     for (const char* key : {"min", "max"}) {
         const QString text = hostVersion.value(QString::fromLatin1(key)).toString();

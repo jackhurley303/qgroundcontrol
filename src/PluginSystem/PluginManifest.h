@@ -9,6 +9,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include <QtCore/QJsonObject>
 #include <QtCore/QString>
 #include <QtCore/QVersionNumber>
@@ -20,6 +22,8 @@ struct HostInfo
     int apiVersion = 0;
     QString buildId;
     int qmlApiVersion = 0; ///< Current QGCPluginQmlApiLevel (see below)
+    QVersionNumber qtVersion;  ///< The Qt this host runs, from qVersion(); null skips the plugin Qt check
+    bool debugBuild = false;   ///< Built without QT_NO_DEBUG
 };
 
 /// The QML plugin API level: the `QGroundControl` QML singleton tree *is* the API for
@@ -53,6 +57,8 @@ public:
     QVersionNumber hostVersionMax; ///< Null/empty QVersionNumber means unbounded.
     QString hostBuildId;
     QJsonObject contributes;
+    QVersionNumber qtVersion;        ///< Tier sdk/internal: the Qt the binary was built with; null = unchecked.
+    std::optional<bool> debugBuild;  ///< Tier sdk/internal: the binary is a Debug build; unset = unchecked.
 
     /// Parses a manifest from its JSON object form. On failure returns a default-constructed
     /// PluginManifest and, if errorOut is non-null, a human-readable reason.
@@ -67,6 +73,15 @@ public:
     /// Returns true if the plugin may be activated; otherwise, if reasonOut is non-null,
     /// a human-readable reason is written and false is returned.
     bool validateForHost(const HostInfo &host, QString *reasonOut = nullptr) const;
+
+    /// Sets qtVersion and debugBuild from a QPluginLoader::metaData() envelope's "version" and
+    /// "debug" keys, which Qt reads from the binary's metadata header without loading it.
+    /// A missing key leaves its field unset. Does nothing for tier qml, which has no binary.
+    void readQtBuildFacts(const QJsonObject& envelope);
+
+    /// Whether a plugin's Debug flag may differ from the host's. A Windows Debug plugin loads the
+    /// Debug Qt DLLs beside the host's Release ones (or the reverse), so only Windows refuses a mismatch.
+    static bool debugBuildCompatible(bool hostDebug, bool pluginDebug, bool hostIsWindows);
 
     static QString tierToString(Tier tier);
     static bool tierFromString(const QString &str, Tier *tierOut);

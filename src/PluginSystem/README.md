@@ -25,7 +25,10 @@ A pure value type parsed from a plugin's `qgcplugin.json`: `id` (reverse-DNS ide
 checked against the host's `QGCPluginQmlApiLevel` when declared), `hostVersionMin`/
 `hostVersionMax` (half-open range, empty max = unbounded), `hostBuildId` (checked only
 for `Internal` tier), and `contributes` (opaque here; parsed by `PluginContributions`,
-see below).
+see below). Two fields never come from `qgcplugin.json`: `qtVersion` and `debugBuild`
+(tiers `Sdk`/`Internal`), which `readQtBuildFacts()` sets from the binary's Qt metadata
+header. `validateForHost()` refuses a different Qt major or a newer Qt minor, and on
+Windows a Debug/Release mismatch (`debugBuildCompatible()`). An unset field is unchecked.
 `PluginManifest::fromJson()`/`fromMetaData()` and `validateForHost()` are pure functions:
 no plugin code runs to produce or check a manifest.
 
@@ -48,6 +51,9 @@ A static utility, not a QObject — it holds no state between calls:
   from this sidecar file, never a binary's own embedded metadata. Tier `qml` requires no
   binary; other tiers resolve one binary under `bin/<platformKey>/` (`bin/macos-universal/` on macOS,
   which also accepts `bin/macos-*/`; `bin/<os>-<arch>/` elsewhere, exact key only) or fail legibly.
+  That binary's Qt metadata header (read with `QPluginLoader::metaData()`, not loaded) is
+  the one exception to the sidecar rule: it supplies `qtVersion` and `debugBuild`, so a
+  plugin built with a newer Qt is `Incompatible` before the consent prompt.
 - `inspectDirectories(dirs)` runs `inspect()` over every bare plugin file, and
   `inspectPackage()` over every child directory containing `qgcplugin.json`, found under
   the given directories (sorted by filename for deterministic duplicate-id resolution).
@@ -58,7 +64,8 @@ A static utility, not a QObject — it holds no state between calls:
 - `defaultPluginPaths()` returns the platform's search directories.
 - `hostInfo()` returns the running host's `HostInfo` (version from `QGC_APP_VERSION_STR`,
   `apiVersion` from `QGCPluginApiVersion`, `qmlApiVersion` from `QGCPluginQmlApiLevel`,
-  build id from `QGC_GIT_HASH`), used to validate manifests.
+  build id from `QGC_GIT_HASH`, `qtVersion` from `qVersion()`, `debugBuild` from
+  `QT_NO_DEBUG`), used to validate manifests.
 
 Policy (which plugins are enabled, which get activated, record-keeping) is **not** the
 loader's job — that's `QGCPluginManager`.

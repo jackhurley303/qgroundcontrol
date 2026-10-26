@@ -185,15 +185,15 @@ QString QGCPluginManagerTest::_writePackage(const QString& parentDir, const QStr
     manifestFile.close();
 
     if (tier != QStringLiteral("qml")) {
-        // inspectPackage() requires exactly one binary under bin/; its content is never
-        // read at inspection, so a placeholder is enough for gate tests.
+        // inspectPackage() requires exactly one binary under bin/ and reads its Qt metadata
+        // header (without loading it), so the binary must be a real Qt plugin.
         const QString binDir = packageDir.filePath(QStringLiteral("bin/macos-universal"));
         if (!QDir().mkpath(binDir)) {
             return QString();
         }
-        QFile binary(binDir + QStringLiteral("/libfixture.dylib"));
-        if (!binary.open(QIODevice::WriteOnly | QIODevice::Truncate)
-            || binary.write(QByteArrayLiteral("not a real dylib")) < 0) {
+        const QString binaryPath = binDir + QStringLiteral("/libfixture.dylib");
+        QFile::remove(binaryPath);
+        if (!QFile::copy(testPluginFixturePath(), binaryPath)) {
             return QString();
         }
     }

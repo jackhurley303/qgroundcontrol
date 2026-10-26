@@ -204,6 +204,35 @@ bool PluginManifest::validateForHost(const HostInfo &host, QString *reasonOut) c
         return false;
     }
 
+    // Qt keeps binary compatibility across patch releases and within a major for older minors, so
+    // only a different major or a newer minor would fail at load ("uses incompatible Qt library").
+    if (tier != Tier::Qml && !qtVersion.isNull() && !host.qtVersion.isNull() &&
+        (qtVersion.majorVersion() != host.qtVersion.majorVersion() ||
+         qtVersion.minorVersion() > host.qtVersion.minorVersion())) {
+        if (reasonOut) {
+            *reasonOut = QStringLiteral("built with Qt %1.%2; this QGroundControl runs Qt %3.%4")
+                             .arg(qtVersion.majorVersion())
+                             .arg(qtVersion.minorVersion())
+                             .arg(host.qtVersion.majorVersion())
+                             .arg(host.qtVersion.minorVersion());
+        }
+        return false;
+    }
+
+#if defined(Q_OS_WIN)
+    constexpr bool hostIsWindows = true;
+#else
+    constexpr bool hostIsWindows = false;
+#endif
+    if (tier != Tier::Qml && debugBuild.has_value() &&
+        !debugBuildCompatible(host.debugBuild, *debugBuild, hostIsWindows)) {
+        if (reasonOut) {
+            *reasonOut = *debugBuild ? QStringLiteral("a Debug build cannot load in this Release QGroundControl")
+                                     : QStringLiteral("a Release build cannot load in this Debug QGroundControl");
+        }
+        return false;
+    }
+
     if (tier == Tier::Qml && qmlApiVersion != 0 && qmlApiVersion != host.qmlApiVersion) {
         if (reasonOut) {
             *reasonOut = QStringLiteral("qmlApiVersion %1 does not match host qmlApiVersion %2").arg(qmlApiVersion).arg(host.qmlApiVersion);
@@ -237,4 +266,28 @@ bool PluginManifest::validateForHost(const HostInfo &host, QString *reasonOut) c
     }
 
     return true;
+}
+
+void PluginManifest::readQtBuildFacts(const QJsonObject& envelope)
+{
+    if (tier == Tier::Qml) {
+        return;
+    }
+
+    // Qt packs the metadata header's major and minor as (major << 16) | (minor << 8); the patch byte is 0.
+    const QJsonValue versionValue = envelope.value(QStringLiteral("version"));
+    if (versionValue.isDouble()) {
+        const int packed = versionValue.toInt();
+        qtVersion = QVersionNumber((packed >> 16) & 0xff, (packed >> 8) & 0xff);
+    }
+
+    const QJsonValue debugValue = envelope.value(QStringLiteral("debug"));
+    if (debugValue.isBool()) {
+        debugBuild = debugValue.toBool();
+    }
+}
+
+bool PluginManifest::debugBuildCompatible(bool hostDebug, bool pluginDebug, bool hostIsWindows)
+{
+    return !hostIsWindows || hostDebug == pluginDebug;
 }

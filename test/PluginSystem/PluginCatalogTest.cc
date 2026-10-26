@@ -679,4 +679,58 @@ void PluginCatalogTest::_verifiedOnOtherPlatformDoesNotCount_test()
     QVERIFY(win->package.verified.has_value());
 }
 
+void PluginCatalogTest::_qtVersionAboveHostHidden_test()
+{
+    QJsonObject newerQt = sdkVersionJson(QStringLiteral("1.1.0"));
+    newerQt[QStringLiteral("qtVersion")] = QStringLiteral("6.13");
+    QJsonObject sameQt = sdkVersionJson(QStringLiteral("1.0.0"));
+    sameQt[QStringLiteral("qtVersion")] = QStringLiteral("6.12");
+
+    HostInfo host = hostWithVersion(QStringLiteral("5.1"));
+    host.qtVersion = QVersionNumber(6, 12, 0);
+
+    // The newer version needs a newer Qt, so the older one is offered
+    QString error;
+    const PluginCatalog catalog = PluginCatalog::fromJson(
+        indexJson(QJsonArray{pluginJson(QStringLiteral("org.example.one"), QJsonArray{newerQt, sameQt})}), &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QCOMPARE(catalog.plugins.at(0).versions.at(0).manifest.qtVersion, QVersionNumber(6, 13));
+    const std::optional<PluginCatalogOffer> offer = catalog.plugins.at(0).newestCompatible(host, MacKey);
+    QVERIFY(offer.has_value());
+    QCOMPARE(offer->version.manifest.version, QVersionNumber(1, 0, 0));
+
+    // Alone, the newer-Qt version is not offered at all
+    const PluginCatalog newerOnly = PluginCatalog::fromJson(singleVersionIndex(newerQt));
+    QVERIFY(!newerOnly.plugins.at(0).newestCompatible(host, MacKey).has_value());
+
+    // A version without qtVersion is offered, as before the field existed
+    const PluginCatalog withoutField = PluginCatalog::fromJson(singleVersionIndex(sdkVersionJson()));
+    QVERIFY(withoutField.plugins.at(0).versions.at(0).manifest.qtVersion.isNull());
+    QVERIFY(withoutField.plugins.at(0).newestCompatible(host, MacKey).has_value());
+}
+
+void PluginCatalogTest::_invalidQtVersionRefused_test()
+{
+    for (const QJsonValue& bad : {QJsonValue(QStringLiteral("6.12-beta")), QJsonValue(QStringLiteral("")),
+                                  QJsonValue(QStringLiteral("6")), QJsonValue(612)}) {
+        QJsonObject version = sdkVersionJson();
+        version[QStringLiteral("qtVersion")] = bad;
+        QString error;
+        const PluginCatalog catalog = PluginCatalog::fromJson(singleVersionIndex(version), &error);
+        QVERIFY(catalog.plugins.isEmpty());
+        QVERIFY2(error.contains(QStringLiteral("qtVersion")), qPrintable(error));
+    }
+}
+
+void PluginCatalogTest::_qtVersionIgnoredOnQmlTier_test()
+{
+    QJsonObject version = qmlVersionJson();
+    version[QStringLiteral("qtVersion")] = QStringLiteral("not a version");
+
+    QString error;
+    const PluginCatalog catalog = PluginCatalog::fromJson(singleVersionIndex(version), &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QVERIFY(catalog.plugins.at(0).versions.at(0).manifest.qtVersion.isNull());
+}
+
 UT_REGISTER_TEST(PluginCatalogTest, TestLabel::Unit)

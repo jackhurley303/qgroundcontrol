@@ -23,11 +23,14 @@ private slots:
     void _inspectPackageBadLayoutErrorsLegible_test();
     void _platformKeyMatchesBuild_test();
     void _inspectPackageRejectsForeignArchBinary_test();
+    void _inspectPackageRejectsNonPluginBinary_test();
     void _inspectPackageMacFallbackFindsSingleArchBinary_test();
     void _inspectQmlPackageRejectsBinary_test();
     void _inspectQmlPackageRejectsReplayDeclaration_test();
     void _inspectPackageRejectsInternalTier_test();
     void _inspectDirectoriesDiscoversPackagesAlongsideBareDylibs_test();
+    void _inspectRefusesNewerQtMinor_test();
+    void _inspectAcceptsOlderQtMinor_test();
 
 private:
     QString _writePackage(const QString& subdirName, const QJsonObject& manifestJson);

@@ -5,9 +5,12 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
+#include <QtCore/QPluginLoader>
 #include <QtCore/QUrl>
 
 #include "PluginManifest.h"
+#include "PluginRecordStore.h"
+#include "PluginTrustGate.h"
 #include "QGCPlugin.h"
 #include "QGCPluginInterface.h"
 #include "QGCPluginLoader.h"
@@ -40,6 +43,45 @@ QString platformBinSubdir(const QString& packageName)
 QString pluginFilePath(const QString& dir, const QString& baseName)
 {
     return dir + QLatin1Char('/') + baseName + QLatin1Char('.') + QFileInfo(testPluginFixturePath()).suffix();
+}
+
+// Copies the real fixture to dstPath with every Qt metadata header claiming Qt minor `minor`. The
+// header is 4 bytes: format version, Qt major, Qt minor, arch byte. ELF holds it in a note named
+// "qt-project!" (type 0x74510001), right after the name; other formats put it after the
+// "QTMETADATA !" magic, once per slice of a universal Mach-O. Returns the number of headers patched.
+int copyFixtureWithQtMinor(const QString& dstPath, int minor)
+{
+    QFile src(testPluginFixturePath());
+    if (!src.open(QIODevice::ReadOnly)) {
+        return 0;
+    }
+    QByteArray bytes = src.readAll();
+
+#if defined(Q_OF_ELF)
+    const QByteArray marker = QByteArrayLiteral("\x01\x00\x51\x74qt-project!\x00");
+#else
+    const QByteArray marker = QByteArrayLiteral("QTMETADATA !");
+#endif
+    const qsizetype minorOffset = marker.size() + 2;
+
+    int patched = 0;
+    for (qsizetype at = bytes.indexOf(marker); at >= 0 && at + minorOffset < bytes.size();
+         at = bytes.indexOf(marker, at + 1)) {
+        bytes[at + minorOffset] = static_cast<char>(minor);
+        ++patched;
+    }
+
+    QFile dst(dstPath);
+    if (!dst.open(QIODevice::WriteOnly | QIODevice::Truncate) || dst.write(bytes) != bytes.size()) {
+        return 0;
+    }
+    return patched;
+}
+
+// The Qt minor a binary's header claims, as QPluginLoader reports it without loading the binary.
+int metaDataQtMinor(const QString& path)
+{
+    return (QPluginLoader(path).metaData().value(QStringLiteral("version")).toInt() >> 8) & 0xff;
 }
 
 QJsonObject qmlPackageManifestJson(const QJsonObject& contributes = QJsonObject())
@@ -116,6 +158,11 @@ void PluginLoaderGateTest::_inspectRealPluginBeforeActivation_test()
     QCOMPARE(info.manifest.tier, PluginManifest::Tier::Sdk);
     QCOMPARE(info.manifest.apiVersion, QGCPluginApiVersion);
     QVERIFY(info.manifest.hostBuildId.isEmpty());
+
+    // The build Qt and Debug flag come from the binary's own metadata header
+    QCOMPARE(info.manifest.qtVersion, QVersionNumber(QT_VERSION_MAJOR, QT_VERSION_MINOR));
+    QVERIFY(info.manifest.debugBuild.has_value());
+    QCOMPARE(*info.manifest.debugBuild, QGCPluginLoader::hostInfo().debugBuild);
 
     // Contribution synthesis end-to-end: the manifest's declared toolMenu made
     // it through the real embedded metadata, not a hand-built QJsonObject.
@@ -370,6 +417,22 @@ void PluginLoaderGateTest::_inspectPackageRejectsForeignArchBinary_test()
 #endif
 }
 
+void PluginLoaderGateTest::_inspectPackageRejectsNonPluginBinary_test()
+{
+    const QString packageDir = _writePackage(QStringLiteral("org.test.notaplugin"), sdkPackageManifestJson());
+    QVERIFY(!packageDir.isEmpty());
+    const QString binDir = createSubDir(platformBinSubdir(QStringLiteral("org.test.notaplugin")));
+    QVERIFY(!binDir.isEmpty());
+    QFile binary(pluginFilePath(binDir, QStringLiteral("NotAPlugin")));
+    QVERIFY(binary.open(QIODevice::WriteOnly));
+    binary.write("this is not a Qt plugin");
+    binary.close();
+
+    const PluginLoadInfo info = QGCPluginLoader::inspectPackage(packageDir);
+    QCOMPARE(info.state, PluginState::Failed);
+    QVERIFY2(!info.errorString.isEmpty(), "a rejected binary must say why");
+}
+
 void PluginLoaderGateTest::_inspectPackageMacFallbackFindsSingleArchBinary_test()
 {
 #if !defined(Q_OS_MACOS)
@@ -450,6 +513,64 @@ void PluginLoaderGateTest::_inspectPackageRejectsInternalTier_test()
     const PluginLoadInfo info = QGCPluginLoader::inspectPackage(packageDir);
     QCOMPARE(info.state, PluginState::Failed);
     QVERIFY2(info.errorString.contains(QStringLiteral("internal")), qPrintable(info.errorString));
+}
+
+// The catalog plan's S4 case: a binary built with a newer Qt minor passed inspection and failed only
+// at activation, after the user had approved it. It must be refused at inspection instead.
+void PluginLoaderGateTest::_inspectRefusesNewerQtMinor_test()
+{
+    const QVersionNumber hostQt = QGCPluginLoader::hostInfo().qtVersion;
+    QVERIFY(!hostQt.isNull());
+    const int newerMinor = hostQt.minorVersion() + 1;
+    const QString expectedReason = QStringLiteral("built with Qt %1.%2; this QGroundControl runs Qt %1.%3")
+                                       .arg(hostQt.majorVersion())
+                                       .arg(newerMinor)
+                                       .arg(hostQt.minorVersion());
+
+    // Bare dev-loop file
+    const QString barePath = pluginFilePath(tempDirPath(), QStringLiteral("NewerQtBare"));
+    QVERIFY(copyFixtureWithQtMinor(barePath, newerMinor) > 0);
+    QCOMPARE(metaDataQtMinor(barePath), newerMinor);  // the patch reached the header Qt reads
+
+    const PluginLoadInfo bare = QGCPluginLoader::inspect(barePath);
+    QCOMPARE(bare.state, PluginState::Incompatible);
+    QCOMPARE(bare.errorString, expectedReason);
+
+    // Package: the sidecar qgcplugin.json is valid; only the binary's header is newer
+    const QString packageDir = _writePackage(QStringLiteral("org.test.newerqt"), sdkPackageManifestJson());
+    QVERIFY(!packageDir.isEmpty());
+    const QString binDir = createSubDir(platformBinSubdir(QStringLiteral("org.test.newerqt")));
+    QVERIFY(!binDir.isEmpty());
+    QVERIFY(copyFixtureWithQtMinor(pluginFilePath(binDir, QStringLiteral("NewerQt")), newerMinor) > 0);
+
+    PluginLoadInfo package = QGCPluginLoader::inspectPackage(packageDir);
+    QCOMPARE(package.state, PluginState::Incompatible);
+    QCOMPARE(package.errorString, expectedReason);
+
+    // The consent gate acts only on a Discovered record, so a refused one never awaits approval
+    PluginRecordStore store;
+    PluginTrustGate::applyTrustGate(package, store);
+    QCOMPARE(package.state, PluginState::Incompatible);
+}
+
+// Control for the patch itself: the same rewrite to an older minor still inspects clean.
+void PluginLoaderGateTest::_inspectAcceptsOlderQtMinor_test()
+{
+    const QVersionNumber hostQt = QGCPluginLoader::hostInfo().qtVersion;
+    if (hostQt.minorVersion() == 0) {
+        QSKIP("host runs Qt x.0; there is no older minor in this major");
+    }
+    const int olderMinor = hostQt.minorVersion() - 1;
+
+    const QString packageDir = _writePackage(QStringLiteral("org.test.olderqt"), sdkPackageManifestJson());
+    QVERIFY(!packageDir.isEmpty());
+    const QString binDir = createSubDir(platformBinSubdir(QStringLiteral("org.test.olderqt")));
+    QVERIFY(!binDir.isEmpty());
+    QVERIFY(copyFixtureWithQtMinor(pluginFilePath(binDir, QStringLiteral("OlderQt")), olderMinor) > 0);
+
+    const PluginLoadInfo info = QGCPluginLoader::inspectPackage(packageDir);
+    QCOMPARE(info.state, PluginState::Discovered);
+    QCOMPARE(info.manifest.qtVersion, QVersionNumber(hostQt.majorVersion(), olderMinor));
 }
 
 UT_REGISTER_TEST(PluginLoaderGateTest, TestLabel::Unit)
