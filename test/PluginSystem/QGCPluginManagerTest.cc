@@ -1050,8 +1050,9 @@ void QGCPluginManagerTest::_stagedUpdateActivatesWithoutPrompt_test()
     QVERIFY(stagedDigest != v1Digest);
 
     // Next start: the update is moved in before the scan and runs with no prompt
+    // Scan only the user dir: off macOS the app dir holds the build's plugins, two of them sharing an id
     QGCPluginManager restarted;
-    restarted._loadPlugins();
+    restarted._loadPluginsFrom({PluginInstaller::userPluginsDir()});
     const PluginLoadInfo* record = restarted._recordStore.find(id);
     QVERIFY(record);
     QCOMPARE(record->manifest.version, QVersionNumber(2, 0, 0));
@@ -1085,7 +1086,7 @@ void QGCPluginManagerTest::_stageForOtherIdRefused_test()
     QVERIFY(pluginSettings()->stagedPluginDigest(otherId).isEmpty());
 
     QGCPluginManager restarted;
-    restarted._loadPlugins();
+    restarted._loadPluginsFrom({PluginInstaller::userPluginsDir()});
     QVERIFY(restarted._recordStore.find(otherId));
     QCOMPARE(restarted._recordStore.find(otherId)->manifest.version, QVersionNumber(1, 0, 0));
     QCOMPARE(pluginSettings()->approvedPluginDigest(otherId), otherApproved);
@@ -1113,7 +1114,7 @@ void QGCPluginManagerTest::_editedStagedUpdatePrompts_test()
     pendingManifest.close();
 
     QGCPluginManager restarted;
-    restarted._loadPlugins();
+    restarted._loadPluginsFrom({PluginInstaller::userPluginsDir()});
     const PluginLoadInfo* record = restarted._recordStore.find(id);
     QVERIFY(record);
     QCOMPARE(record->manifest.version, QVersionNumber(2, 0, 0));
@@ -1140,7 +1141,7 @@ void QGCPluginManagerTest::_failedUpdateKeepsOldActive_test()
 
     QGCPluginManager restarted;
     expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("not applied"));
-    restarted._loadPlugins();
+    restarted._loadPluginsFrom({PluginInstaller::userPluginsDir()});
     verifyExpectedLogMessage();
 
     // The old version runs, approved as before, and its row says the update failed
@@ -1181,7 +1182,7 @@ void QGCPluginManagerTest::_removeDiscardsStagedUpdate_test()
 
     // The staged update does not bring the plugin back
     QGCPluginManager restarted;
-    restarted._loadPlugins();
+    restarted._loadPluginsFrom({PluginInstaller::userPluginsDir()});
     QVERIFY(!restarted._recordStore.find(id));
 }
 
@@ -1206,7 +1207,7 @@ void QGCPluginManagerTest::_manualInstallDiscardsStagedUpdate_test()
     QVERIFY(pluginSettings()->stagedPluginDigest(id).isEmpty());
 
     QGCPluginManager restarted;
-    restarted._loadPlugins();
+    restarted._loadPluginsFrom({PluginInstaller::userPluginsDir()});
     QVERIFY(restarted._recordStore.find(id));
     QCOMPARE(restarted._recordStore.find(id)->manifest.version, QVersionNumber(3, 0, 0));
     QCOMPARE(restarted._recordStore.find(id)->state, PluginState::Active);

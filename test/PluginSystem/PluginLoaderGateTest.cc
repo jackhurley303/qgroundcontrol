@@ -2,6 +2,7 @@
 
 #include <QtCore/QByteArray>
 #include <QtCore/QFile>
+#include <QtCore/QFileInfo>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QUrl>
@@ -27,6 +28,18 @@ QString testPluginFixturePath()
 QString testPluginFixtureV2Path()
 {
     return QStringLiteral(QGC_TEST_PLUGIN_FIXTURE_V2_PATH);
+}
+
+// The bin/ subdirectory inspectPackage() resolves a binary from on this platform.
+QString platformBinSubdir(const QString& packageName)
+{
+    return packageName + QStringLiteral("/bin/") + QGCPluginLoader::platformKey();
+}
+
+// <dir>/<baseName> with this platform's plugin suffix, taken from the real fixture.
+QString pluginFilePath(const QString& dir, const QString& baseName)
+{
+    return dir + QLatin1Char('/') + baseName + QLatin1Char('.') + QFileInfo(testPluginFixturePath()).suffix();
 }
 
 QJsonObject qmlPackageManifestJson(const QJsonObject& contributes = QJsonObject())
@@ -161,9 +174,9 @@ void PluginLoaderGateTest::_inPlaceUpgradeChangesBuildMarker_test()
 {
     const QString packageDir = _writePackage(QStringLiteral("org.test.upgrade"), sdkPackageManifestJson());
     QVERIFY(!packageDir.isEmpty());
-    const QString binDir = createSubDir(QStringLiteral("org.test.upgrade/bin/macos-universal"));
+    const QString binDir = createSubDir(platformBinSubdir(QStringLiteral("org.test.upgrade")));
     QVERIFY(!binDir.isEmpty());
-    const QString dylibPath = binDir + QStringLiteral("/UpgradePackage.dylib");
+    const QString dylibPath = pluginFilePath(binDir, QStringLiteral("UpgradePackage"));
 
     QVERIFY(QFile::copy(testPluginFixturePath(), dylibPath));
     PluginLoadInfo before = QGCPluginLoader::inspectPackage(packageDir);
@@ -266,16 +279,17 @@ void PluginLoaderGateTest::_inspectSdkPackageLoadsBinary_test()
     const QString packageDir = _writePackage(QStringLiteral("org.test.sdkpackage"), sdkPackageManifestJson());
     QVERIFY(!packageDir.isEmpty());
 
-    const QString binDir = createSubDir(QStringLiteral("org.test.sdkpackage/bin/macos-universal"));
+    const QString binDir = createSubDir(platformBinSubdir(QStringLiteral("org.test.sdkpackage")));
     QVERIFY(!binDir.isEmpty());
-    const QString dylibPath = binDir + QStringLiteral("/SdkPackage.dylib");
+    const QString dylibPath = pluginFilePath(binDir, QStringLiteral("SdkPackage"));
     QVERIFY(QFile::copy(testPluginFixturePath(), dylibPath));
 
     PluginLoadInfo info = QGCPluginLoader::inspectPackage(packageDir);
     QCOMPARE(info.state, PluginState::Discovered);
     QCOMPARE(info.manifest.tier, PluginManifest::Tier::Sdk);
     QCOMPARE(info.packageDir, packageDir);
-    QCOMPARE(info.filePath, dylibPath); // resolved via the documented bin/macos-universal key
+    // Resolved via the documented bin/<platformKey> subdirectory
+    QCOMPARE(info.filePath, dylibPath);
 
     QGCPluginLoader::activate(info);
     QCOMPARE(info.state, PluginState::Active);
@@ -285,28 +299,30 @@ void PluginLoaderGateTest::_inspectSdkPackageLoadsBinary_test()
 
 void PluginLoaderGateTest::_inspectPackageBadLayoutErrorsLegible_test()
 {
+    const QString binKey = QStringLiteral("bin/") + QGCPluginLoader::platformKey();
+
     // No bin/ directory at all
     const QString noBinDir = _writePackage(QStringLiteral("org.test.nobin"), sdkPackageManifestJson());
     QVERIFY(!noBinDir.isEmpty());
     const PluginLoadInfo noBinInfo = QGCPluginLoader::inspectPackage(noBinDir);
     QCOMPARE(noBinInfo.state, PluginState::Failed);
-    QVERIFY2(noBinInfo.errorString.contains(QStringLiteral("bin/macos")), qPrintable(noBinInfo.errorString));
+    QVERIFY2(noBinInfo.errorString.contains(binKey), qPrintable(noBinInfo.errorString));
 
     // bin/ present but empty
     const QString emptyBinDir = _writePackage(QStringLiteral("org.test.emptybin"), sdkPackageManifestJson());
     QVERIFY(!emptyBinDir.isEmpty());
-    QVERIFY(!createSubDir(QStringLiteral("org.test.emptybin/bin/macos-universal")).isEmpty());
+    QVERIFY(!createSubDir(platformBinSubdir(QStringLiteral("org.test.emptybin"))).isEmpty());
     const PluginLoadInfo emptyBinInfo = QGCPluginLoader::inspectPackage(emptyBinDir);
     QCOMPARE(emptyBinInfo.state, PluginState::Failed);
-    QVERIFY2(emptyBinInfo.errorString.contains(QStringLiteral("bin/macos")), qPrintable(emptyBinInfo.errorString));
+    QVERIFY2(emptyBinInfo.errorString.contains(binKey), qPrintable(emptyBinInfo.errorString));
 
     // Two binaries under the documented key subdirectory: ambiguous, not a guess
     const QString ambiguousDir = _writePackage(QStringLiteral("org.test.ambiguous"), sdkPackageManifestJson());
     QVERIFY(!ambiguousDir.isEmpty());
-    const QString ambiguousBinDir = createSubDir(QStringLiteral("org.test.ambiguous/bin/macos-universal"));
+    const QString ambiguousBinDir = createSubDir(platformBinSubdir(QStringLiteral("org.test.ambiguous")));
     QVERIFY(!ambiguousBinDir.isEmpty());
-    QVERIFY(QFile::copy(testPluginFixturePath(), ambiguousBinDir + QStringLiteral("/One.dylib")));
-    QVERIFY(QFile::copy(testPluginFixturePath(), ambiguousBinDir + QStringLiteral("/Two.dylib")));
+    QVERIFY(QFile::copy(testPluginFixturePath(), pluginFilePath(ambiguousBinDir, QStringLiteral("One"))));
+    QVERIFY(QFile::copy(testPluginFixturePath(), pluginFilePath(ambiguousBinDir, QStringLiteral("Two"))));
     const PluginLoadInfo ambiguousInfo = QGCPluginLoader::inspectPackage(ambiguousDir);
     QCOMPARE(ambiguousInfo.state, PluginState::Failed);
     QVERIFY2(ambiguousInfo.errorString.contains(QStringLiteral("multiple")), qPrintable(ambiguousInfo.errorString));
@@ -316,9 +332,9 @@ void PluginLoaderGateTest::_inspectQmlPackageRejectsBinary_test()
 {
     const QString packageDir = _writePackage(QStringLiteral("org.test.qmlwithbinary"), qmlPackageManifestJson());
     QVERIFY(!packageDir.isEmpty());
-    const QString binDir = createSubDir(QStringLiteral("org.test.qmlwithbinary/bin/macos-universal"));
+    const QString binDir = createSubDir(platformBinSubdir(QStringLiteral("org.test.qmlwithbinary")));
     QVERIFY(!binDir.isEmpty());
-    QVERIFY(QFile::copy(testPluginFixturePath(), binDir + QStringLiteral("/Unexpected.dylib")));
+    QVERIFY(QFile::copy(testPluginFixturePath(), pluginFilePath(binDir, QStringLiteral("Unexpected"))));
 
     const PluginLoadInfo info = QGCPluginLoader::inspectPackage(packageDir);
     QCOMPARE(info.state, PluginState::Failed);
@@ -342,7 +358,7 @@ void PluginLoaderGateTest::_inspectDirectoriesDiscoversPackagesAlongsideBareDyli
 {
     const QString packageDir = _writePackage(QStringLiteral("org.test.discoveredpackage"), qmlPackageManifestJson());
     QVERIFY(!packageDir.isEmpty());
-    QVERIFY(QFile::copy(testPluginFixturePath(), tempPath(QStringLiteral("BareDylib.dylib"))));
+    QVERIFY(QFile::copy(testPluginFixturePath(), pluginFilePath(tempDirPath(), QStringLiteral("BareDylib"))));
 
     const QList<PluginLoadInfo> infos = QGCPluginLoader::inspectDirectories({tempDirPath()});
 

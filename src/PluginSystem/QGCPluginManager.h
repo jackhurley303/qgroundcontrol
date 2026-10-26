@@ -161,6 +161,8 @@ signals:
 
 private:
     void _loadPlugins();
+    /// _loadPlugins() over explicit paths, so tests can skip the build's own plugins dir.
+    void _loadPluginsFrom(const QStringList& pluginPaths);
     /// Moves staged updates into place and settles their consent digests.
     /// @return Plugin id -> why its update was not applied, for each one that failed
     QHash<QString, QString> _applyPendingUpdates();

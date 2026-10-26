@@ -263,6 +263,11 @@ void QGCPluginManager::_activateIfEnabled(PluginLoadInfo& record)
 
 void QGCPluginManager::_loadPlugins()
 {
+    _loadPluginsFrom(QGCPluginLoader::defaultPluginPaths());
+}
+
+void QGCPluginManager::_loadPluginsFrom(const QStringList& pluginPaths)
+{
     qCDebug(QGCPluginManagerLog) << "=== Plugin Loading Start ===";
 
     _recordStore.checkCrashSentinel();
@@ -271,7 +276,6 @@ void QGCPluginManager::_loadPlugins()
     // the only point in a run where a staged update can still take effect.
     const QHash<QString, QString> updateErrors = _applyPendingUpdates();
 
-    const QStringList pluginPaths = QGCPluginLoader::defaultPluginPaths();
     qCDebug(QGCPluginManagerLog) << "Plugin search paths:" << pluginPaths;
 
     QList<PluginLoadInfo> inspected = QGCPluginLoader::inspectDirectories(pluginPaths);
