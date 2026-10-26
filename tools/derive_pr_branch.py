@@ -601,12 +601,12 @@ PLUGIN_SDK = PRSpec(
         (
             "src/AppSettings/CMakeLists.txt",
             (
-                ("              VehicleProfileSettings.qml\n", ""),
+                ("        VehicleProfileSettings.qml\n", ""),
                 (
-                    "              PluginCatalogBrowse.qml\n"
-                    "              PluginCatalogInstalledExtras.qml\n"
-                    "              PluginCatalogInstaller.qml\n"
-                    "              PluginCatalogUpdateButton.qml\n",
+                    "        PluginCatalogBrowse.qml\n"
+                    "        PluginCatalogInstalledExtras.qml\n"
+                    "        PluginCatalogInstaller.qml\n"
+                    "        PluginCatalogUpdateButton.qml\n",
                     "",
                 ),
             ),
@@ -809,12 +809,12 @@ VEHICLE_PROFILES = PRSpec(
         (
             "src/AppSettings/CMakeLists.txt",
             (
-                ("              PluginSettings.qml\n", ""),
+                ("        PluginSettings.qml\n", ""),
                 (
-                    "              PluginCatalogBrowse.qml\n"
-                    "              PluginCatalogInstalledExtras.qml\n"
-                    "              PluginCatalogInstaller.qml\n"
-                    "              PluginCatalogUpdateButton.qml\n",
+                    "        PluginCatalogBrowse.qml\n"
+                    "        PluginCatalogInstalledExtras.qml\n"
+                    "        PluginCatalogInstaller.qml\n"
+                    "        PluginCatalogUpdateButton.qml\n",
                     "",
                 ),
             ),
@@ -887,7 +887,7 @@ PLUGIN_CATALOG = PRSpec(
     # These are taken whole from mainline, where VEHICLE_PROFILES' page is also registered;
     # that page is not on this branch.
     doc_rewrites=(
-        ("src/AppSettings/CMakeLists.txt", (("              VehicleProfileSettings.qml\n", ""),)),
+        ("src/AppSettings/CMakeLists.txt", (("        VehicleProfileSettings.qml\n", ""),)),
         (
             "src/AppSettings/pages/SettingsPages.json",
             (
