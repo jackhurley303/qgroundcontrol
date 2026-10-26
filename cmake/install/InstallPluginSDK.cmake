@@ -20,7 +20,8 @@ include(CMakePackageConfigHelpers)
 # target needs (the headers dir plus, since U1, the two mavlink dirs below) via
 # $<INSTALL_INTERFACE:...> — adding INCLUDES DESTINATION too would just duplicate
 # those same entries in the exported target's interface.
-install(TARGETS QGCPluginAPI
+install(
+    TARGETS QGCPluginAPI
     EXPORT QGCPluginAPITargets
     COMPONENT QGCPluginSDK
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
@@ -33,9 +34,10 @@ install(TARGETS QGCPluginAPI
 # context); resolve them against src/PluginAPI/ here since install() runs in the
 # root CMakeLists.txt's directory context instead.
 list(TRANSFORM QGC_PLUGIN_API_PUBLIC_HEADERS PREPEND "${CMAKE_SOURCE_DIR}/src/PluginAPI/"
-    OUTPUT_VARIABLE QGC_PLUGIN_API_PUBLIC_HEADER_PATHS
+                                                     OUTPUT_VARIABLE QGC_PLUGIN_API_PUBLIC_HEADER_PATHS
 )
-install(FILES ${QGC_PLUGIN_API_PUBLIC_HEADER_PATHS}
+install(
+    FILES ${QGC_PLUGIN_API_PUBLIC_HEADER_PATHS}
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/QGCPluginAPI"
     COMPONENT QGCPluginSDK
 )
@@ -49,7 +51,8 @@ install(FILES ${QGC_PLUGIN_API_PUBLIC_HEADER_PATHS}
 # CACHE INTERNAL list (mavlink_BINARY_DIR itself, a plain CPM variable, doesn't
 # propagate to this root-level scope) — its first entry is that root include dir.
 list(GET QGC_MAVLINK_INCLUDE_DIRS 0 QGC_MAVLINK_GENERATED_ROOT)
-install(DIRECTORY "${QGC_MAVLINK_GENERATED_ROOT}/"
+install(
+    DIRECTORY "${QGC_MAVLINK_GENERATED_ROOT}/"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/QGCPluginAPI/mavlink"
     COMPONENT QGCPluginSDK
 )
@@ -63,10 +66,9 @@ install(DIRECTORY "${QGC_MAVLINK_GENERATED_ROOT}/"
 # engine. src/PluginSystem/CMakeLists.txt derives all three inputs from one roster.
 get_target_property(QGC_PLUGIN_UI_SDK_DIR QGCPluginUISDKModule QGC_PLUGIN_UI_SDK_DIR)
 get_target_property(QGC_PLUGIN_UI_QML_BODIES QGCPluginUISDKModule QGC_PLUGIN_UI_QML_BODIES)
-install(FILES
-    "${QGC_PLUGIN_UI_SDK_DIR}/qmldir"
-    "${QGC_PLUGIN_UI_SDK_DIR}/QGroundControl.PluginUI.qmltypes"
-    ${QGC_PLUGIN_UI_QML_BODIES}
+install(
+    FILES "${QGC_PLUGIN_UI_SDK_DIR}/qmldir" "${QGC_PLUGIN_UI_SDK_DIR}/QGroundControl.PluginUI.qmltypes"
+          ${QGC_PLUGIN_UI_QML_BODIES}
     DESTINATION "qml/QGroundControl/PluginUI"
     COMPONENT QGCPluginSDK
 )
@@ -74,7 +76,8 @@ install(FILES
 install(CODE "set(QGC_PLUGIN_UI_QML_BODIES \"${QGC_PLUGIN_UI_QML_BODIES}\")" COMPONENT QGCPluginSDK)
 install(SCRIPT "${CMAKE_CURRENT_LIST_DIR}/InstallPluginUIScripts.cmake" COMPONENT QGCPluginSDK)
 
-install(EXPORT QGCPluginAPITargets
+install(
+    EXPORT QGCPluginAPITargets
     FILE QGCPluginAPITargets.cmake
     NAMESPACE QGCPluginAPI::
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/QGCPluginAPI"
@@ -88,8 +91,7 @@ set(QGC_PLUGIN_API_QML_DIR "qml")
 # find_package(QGCPluginAPI) outright. Same install destination as the install(FILES) above.
 set(QGC_PLUGIN_API_INCLUDE_DIR "${CMAKE_INSTALL_INCLUDEDIR}/QGCPluginAPI")
 configure_package_config_file(
-    "${CMAKE_SOURCE_DIR}/cmake/install/QGCPluginAPIConfig.cmake.in"
-    "${CMAKE_BINARY_DIR}/QGCPluginAPIConfig.cmake"
+    "${CMAKE_SOURCE_DIR}/cmake/install/QGCPluginAPIConfig.cmake.in" "${CMAKE_BINARY_DIR}/QGCPluginAPIConfig.cmake"
     INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/QGCPluginAPI"
     PATH_VARS QGC_PLUGIN_API_QML_DIR QGC_PLUGIN_API_INCLUDE_DIR
 )
@@ -117,10 +119,9 @@ write_basic_package_version_file(
 # includes the very same file from cmake/install/ — one implementation, two
 # callers, which is what keeps the marker on out-of-tree plugins, the primary
 # plugin form.
-install(FILES
-    "${CMAKE_BINARY_DIR}/QGCPluginAPIConfig.cmake"
-    "${CMAKE_BINARY_DIR}/QGCPluginAPIConfigVersion.cmake"
-    "${CMAKE_SOURCE_DIR}/cmake/install/QGCPluginBuildMarker.cmake"
+install(
+    FILES "${CMAKE_BINARY_DIR}/QGCPluginAPIConfig.cmake" "${CMAKE_BINARY_DIR}/QGCPluginAPIConfigVersion.cmake"
+          "${CMAKE_SOURCE_DIR}/cmake/install/QGCPluginBuildMarker.cmake"
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/QGCPluginAPI"
     COMPONENT QGCPluginSDK
 )
@@ -134,7 +135,8 @@ install(FILES
 # doesn't exist in a standalone-extracted SDK zip, so they'd only confuse a
 # third-party author) — the package ships plugin sources plus the standalone
 # CMakeLists.txt only.
-install(DIRECTORY "${CMAKE_SOURCE_DIR}/plugins/example/"
+install(
+    DIRECTORY "${CMAKE_SOURCE_DIR}/plugins/example/"
     DESTINATION "example"
     COMPONENT QGCPluginSDK
     PATTERN "SDK-README.md" EXCLUDE
@@ -143,7 +145,8 @@ install(DIRECTORY "${CMAKE_SOURCE_DIR}/plugins/example/"
     PATTERN "build.bat" EXCLUDE
 )
 
-install(FILES "${CMAKE_SOURCE_DIR}/plugins/example/SDK-README.md"
+install(
+    FILES "${CMAKE_SOURCE_DIR}/plugins/example/SDK-README.md"
     DESTINATION "."
     COMPONENT QGCPluginSDK
 )
@@ -154,19 +157,22 @@ install(FILES "${CMAKE_SOURCE_DIR}/plugins/example/SDK-README.md"
 # QGC checkout to fall back on. PROGRAMS, not FILES, so the shebang is usable. The schema
 # ships beside it as the human- and editor-readable statement of the manifest contract; the
 # tool validates manifests itself and never depends on it being present.
-install(PROGRAMS "${CMAKE_SOURCE_DIR}/tools/verify_plugin_out_of_tree.py"
+install(
+    PROGRAMS "${CMAKE_SOURCE_DIR}/tools/verify_plugin_out_of_tree.py"
     DESTINATION "tools"
     COMPONENT QGCPluginSDK
 )
 
-install(FILES "${CMAKE_SOURCE_DIR}/tools/plugin-verify.schema.json"
+install(
+    FILES "${CMAKE_SOURCE_DIR}/tools/plugin-verify.schema.json"
     DESTINATION "tools"
     COMPONENT QGCPluginSDK
 )
 
 # Both shipped tools import tools/_bootstrap.py, as every tools/ entry script must. It is
 # stdlib-only and written for checkouts without the rest of tools/, so it ships beside them.
-install(FILES "${CMAKE_SOURCE_DIR}/tools/_bootstrap.py"
+install(
+    FILES "${CMAKE_SOURCE_DIR}/tools/_bootstrap.py"
     DESTINATION "tools"
     COMPONENT QGCPluginSDK
 )
@@ -175,7 +181,8 @@ install(FILES "${CMAKE_SOURCE_DIR}/tools/_bootstrap.py"
 # enforces are PluginInstaller's, and an author who cannot run them locally only discovers
 # a bad package when a user fails to install it. Stdlib-only and single-file, so it runs
 # from the unpacked zip with no QGC checkout.
-install(PROGRAMS "${CMAKE_SOURCE_DIR}/tools/pack_plugin.py"
+install(
+    PROGRAMS "${CMAKE_SOURCE_DIR}/tools/pack_plugin.py"
     DESTINATION "tools"
     COMPONENT QGCPluginSDK
 )
