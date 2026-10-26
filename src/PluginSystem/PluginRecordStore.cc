@@ -84,9 +84,9 @@ QScopeGuard<std::function<void()>> PluginRecordStore::armLoadingSentinel(const Q
     settings.setValue(QString::fromLatin1(kLoadingPluginIdKey), pluginId);
     settings.sync();
     return qScopeGuard(std::function<void()>([] {
-        QSettings settings;
-        settings.remove(QString::fromLatin1(kLoadingPluginIdKey));
-        settings.sync();
+        QSettings sentinelSettings;
+        sentinelSettings.remove(QString::fromLatin1(kLoadingPluginIdKey));
+        sentinelSettings.sync();
     }));
 }
 
