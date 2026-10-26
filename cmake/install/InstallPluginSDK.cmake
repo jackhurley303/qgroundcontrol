@@ -85,6 +85,22 @@ install(
 )
 
 set(QGC_PLUGIN_API_QML_DIR "qml")
+# What this configure run built against, recorded in the config file. The key follows the
+# loader's <os>-<arch> rule (QGCPluginLoader::platformKey()); macOS is universal.
+set(QGC_PLUGIN_API_QT_VERSION "${Qt6_VERSION}")
+if(APPLE)
+    set(QGC_PLUGIN_API_PLATFORM_KEY "macos-universal")
+else()
+    string(TOLOWER "${CMAKE_SYSTEM_NAME}" _qgc_sdk_os)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
+        set(_qgc_sdk_arch "x64")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+        set(_qgc_sdk_arch "arm64")
+    else()
+        set(_qgc_sdk_arch "unknown")
+    endif()
+    set(QGC_PLUGIN_API_PLATFORM_KEY "${_qgc_sdk_os}-${_qgc_sdk_arch}")
+endif()
 # Where the headers land, as a PATH_VAR so the config file's set_and_check() resolves the
 # real location rather than a hardcoded "include/" — the build-marker generator reads this
 # to build its DEPENDS set, so a non-default CMAKE_INSTALL_INCLUDEDIR would otherwise fail

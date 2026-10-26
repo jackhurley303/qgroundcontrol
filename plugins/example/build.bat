@@ -6,7 +6,7 @@ setlocal enabledelayedexpansion
 set SCRIPT_DIR=%~dp0
 set QGC_ROOT=%SCRIPT_DIR%..\..
 set BUILD_DIR=%QGC_ROOT%\build
-set PLUGIN_DEST=%LOCALAPPDATA%\QGroundControl\QGroundControl Daily\plugins
+set PLUGIN_DEST=%APPDATA%\QGroundControl\QGroundControl Daily\plugins
 
 echo Building Example Plugin for Windows...
 

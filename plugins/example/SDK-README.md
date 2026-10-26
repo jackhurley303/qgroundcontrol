@@ -4,10 +4,12 @@ This package lets you build a QGroundControl **Tier B** plugin — a `.dylib`/`.
 that loads into a QGC build you never compiled, without cloning the QGC source tree.
 It contains:
 
-```
+```text
 include/QGCPluginAPI/...          # public headers (QGCPlugin, QGCPluginInterface,
                                    # QGCHostServices, and the host service interfaces)
 lib/libQGCPluginAPI.*.dylib       # the versioned SDK shared library (macOS)
+lib/libQGCPluginAPI.so.*          # the same, on Linux
+bin/QGCPluginAPI.dll, lib/        # the same on Windows: the DLL and its import library
 lib/cmake/QGCPluginAPI/...        # find_package(QGCPluginAPI) config
 qml/QGroundControl/PluginUI/...   # the published QML vocabulary (see below)
 example/                          # a copy-and-build starting point (see below)
@@ -100,14 +102,23 @@ Concretely, for this package:
 - **`hostVersion`** in your manifest declares the QGC app-version range your plugin
   supports (`{"min": "5.0", "max": ""}` = "5.0 and later"). The host checks this before
   ever instantiating your plugin.
-- **Platform + Qt kit:** build against **Qt 6.10.3** (the pinned kit this SDK was built
-  with — see `.github/build-config.json` in the QGC source, or the SDK zip's file name).
-  A host running an older Qt 6.x than your plugin's build Qt is unsupported: you'll see
-  Qt's own version-mismatch error surfaced through the Plugins settings page, not a
-  crash. A host running the same or newer Qt 6.x works.
+- **Platform + Qt kit:** build against the Qt this SDK was built with. The SDK's
+  `find_package(QGCPluginAPI)` sets `QGCPluginAPI_QT_VERSION` (the full Qt version) and
+  `QGCPluginAPI_PLATFORM_KEY` (the `bin/<key>/` folder your package uses). A host running a
+  different Qt major, or an older minor than your plugin's build Qt, refuses the plugin
+  before you consent to it. A host running the same or a newer minor works.
+- **Linux glibc floor:** build the plugin on the OS image that builds QGC's AppImage,
+  currently Ubuntu 24.04 (glibc 2.39). A plugin built against a newer glibc than the host's
+  fails to load.
+- **Package keys:** `macos-universal`, `windows-x64`, `linux-x64` and `linux-arm64` have an
+  SDK package. `windows-arm64` and `android-*` are loader keys only.
 - **Compiler ABI (macOS):** build with the same Xcode/Clang toolchain family QGC itself
   ships with (libc++). Mixed Debug/Release configs are accepted looseness — not
   guaranteed, but libc++ makes it mostly work in practice.
+- **Compiler ABI (Linux):** build with GCC and libstdc++, as the Qt `gcc_64` kit does.
+- **Compiler ABI (Windows):** pin the **same MSVC toolset family and CRT** as the SDK was
+  built with. Mixing them is unsupported. Build Release: a Debug plugin loads a second Qt
+  and CRT beside the host's.
 
 ## ABI rules (why the contract holds)
 
@@ -170,10 +181,13 @@ to wherever you extracted the zip.) Then copy the built library into QGC's per-u
 plugins directory and relaunch:
 
 | Platform | Plugins directory |
-|---|---|
-| macOS | `~/Library/Application Support/QGroundControl/plugins/` |
-| Linux | `~/.local/share/QGroundControl/plugins/` |
-| Windows | `%APPDATA%/QGroundControl/plugins/` |
+| --- | --- |
+| macOS | `~/Library/Application Support/QGroundControl/QGroundControl/plugins/` |
+| Linux | `~/.local/share/QGroundControl/QGroundControl/plugins/` |
+| Windows | `%APPDATA%/QGroundControl/QGroundControl/plugins/` |
+
+(The first folder is the organization, the second the application. A daily build uses
+`QGroundControl Daily` as the application folder.)
 
 A newly-discovered plugin in this directory needs to be enabled once from
 Application Settings → Plugins before it runs. If it doesn't appear or shows
@@ -192,19 +206,14 @@ author configures. If you distribute your plugin outside this installer path, si
 with a Developer ID certificate (and notarize it) so Gatekeeper doesn't quarantine it
 for your users.
 
-## Forward look: Windows and Android
-
-Not relevant to this package (macOS-only today), but worth knowing if you're planning
-ahead for a plugin you intend to keep working:
+## Platform notes
 
 - **Windows** has no soname mechanism — a DLL's filename doesn't carry the SDK major the
-  way `libQGCPluginAPI.2.dylib` does on macOS. When the Windows SDK ships, rely on the
-  manifest's `apiVersion` gate (which rejects before any of your code runs) rather than
-  assuming the DLL filename tells you anything. Also pin the **same MSVC toolset family
-  and CRT** as the SDK was built with — mixing them is unsupported on Windows in a way it
-  mostly isn't on macOS/Linux.
-- **Android** can only ever support `tier: "qml"` packages installed to a user-writable
-  directory — modern Android's W^X enforcement forbids `dlopen`-ing a native library from
+  way `libQGCPluginAPI.2.dylib` does on macOS. Rely on the manifest's
+  `apiVersion` gate (which rejects before any of your code runs) rather than assuming the
+  DLL filename tells you anything.
+- **Android** supports only `tier: "qml"` packages today; this SDK builds no native
+  Android plugin. Modern Android's W^X enforcement forbids `dlopen`-ing a native library from
   app-writable storage, full stop. A native (Tier B/C) plugin on Android ships as its own
   installed APK instead; that's a different, larger distribution model than this package
   covers.
