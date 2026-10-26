@@ -1377,11 +1377,11 @@ private:
 /*                         Replay Plan Registry                               */
 /*===========================================================================*/
 public:
-    static void    registerReplayPlanFile(int vehicleId, const QString& planFilePath);
-    static QString peekReplayPlanFile    (int vehicleId);
+    static void registerReplayPlanFile(quint32 vehicleId, const QString& planFilePath);
+    static QString peekReplayPlanFile(quint32 vehicleId);
 
 private:
-    static QMap<int, QString> _replayPlanFileRegistry;
+    static QMap<quint32, QString> _replayPlanFileRegistry;
 
-/*---------------------------------------------------------------------------*/
+    /*---------------------------------------------------------------------------*/
 };

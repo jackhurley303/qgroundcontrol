@@ -42,8 +42,8 @@ public:
     void movePlayhead(qreal percentComplete) override;
     void requestPlanReload() override;
 
-    void registerReplayParamFile(int vehicleId, const QString& filePath) override;
-    void registerReplayPlanFile(int vehicleId, const QString& planFilePath) override;
+    void registerReplayParamFile(quint32 vehicleId, const QString& filePath) override;
+    void registerReplayPlanFile(quint32 vehicleId, const QString& planFilePath) override;
 
 private slots:
     void _onLinkDisconnected();

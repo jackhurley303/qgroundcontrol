@@ -35,9 +35,9 @@ QGC_LOGGING_CATEGORY(ParameterManagerVerbose1Log, "FactSystem.ParameterManager:v
 QGC_LOGGING_CATEGORY(ParameterManagerVerbose2Log, "FactSystem.ParameterManager:verbose2")
 QGC_LOGGING_CATEGORY(ParameterManagerDebugCacheFailureLog, "FactSystem.ParameterManager:debugCacheFailure") // Turn on to debug parameter cache crc misses
 
-QMap<int, QString> ParameterManager::_replayParamFileRegistry;
+QMap<quint32, QString> ParameterManager::_replayParamFileRegistry;
 
-void ParameterManager::registerReplayParamFile(int vehicleId, const QString& filePath)
+void ParameterManager::registerReplayParamFile(quint32 vehicleId, const QString& filePath)
 {
     if (filePath.isEmpty()) {
         qCDebug(ParameterManagerLog) << "registerReplayParamFile: clearing entry for vehicle" << vehicleId;

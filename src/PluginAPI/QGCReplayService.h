@@ -93,11 +93,11 @@ public:
 
     /// Register a parameter file to load when replay creates the vehicle with
     /// this system id. An empty path clears the entry.
-    virtual void registerReplayParamFile(int vehicleId, const QString& filePath) = 0;
+    virtual void registerReplayParamFile(quint32 vehicleId, const QString& filePath) = 0;
 
     /// Register a plan file to load when replay creates the vehicle with this
     /// system id. An empty path clears the entry.
-    virtual void registerReplayPlanFile(int vehicleId, const QString& planFilePath) = 0;
+    virtual void registerReplayPlanFile(quint32 vehicleId, const QString& planFilePath) = 0;
 
 signals:
     void playbackStarted();

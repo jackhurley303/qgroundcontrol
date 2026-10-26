@@ -142,12 +142,12 @@ void QGCReplayServiceImpl::requestPlanReload()
     }
 }
 
-void QGCReplayServiceImpl::registerReplayParamFile(int vehicleId, const QString& filePath)
+void QGCReplayServiceImpl::registerReplayParamFile(quint32 vehicleId, const QString& filePath)
 {
     ParameterManager::registerReplayParamFile(vehicleId, filePath);
 }
 
-void QGCReplayServiceImpl::registerReplayPlanFile(int vehicleId, const QString& planFilePath)
+void QGCReplayServiceImpl::registerReplayPlanFile(quint32 vehicleId, const QString& planFilePath)
 {
     Vehicle::registerReplayPlanFile(vehicleId, planFilePath);
 }

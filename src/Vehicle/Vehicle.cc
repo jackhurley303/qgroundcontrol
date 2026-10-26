@@ -2307,9 +2307,9 @@ int Vehicle::_findMavCommandListEntryIndex(int targetCompId, MAV_CMD command)
     return _mavCmdQueue->findEntryIndex(targetCompId, command);
 }
 
-QMap<int, QString> Vehicle::_replayPlanFileRegistry;
+QMap<quint32, QString> Vehicle::_replayPlanFileRegistry;
 
-void Vehicle::registerReplayPlanFile(int vehicleId, const QString& planFilePath)
+void Vehicle::registerReplayPlanFile(quint32 vehicleId, const QString& planFilePath)
 {
     if (planFilePath.isEmpty()) {
         _replayPlanFileRegistry.remove(vehicleId);
@@ -2318,7 +2318,7 @@ void Vehicle::registerReplayPlanFile(int vehicleId, const QString& planFilePath)
     }
 }
 
-QString Vehicle::peekReplayPlanFile(int vehicleId)
+QString Vehicle::peekReplayPlanFile(quint32 vehicleId)
 {
     return _replayPlanFileRegistry.value(vehicleId);
 }

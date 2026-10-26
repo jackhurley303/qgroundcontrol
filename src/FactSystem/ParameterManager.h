@@ -119,7 +119,7 @@ public:
     /// Pre-registers a params file for a vehicle before tlog replay starts. ParameterManager
     /// loads it during refreshAllParameters instead of immediately completing with missing
     /// parameters.
-    static void registerReplayParamFile(int vehicleId, const QString& filePath);
+    static void registerReplayParamFile(quint32 vehicleId, const QString& filePath);
 
     // Apply resolved parameter values after a replay seek. Both update in-memory Fact
     // values without sending MAVLink, and both create the Fact when the parameter has none
@@ -300,7 +300,7 @@ private:
     bool _ftpParamsLoaded = false;              ///< true: autopilot params came from param.pck
     QSet<int> _heartbeatComponentIds;           ///< Non-autopilot components heard via HEARTBEAT
 
-    static QMap<int, QString> _replayParamFileRegistry; ///< sysId -> path, populated before tlog replay starts
+    static QMap<quint32, QString> _replayParamFileRegistry;  ///< sysId -> path, populated before tlog replay starts
 
     /// Cached initial raw values from the params file, used by resetParamToReplayInitial().
     /// Key: (componentId, paramName). Populated in _loadReplayParamsFromFile().

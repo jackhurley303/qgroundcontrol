@@ -81,7 +81,7 @@ void ReplaySeekApplier::_onSeekMissionResolved(QMap<int, QList<mavlink_mission_i
 {
     Vehicle* vehicle = MultiVehicleManager::instance()->activeVehicle();
     if (!vehicle) return;
-    const int sysId = vehicle->id();
+    const quint32 sysId = vehicle->id();
     const bool hasPlanFile = !Vehicle::peekReplayPlanFile(sysId).isEmpty();
 
     // Restore initial state for types without a resolved timeline snapshot
