@@ -107,6 +107,7 @@ add_custom_command(
     DEPENDS
         "${CMAKE_SOURCE_DIR}/tools/derive_plugin_ui_sdk.py"
         "${QGC_PLUGIN_UI_ROSTER}"
+        "${CMAKE_BINARY_DIR}/qml/QGC/QGroundControl.qmltypes"
         ${CMAKE_PROJECT_NAME}_qmltyperegistration
     COMMENT "Deriving the packaged QGroundControl.PluginUI module"
     VERBATIM
