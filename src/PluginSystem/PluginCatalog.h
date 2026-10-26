@@ -48,7 +48,7 @@ struct PluginCatalogVersion
     PluginManifest manifest;
     QString released;
     QString notes;
-    /// Keyed by platform key (`macos-universal`, `windows-x64`, `linux-x64`) or `any` (qml tier
+    /// Keyed by platform key (`macos-universal`, `windows-x64`, `linux-x64`, `linux-arm64`) or `any` (qml tier
     /// only). Keys this build does not know are dropped at parse time.
     QHash<QString, PluginCatalogPackage> packages;
 

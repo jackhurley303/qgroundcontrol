@@ -21,6 +21,9 @@ private slots:
     void _inspectQmlPackageActivatesWithoutBinary_test();
     void _inspectSdkPackageLoadsBinary_test();
     void _inspectPackageBadLayoutErrorsLegible_test();
+    void _platformKeyMatchesBuild_test();
+    void _inspectPackageRejectsForeignArchBinary_test();
+    void _inspectPackageMacFallbackFindsSingleArchBinary_test();
     void _inspectQmlPackageRejectsBinary_test();
     void _inspectQmlPackageRejectsReplayDeclaration_test();
     void _inspectPackageRejectsInternalTier_test();

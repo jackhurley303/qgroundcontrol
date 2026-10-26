@@ -46,8 +46,8 @@ A static utility, not a QObject — it holds no state between calls:
 - `inspectPackage(packageDir)` reads `qgcplugin.json` directly (not via `QPluginLoader`
   metadata) from a package directory (D8): a package's identity/contributions always come
   from this sidecar file, never a binary's own embedded metadata. Tier `qml` requires no
-  binary; other tiers resolve one binary under `bin/<platform>-*/` (documented key
-  `bin/macos-universal/` on macOS, with a same-platform fallback) or fail legibly.
+  binary; other tiers resolve one binary under `bin/<platformKey>/` (`bin/macos-universal/` on macOS,
+  which also accepts `bin/macos-*/`; `bin/<os>-<arch>/` elsewhere, exact key only) or fail legibly.
 - `inspectDirectories(dirs)` runs `inspect()` over every bare plugin file, and
   `inspectPackage()` over every child directory containing `qgcplugin.json`, found under
   the given directories (sorted by filename for deterministic duplicate-id resolution).

@@ -319,6 +319,21 @@ def test_binary_flag_rejected_for_qml_tier(tmp_path: Path, capsys) -> None:
     assert "qml-tier" in capsys.readouterr().err
 
 
+def test_linux_arm64_key_packs_without_warning(tmp_path: Path, capsys) -> None:
+    package_dir = tmp_path / "pkg"
+    write_manifest(package_dir)
+    loose = tmp_path / "libLoose.so"
+    loose.write_bytes(b"binary")
+    output = tmp_path / "out.qgcplugin"
+    code = main(
+        [str(package_dir), "-o", str(output), "--binary", str(loose), "--platform", "linux-arm64"]
+    )
+    assert code == 0
+    assert "warning" not in capsys.readouterr().err
+    with zipfile.ZipFile(output) as archive:
+        assert "bin/linux-arm64/libLoose.so" in archive.namelist()
+
+
 def test_unknown_platform_key_warns_but_packs(tmp_path: Path, capsys) -> None:
     package_dir = tmp_path / "pkg"
     write_manifest(package_dir)
@@ -340,6 +355,7 @@ def test_unknown_platform_key_warns_but_packs(tmp_path: Path, capsys) -> None:
 
 INSTALLER_CC = REPO_ROOT / "src" / "PluginSystem" / "PluginInstaller.cc"
 LOADER_CC = REPO_ROOT / "src" / "PluginSystem" / "QGCPluginLoader.cc"
+CATALOG_CC = REPO_ROOT / "src" / "PluginSystem" / "PluginCatalog.cc"
 
 
 @pytest.mark.skipif(not INSTALLER_CC.is_file(), reason="requires a QGC checkout")
@@ -357,4 +373,15 @@ def test_platform_keys_match_loader() -> None:
     for key in PLATFORM_KEYS:
         assert f'QStringLiteral("{key}")' in text, (
             f"platformBinarySubdir() no longer names {key}; update PLATFORM_KEYS"
+        )
+
+
+@pytest.mark.skipif(
+    not CATALOG_CC.is_file(), reason="requires a QGC checkout with the plugin catalog"
+)
+def test_platform_keys_match_catalog_parser() -> None:
+    text = CATALOG_CC.read_text(encoding="utf-8")
+    for key in PLATFORM_KEYS:
+        assert f'QStringLiteral("{key}")' in text, (
+            f"isKnownPackageKey() no longer names {key}; update PLATFORM_KEYS or the parser"
         )

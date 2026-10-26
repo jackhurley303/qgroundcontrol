@@ -40,22 +40,44 @@ QStringList pluginBinaryFilters()
 #endif
 }
 
-// The package format's documented per-platform bin/ subdirectory key (02 §6).
+// The package format's documented per-platform bin/ subdirectory key (02 §6): macos-universal,
+// else <os>-<arch>. Android is tested before Linux because Qt defines Q_OS_LINUX there too.
+// A CPU with no package gets a key no package uses, so the build loads no native package.
 QString platformBinarySubdir()
 {
-#if defined(Q_OS_WIN)
-    return QStringLiteral("windows-x64");
-#elif defined(Q_OS_MACOS)
+#if defined(Q_OS_MACOS)
     return QStringLiteral("macos-universal");
+#elif defined(Q_OS_WIN)
+#if defined(Q_PROCESSOR_X86_64)
+    return QStringLiteral("windows-x64");
+#elif defined(Q_PROCESSOR_ARM_64)
+    return QStringLiteral("windows-arm64");
 #else
+    return QStringLiteral("windows-unknown");
+#endif
+#elif defined(Q_OS_ANDROID)
+#if defined(Q_PROCESSOR_X86_64)
+    return QStringLiteral("android-x64");
+#elif defined(Q_PROCESSOR_ARM_64)
+    return QStringLiteral("android-arm64");
+#else
+    return QStringLiteral("android-unknown");
+#endif
+#else
+#if defined(Q_PROCESSOR_X86_64)
     return QStringLiteral("linux-x64");
+#elif defined(Q_PROCESSOR_ARM_64)
+    return QStringLiteral("linux-arm64");
+#else
+    return QStringLiteral("linux-unknown");
+#endif
 #endif
 }
 
-// Finds a package's binary under bin/: the documented key subdirectory first
-// (bin/macos-universal/ on macOS), falling back to any single binary under a
-// platform-prefixed subdirectory (bin/macos-*/) — the fallback the plan documents
-// for e.g. a single-arch bin/macos-x86_64/ layout.
+// Finds a package's binary under bin/: the key subdirectory first. On macOS only, it falls
+// back to any single binary under a bin/macos-*/ subdirectory (e.g. a single-arch
+// bin/macos-x86_64/ layout). Other OSes look only under their exact key: a Linux arm64 host
+// must not pick up a bin/linux-x64/ binary and fail at dlopen.
 QStringList findPackageBinaries(const QString& binDir)
 {
     QDir bin(binDir);
@@ -78,6 +100,7 @@ QStringList findPackageBinaries(const QString& binDir)
     }
 
     QStringList paths;
+#if defined(Q_OS_MACOS)
     const QString platformPrefix = platformBinarySubdir().section(QLatin1Char('-'), 0, 0);
     const QFileInfoList subdirs = bin.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
     for (const QFileInfo& subdirInfo : subdirs) {
@@ -90,7 +113,21 @@ QStringList findPackageBinaries(const QString& binDir)
             paths << fi.absoluteFilePath();
         }
     }
+#endif
     return paths;
+}
+
+// Names the exact key; only macOS also searches bin/macos-*/, so only its message says so.
+QString noBinaryMessage(PluginManifest::Tier tier)
+{
+    const QString key = platformBinarySubdir();
+    const QString tierName = PluginManifest::tierToString(tier);
+#if defined(Q_OS_MACOS)
+    return QStringLiteral("no %1 binary found under bin/%2 or bin/%3-*")
+        .arg(tierName, key, key.section(QLatin1Char('-'), 0, 0));
+#else
+    return QStringLiteral("no %1 binary found under bin/%2").arg(tierName, key);
+#endif
 }
 
 // Shared tail of inspect()/inspectPackage(): once a manifest is parsed (and any
@@ -156,6 +193,7 @@ void markDiscovered(PluginLoadInfo& info)
 
 QList<PluginLoadInfo> QGCPluginLoader::inspectDirectories(const QStringList& pluginDirs)
 {
+    qCDebug(QGCPluginLoaderLog) << "Plugin platform key:" << platformBinarySubdir();
     qCDebug(QGCPluginLoaderLog) << "Inspecting plugins in" << pluginDirs.size() << "directories";
 
     QList<PluginLoadInfo> infos;
@@ -295,8 +333,9 @@ PluginLoadInfo QGCPluginLoader::inspectPackage(const QString& packageDir)
         if (binaries.size() != 1) {
             info.state = PluginState::Failed;
             info.errorString = binaries.isEmpty()
-                ? QStringLiteral("no %1 binary found under bin/%2 or bin/%3-*").arg(PluginManifest::tierToString(info.manifest.tier), platformBinarySubdir(), platformBinarySubdir().section(QLatin1Char('-'), 0, 0))
-                : QStringLiteral("multiple candidate binaries found (%1); expected exactly one").arg(binaries.join(QStringLiteral(", ")));
+                                   ? noBinaryMessage(info.manifest.tier)
+                                   : QStringLiteral("multiple candidate binaries found (%1); expected exactly one")
+                                         .arg(binaries.join(QStringLiteral(", ")));
             return info;
         }
         info.filePath = binaries.first();

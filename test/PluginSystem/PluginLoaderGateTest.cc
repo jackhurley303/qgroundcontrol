@@ -328,6 +328,66 @@ void PluginLoaderGateTest::_inspectPackageBadLayoutErrorsLegible_test()
     QVERIFY2(ambiguousInfo.errorString.contains(QStringLiteral("multiple")), qPrintable(ambiguousInfo.errorString));
 }
 
+void PluginLoaderGateTest::_platformKeyMatchesBuild_test()
+{
+#if defined(Q_OS_MACOS)
+    QCOMPARE(QGCPluginLoader::platformKey(), QStringLiteral("macos-universal"));
+#elif defined(Q_OS_WIN) && defined(Q_PROCESSOR_X86_64)
+    QCOMPARE(QGCPluginLoader::platformKey(), QStringLiteral("windows-x64"));
+#elif defined(Q_OS_ANDROID) && defined(Q_PROCESSOR_ARM_64)
+    QCOMPARE(QGCPluginLoader::platformKey(), QStringLiteral("android-arm64"));
+#elif defined(Q_OS_ANDROID) && defined(Q_PROCESSOR_X86_64)
+    QCOMPARE(QGCPluginLoader::platformKey(), QStringLiteral("android-x64"));
+#elif defined(Q_OS_LINUX) && defined(Q_PROCESSOR_X86_64)
+    QCOMPARE(QGCPluginLoader::platformKey(), QStringLiteral("linux-x64"));
+#elif defined(Q_OS_LINUX) && defined(Q_PROCESSOR_ARM_64)
+    QCOMPARE(QGCPluginLoader::platformKey(), QStringLiteral("linux-arm64"));
+#else
+    QVERIFY(QGCPluginLoader::platformKey().endsWith(QStringLiteral("-unknown")));
+#endif
+}
+
+void PluginLoaderGateTest::_inspectPackageRejectsForeignArchBinary_test()
+{
+#if defined(Q_OS_MACOS)
+    QSKIP("macOS accepts any bin/macos-*/ binary; the exact-key rule applies to the other OSes");
+#else
+    const QString key = QGCPluginLoader::platformKey();
+    const QString osName = key.section(QLatin1Char('-'), 0, 0);
+    const bool isX64 = key.endsWith(QStringLiteral("-x64"));
+    const QString foreignKey = osName + (isX64 ? QStringLiteral("-arm64") : QStringLiteral("-x64"));
+
+    const QString packageDir = _writePackage(QStringLiteral("org.test.foreignarch"), sdkPackageManifestJson());
+    QVERIFY(!packageDir.isEmpty());
+    const QString binDir = createSubDir(QStringLiteral("org.test.foreignarch/bin/") + foreignKey);
+    QVERIFY(!binDir.isEmpty());
+    QVERIFY(QFile::copy(testPluginFixturePath(), pluginFilePath(binDir, QStringLiteral("Foreign"))));
+
+    const PluginLoadInfo info = QGCPluginLoader::inspectPackage(packageDir);
+    QCOMPARE(info.state, PluginState::Failed);
+    QVERIFY2(info.errorString.contains(QStringLiteral("bin/") + key), qPrintable(info.errorString));
+    QVERIFY2(!info.errorString.contains(QStringLiteral("-*")), qPrintable(info.errorString));
+#endif
+}
+
+void PluginLoaderGateTest::_inspectPackageMacFallbackFindsSingleArchBinary_test()
+{
+#if !defined(Q_OS_MACOS)
+    QSKIP("the bin/macos-*/ fallback is macOS only");
+#else
+    const QString packageDir = _writePackage(QStringLiteral("org.test.macfallback"), sdkPackageManifestJson());
+    QVERIFY(!packageDir.isEmpty());
+    const QString binDir = createSubDir(QStringLiteral("org.test.macfallback/bin/macos-x86_64"));
+    QVERIFY(!binDir.isEmpty());
+    const QString dylibPath = pluginFilePath(binDir, QStringLiteral("SingleArch"));
+    QVERIFY(QFile::copy(testPluginFixturePath(), dylibPath));
+
+    const PluginLoadInfo info = QGCPluginLoader::inspectPackage(packageDir);
+    QCOMPARE(info.state, PluginState::Discovered);
+    QCOMPARE(info.filePath, dylibPath);
+#endif
+}
+
 void PluginLoaderGateTest::_inspectQmlPackageRejectsBinary_test()
 {
     const QString packageDir = _writePackage(QStringLiteral("org.test.qmlwithbinary"), qmlPackageManifestJson());

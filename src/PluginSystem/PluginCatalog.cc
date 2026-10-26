@@ -33,7 +33,7 @@ const QString AnyPlatformKey = QStringLiteral("any");
 bool isKnownPackageKey(const QString& key)
 {
     return key == AnyPlatformKey || key == QStringLiteral("macos-universal") || key == QStringLiteral("windows-x64") ||
-           key == QStringLiteral("linux-x64");
+           key == QStringLiteral("linux-x64") || key == QStringLiteral("linux-arm64");
 }
 
 // QVersionNumber::fromString() silently drops a suffix ("1.0.0-beta" parses as 1.0.0), which

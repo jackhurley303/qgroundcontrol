@@ -554,8 +554,9 @@ PLUGIN_SDK = PRSpec(
             "src/PluginSystem/QGCPluginLoader.h",
             (
                 (
-                    "\n    /// @brief This build's platform key (`macos-universal`, `windows-x64`, `linux-x64`):\n"
-                    "    /// the bin/ subdirectory a package's binary sits in, and the plugin catalog's package key\n"
+                    "\n    /// @brief This build's platform key: `macos-universal`, else `<os>-<arch>` (os windows, linux or\n"
+                    "    /// android; arch x64 or arm64): the bin/ subdirectory a package's binary sits in, and the plugin\n"
+                    "    /// catalog's package key\n"
                     "    static QString platformKey();\n",
                     "",
                 ),

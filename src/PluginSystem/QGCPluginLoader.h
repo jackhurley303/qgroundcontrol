@@ -71,7 +71,7 @@ public:
     /// A package is a directory with qgcplugin.json at its root. Tier qml packages ship
     /// no binary; contributions are synthesized from the manifest alone, with relative
     /// URLs resolved package-relative. Other tiers require exactly one platform binary
-    /// under bin/<platform>-*/ (documented key: bin/macos-universal/ on macOS).
+    /// under bin/<platformKey>/ (bin/macos-universal/ on macOS, which also accepts bin/macos-*/).
     /// @param packageDir Absolute path to the package directory
     /// @return PluginLoadInfo in state Discovered, Incompatible, or Failed
     static PluginLoadInfo inspectPackage(const QString& packageDir);
@@ -96,7 +96,8 @@ public:
     /// @brief Identity/compatibility facts of the running host, used to validate manifests
     static HostInfo hostInfo();
 
-    /// @brief This build's platform key (`macos-universal`, `windows-x64`, `linux-x64`):
-    /// the bin/ subdirectory a package's binary sits in, and the plugin catalog's package key
+    /// @brief This build's platform key: `macos-universal`, else `<os>-<arch>` (os windows, linux or
+    /// android; arch x64 or arm64): the bin/ subdirectory a package's binary sits in, and the plugin
+    /// catalog's package key
     static QString platformKey();
 };
