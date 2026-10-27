@@ -898,7 +898,15 @@ void QGCPluginManagerTest::_inPlaceUpgradeMarksStaleImage_test()
 
     // The in-place upgrade: same path, a different build's bytes. Setting the
     // modification time explicitly keeps filesystem timestamp resolution out of it.
+#if defined(Q_OS_WIN)
+    // Windows refuses to delete or overwrite a mapped DLL but lets it be renamed, which
+    // frees the path the same way. The renamed DLL stays mapped until the process exits,
+    // so the temp dir cannot be removed.
+    QVERIFY(QFile::rename(dylibPath, dylibPath + QStringLiteral(".mapped")));
+    ignoreLogMessage("default", QtWarningMsg, QRegularExpression(QStringLiteral("QTemporaryDir: Unable to remove")));
+#else
     QVERIFY(QFile::remove(dylibPath));
+#endif
     QVERIFY(QFile::copy(testPluginFixtureV2Path(), dylibPath));
     QFile upgradedFile(dylibPath);
     QVERIFY(upgradedFile.open(QIODevice::ReadWrite));

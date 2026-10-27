@@ -149,6 +149,10 @@ void PluginTeardownTest::_teardownCensusIsUnaffectedByLiveQml_test()
     // Materialising a real control populates Qt's font database, which warns on systems
     // without the aliased families. Environmental; ignoreLogMessage tolerates its absence.
     ignoreLogMessage("qt.qpa.fonts", QtWarningMsg, QRegularExpression(QStringLiteral("font family aliases")));
+    // The offscreen platform on Windows uses the FreeType font database, which warns once
+    // when the Qt install has no lib/fonts directory.
+    ignoreLogMessage("default", QtWarningMsg,
+                     QRegularExpression(QStringLiteral("QFontDatabase: Cannot find font directory")));
 
     QGCHostServicesImpl services;
     auto* appService = new ConnectionCensus<QGCAppServiceImpl>(&services);

@@ -105,6 +105,10 @@ void PluginUIModuleTest::init()
     // ignoreLogMessage tolerates its absence, so this stays correct where the
     // warning never fires.
     ignoreLogMessage("qt.qpa.fonts", QtWarningMsg, QRegularExpression(QStringLiteral("font family aliases")));
+    // The offscreen platform on Windows uses the FreeType font database, which warns once
+    // when the Qt install has no lib/fonts directory.
+    ignoreLogMessage("default", QtWarningMsg,
+                     QRegularExpression(QStringLiteral("QFontDatabase: Cannot find font directory")));
 }
 
 QObject* PluginUIModuleTest::_create(const QByteArray& qml)

@@ -6,6 +6,7 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QPluginLoader>
+#include <QtCore/QRegularExpression>
 #include <QtCore/QUrl>
 
 #include "PluginManifest.h"
@@ -236,7 +237,15 @@ void PluginLoaderGateTest::_inPlaceUpgradeChangesBuildMarker_test()
     // Overwrite the same path with a different build — installPlugin's shape: the old
     // image is deactivated (deleted above) but stays mapped (PreventUnloadHint, S2/S3);
     // only the file on disk changes before the fresh inspect+activate.
+#if defined(Q_OS_WIN)
+    // Windows refuses to delete or overwrite a mapped DLL but lets it be renamed, which
+    // frees the path the same way.
+    QVERIFY(QFile::rename(dylibPath, dylibPath + QStringLiteral(".mapped")));
+    // The renamed DLL stays mapped until the process exits, so the temp dir cannot be removed.
+    ignoreLogMessage("default", QtWarningMsg, QRegularExpression(QStringLiteral("QTemporaryDir: Unable to remove")));
+#else
     QVERIFY(QFile::remove(dylibPath));
+#endif
     QVERIFY(QFile::copy(testPluginFixtureV2Path(), dylibPath));
     PluginLoadInfo after = QGCPluginLoader::inspectPackage(packageDir);
     QCOMPARE(after.state, PluginState::Discovered);
@@ -342,6 +351,11 @@ void PluginLoaderGateTest::_inspectSdkPackageLoadsBinary_test()
     QCOMPARE(info.state, PluginState::Active);
     QVERIFY(info.plugin != nullptr);
     delete info.plugin;
+#if defined(Q_OS_WIN)
+    // The activated DLL stays mapped (PreventUnloadHint) and Windows cannot delete a mapped
+    // DLL, so the temp dir that holds it survives the test and Qt warns about it.
+    ignoreLogMessage("default", QtWarningMsg, QRegularExpression(QStringLiteral("QTemporaryDir: Unable to remove")));
+#endif
 }
 
 void PluginLoaderGateTest::_inspectPackageBadLayoutErrorsLegible_test()
