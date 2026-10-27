@@ -1,0 +1,32 @@
+Microsoft (R) COFF/PE Dumper Version 14.44.35229.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file C:\Users\jackhurley\qgc-sdk\build-rel\ExamplePlugin.dll
+
+File Type: DLL
+
+  Section contains the following exports for ExamplePlugin.dll
+
+    00000000 characteristics
+    FFFFFFFF time date stamp
+        0.00 version
+           1 ordinal base
+           3 number of functions
+           3 number of names
+
+    ordinal hint RVA      name
+
+          1    0 00001D20 qgcPluginBuildMarker
+          2    1 00001220 qt_plugin_instance
+          3    2 00001330 qt_plugin_query_metadata_v2
+
+  Summary
+
+        1000 .data
+        1000 .pdata
+        1000 .qtmetad
+        5000 .rdata
+        1000 .reloc
+        1000 .rsrc
+        3000 .text

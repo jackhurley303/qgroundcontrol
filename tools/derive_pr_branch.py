@@ -200,6 +200,8 @@ PLUGIN_SDK = PRSpec(
         "tools/verify_plugin_out_of_tree.py",
         "tools/plugin-verify.schema.json",
         "tools/tests/test_verify_plugin_out_of_tree.py",
+        # Captured `dumpbin /exports` output the gate's Windows parser is tested against.
+        "tools/tests/fixtures/dumpbin",
         # The QML contract watchdog (out-of-tree-plugins.md U5), invoked by the patched-in
         # macos.yml step "Check QML contract (frozen-tier watchdog)". Without this the derived
         # branch's CI would call a script that doesn't exist on it.
@@ -467,6 +469,7 @@ PLUGIN_SDK = PRSpec(
                 "tools/check_plugin_ui_contract.py",
                 "tools/tests/test_derive_plugin_ui_sdk.py",
                 "tools/tests/test_verify_plugin_out_of_tree.py",
+                "tools/tests/fixtures/dumpbin",
                 "tools/tests/test_check_plugin_ui_contract.py",
                 "tools/tests/test_pack_plugin.py",
                 "tools/README.md",

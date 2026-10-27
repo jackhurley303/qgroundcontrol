@@ -14,17 +14,22 @@ import json
 import os
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
+import verify_plugin_out_of_tree as verifier
 from verify_plugin_out_of_tree import (
+    FORBIDDEN_SYMBOLS_NA_ON_WINDOWS,
     GUARANTEED_QT_COMPONENTS,
+    GateContext,
     GateError,
     ManifestError,
     QmlModule,
     Runner,
     TriageEntry,
+    artifact_filename,
     assert_control_failed,
+    build_command,
     build_marker_script_for,
     check_forbidden_symbols,
     check_marker_embedded,
@@ -33,25 +38,37 @@ from verify_plugin_out_of_tree import (
     check_module_closure,
     check_qrc_closure,
     check_qt_components,
+    choose_qt_prefix,
+    configure_command,
+    dumpbin_export_lister,
     exclude_module_sources,
     expected_test_count,
     find_build_marker_source,
+    find_built_artifact,
     find_cmake_lists,
     find_forbidden_symbols,
     find_qml_sources,
     flatten_qml_entries,
+    generator_args,
     host_plugin_dir,
     inject_import,
+    is_desktop_kit,
+    link_path,
     parse_build_marker_source,
     parse_ctest_total,
+    parse_dumpbin_exports,
     parse_manifest,
     parse_qmldir_module_files,
     parse_qrc,
     parse_qt_components,
     qmllint_error_lines,
     qmllint_syntax_lines,
+    replace_path,
+    require_dumpbin,
+    run_forbidden_symbol_axis,
     triage_qmllint_output,
     version_key,
+    wait_for_next_mtime_tick,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -1032,3 +1049,445 @@ def test_the_deploy_dir_distinguishes_a_daily_build_from_a_stable_one():
 
     assert stable.name == "plugins" and stable.parent.name == "QGroundControl"
     assert daily.parent.name == "QGroundControl Daily"
+
+
+# --- Windows: reading exports with dumpbin ------------------------------------------------------------
+#
+# The fixtures are real `dumpbin /exports` output captured on the Windows test target (MSVC
+# 14.44), not text written to suit the parser.
+
+DUMPBIN_FIXTURES = Path(__file__).parent / "fixtures" / "dumpbin"
+
+
+def _dumpbin(name: str) -> str:
+    return (DUMPBIN_FIXTURES / f"{name}.dumpbin").read_text(encoding="utf-8")
+
+
+def test_dumpbin_exports_of_a_real_plugin_are_read_by_name():
+    assert parse_dumpbin_exports(_dumpbin("example_release_exports")) == [
+        "qgcPluginBuildMarker",
+        "qt_plugin_instance",
+        "qt_plugin_query_metadata_v2",
+    ]
+
+
+def test_dumpbin_crlf_output_reads_the_same_as_lf():
+    # dumpbin writes CRLF; the fixtures are stored with LF.
+    crlf = _dumpbin("example_release_exports").replace("\n", "\r\n")
+    assert parse_dumpbin_exports(crlf) == parse_dumpbin_exports(_dumpbin("example_release_exports"))
+
+
+def test_dumpbin_mangled_rows_keep_the_decorated_name_not_the_annotation():
+    names = parse_dumpbin_exports(_dumpbin("sdk_library_exports"))
+
+    assert len(names) == 127
+    assert "??0QGCAppService@@QEAA@PEAVQObject@@@Z" in names
+    assert all("(" not in name and "=" not in name for name in names)
+
+
+def test_a_dll_with_no_export_table_is_an_error_not_an_empty_list():
+    with pytest.raises(GateError, match="printed no export table"):
+        parse_dumpbin_exports(_dumpbin("no_export_table"))
+
+
+@pytest.mark.parametrize("fixture", ["corrupt_file", "missing_file"])
+def test_dumpbin_error_output_is_not_an_export_table(fixture: str):
+    with pytest.raises(GateError, match="printed no export table"):
+        parse_dumpbin_exports(_dumpbin(fixture))
+
+
+def test_a_truncated_export_table_is_an_error():
+    # The header says three names; two rows is a partial read, and a partial read could
+    # have lost exactly the row the marker check wants.
+    lines = _dumpbin("example_release_exports").splitlines()
+    kept = [line for line in lines if "qt_plugin_query_metadata_v2" not in line]
+
+    with pytest.raises(GateError, match="declares 3 exported name"):
+        parse_dumpbin_exports("\n".join(kept))
+
+
+def test_an_export_section_with_no_table_header_is_an_error():
+    lines = _dumpbin("example_release_exports").splitlines()
+    kept = [line for line in lines if "ordinal hint RVA" not in line]
+
+    with pytest.raises(GateError, match="cannot read"):
+        parse_dumpbin_exports("\n".join(kept))
+
+
+def test_a_forwarded_export_and_an_ordinal_only_export_are_handled():
+    text = (
+        "File Type: DLL\n\n  Section contains the following exports for X.dll\n\n"
+        "           2 number of functions\n           1 number of names\n\n"
+        "    ordinal hint RVA      name\n\n"
+        "          1    0          Forwarded = ntdll.RtlSomething\n"
+        "          2      00001000 [NONAME]\n\n  Summary\n"
+    )
+    assert parse_dumpbin_exports(text) == ["Forwarded"]
+
+
+def test_the_dumpbin_lister_yields_one_bare_name_per_line():
+    calls: list[tuple[str, ...]] = []
+
+    def capture(*args: str) -> tuple[int, str]:
+        calls.append(args)
+        return 0, _dumpbin("example_release_exports")
+
+    returncode, listing = dumpbin_export_lister(capture, "dumpbin")(Path("X.dll"))
+
+    assert calls == [("dumpbin", "/exports", "X.dll")]
+    assert returncode == 0
+    assert listing.splitlines() == [
+        "qgcPluginBuildMarker",
+        "qt_plugin_instance",
+        "qt_plugin_query_metadata_v2",
+    ]
+
+
+def test_a_dumpbin_failure_surfaces_as_a_failed_read_not_a_missing_marker(tmp_path: Path):
+    artifact = tmp_path / "X.dll"
+    artifact.write_bytes(b"not a pe image")
+    lister = dumpbin_export_lister(lambda *_: (1107, _dumpbin("corrupt_file")), "dumpbin")
+
+    with pytest.raises(GateError, match=r"dumpbin could not read .*exit 1107"):
+        check_marker_symbol_exported(artifact, lister, exact_names=True, tool="dumpbin")
+
+
+def test_the_real_plugin_exports_pass_the_marker_check(tmp_path: Path):
+    artifact = tmp_path / "ExamplePlugin.dll"
+    artifact.write_bytes(b"")
+    lister = dumpbin_export_lister(lambda *_: (0, _dumpbin("example_release_exports")), "dumpbin")
+
+    check_marker_symbol_exported(artifact, lister, exact_names=True)
+
+
+def test_a_plugin_without_the_marker_export_fails_the_dumpbin_check(tmp_path: Path):
+    # The same export table with the marker row removed: only the other two names are left.
+    lines = _dumpbin("example_release_exports").splitlines()
+    kept = [line for line in lines if "qgcPluginBuildMarker" not in line]
+    kept = [line.replace("3 number of", "2 number of") for line in kept]
+    artifact = tmp_path / "ExamplePlugin.dll"
+    artifact.write_bytes(b"")
+    lister = dumpbin_export_lister(lambda *_: (0, "\n".join(kept)), "dumpbin")
+
+    with pytest.raises(GateError, match="exports no qgcPluginBuildMarker"):
+        check_marker_symbol_exported(artifact, lister, exact_names=True)
+
+
+def test_a_mangled_export_containing_the_marker_name_is_not_the_marker(tmp_path: Path):
+    # The host resolves the plain C name. A C++ function that merely contains it exports a
+    # different symbol, so the substring match used for nm output must not apply here.
+    artifact = tmp_path / "ExamplePlugin.dll"
+    artifact.write_bytes(b"")
+    listing = "?qgcPluginBuildMarker@@YAPEBDXZ\nqt_plugin_instance\n"
+
+    with pytest.raises(GateError, match="exports no qgcPluginBuildMarker"):
+        check_marker_symbol_exported(artifact, lambda _: (0, listing), exact_names=True)
+
+
+def test_a_missing_dumpbin_is_an_error_naming_the_shell_it_needs():
+    with pytest.raises(GateError, match=r"dumpbin is not on PATH.*vcvars64"):
+        require_dumpbin(lambda _name: None)
+
+
+def test_a_found_dumpbin_is_returned():
+    assert require_dumpbin(lambda name: f"C:/vc/{name}.exe") == "C:/vc/dumpbin.exe"
+
+
+def test_a_tool_that_is_not_installed_stops_the_gate_with_its_name():
+    with pytest.raises(GateError, match="could not run definitely-not-a-real-tool"):
+        Runner(verbose=False).capture("definitely-not-a-real-tool", "--version")
+
+
+def _context(tmp_path: Path, manifest: dict[str, object]) -> GateContext:
+    def refuse(*_args: object, **_kwargs: object) -> tuple[int, str]:
+        raise AssertionError("no tool may run on the N/A path")
+
+    runner = Runner(verbose=False)
+    runner.capture = refuse  # type: ignore[method-assign]
+    return GateContext(
+        manifest=parse_manifest(manifest),
+        work_dir=tmp_path,
+        scratch_plugin=tmp_path,
+        build_dir=tmp_path,
+        sdk_prefix=tmp_path,
+        qt_root=tmp_path,
+        qmllint=tmp_path,
+        runner=runner,
+        parallel=1,
+    )
+
+
+def test_the_forbidden_symbol_axis_is_na_on_windows_with_the_link_time_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    monkeypatch.setattr(verifier, "is_windows", lambda: True)
+    context = _context(
+        tmp_path,
+        _manifest(
+            forbidden_symbols={"enabled": True, "patterns": ["mavlink"], "reason": "headers-only"}
+        ),
+    )
+
+    run_forbidden_symbol_axis(context, tmp_path / "absent.dll")
+
+    out = capsys.readouterr().out
+    assert "N/A on Windows" in out
+    assert "resolves every import at link time" in FORBIDDEN_SYMBOLS_NA_ON_WINDOWS
+    assert FORBIDDEN_SYMBOLS_NA_ON_WINDOWS in out
+
+
+def test_the_forbidden_symbol_axis_still_runs_off_windows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(verifier, "is_windows", lambda: False)
+    context = _context(
+        tmp_path,
+        _manifest(
+            forbidden_symbols={"enabled": True, "patterns": ["mavlink"], "reason": "headers-only"}
+        ),
+    )
+
+    with pytest.raises(AssertionError, match="no tool may run"):
+        run_forbidden_symbol_axis(context, _touch(tmp_path / "libX.so"))
+
+
+def _touch(path: Path) -> Path:
+    path.write_bytes(b"")
+    return path
+
+
+# --- Build: generator, configuration, artifact location -------------------------------------------
+
+
+def test_ninja_is_chosen_when_present_and_no_generator_was_asked_for():
+    assert generator_args({}, lambda _name: "/usr/bin/ninja") == ["-G", "Ninja"]
+
+
+def test_an_explicit_generator_in_the_environment_is_left_alone():
+    assert (
+        generator_args({"CMAKE_GENERATOR": "Unix Makefiles"}, lambda _name: "/usr/bin/ninja") == []
+    )
+
+
+def test_no_generator_is_forced_when_ninja_is_absent():
+    assert generator_args({}, lambda _name: None) == []
+
+
+def test_both_the_build_and_the_configure_ask_for_release(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(verifier, "is_windows", lambda: True)
+    configure = configure_command(Path("b"), Path("s"), Path("sdk"), Path("qt"), {"X": "1"})
+
+    assert "-DCMAKE_BUILD_TYPE=Release" in configure
+    assert build_command("b", 4) == [
+        "cmake",
+        "--build",
+        "b",
+        "--config",
+        "Release",
+        "--parallel",
+        "4",
+    ]
+    assert build_command("b", 4, "--target", "t")[3:5] == ["--target", "t"]
+
+
+def test_off_windows_the_configure_sets_no_build_type(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(verifier, "is_windows", lambda: False)
+    configure = configure_command(Path("b"), Path("s"), Path("sdk"), Path("qt"), {"X": "1"})
+
+    assert not any(str(arg).startswith("-DCMAKE_BUILD_TYPE") for arg in configure)
+
+
+def test_the_artifact_is_found_in_a_single_config_build_dir(tmp_path: Path):
+    expected = _touch(tmp_path / artifact_filename("SomePlugin"))
+
+    assert find_built_artifact(tmp_path, "SomePlugin") == expected
+
+
+def test_the_artifact_is_found_in_a_multi_config_release_folder(tmp_path: Path):
+    (tmp_path / "Release").mkdir()
+    expected = _touch(tmp_path / "Release" / artifact_filename("SomePlugin"))
+
+    assert find_built_artifact(tmp_path, "SomePlugin") == expected
+
+
+def test_a_debug_folder_artifact_is_not_taken_for_the_release_one(tmp_path: Path):
+    (tmp_path / "Debug").mkdir()
+    _touch(tmp_path / "Debug" / artifact_filename("SomePlugin"))
+
+    with pytest.raises(GateError, match="produced no artifact"):
+        find_built_artifact(tmp_path, "SomePlugin")
+
+
+def test_an_artifact_in_two_places_is_an_error_not_a_choice(tmp_path: Path):
+    (tmp_path / "Release").mkdir()
+    _touch(tmp_path / artifact_filename("SomePlugin"))
+    _touch(tmp_path / "Release" / artifact_filename("SomePlugin"))
+
+    with pytest.raises(GateError, match="more than one place"):
+        find_built_artifact(tmp_path, "SomePlugin")
+
+
+def test_the_marker_rebuild_waits_past_one_second_of_file_time():
+    # GNU make 3.81 compares file times at one-second resolution; a touch inside the same
+    # second as the first build's object file is invisible to it.
+    waited: list[float] = []
+
+    wait_for_next_mtime_tick(waited.append)
+
+    assert len(waited) == 1 and waited[0] > 1.0
+
+
+# --- Qt auto-detect: the host's desktop kit only -------------------------------------------------------
+
+
+def _kits(*pairs: tuple[str, str]) -> list[Path]:
+    return [Path("/qt") / version / kit for version, kit in pairs]
+
+
+def test_desktop_kits_per_host():
+    assert is_desktop_kit("macos", "darwin", "arm64")
+    assert is_desktop_kit("gcc_64", "linux", "x86_64")
+    assert is_desktop_kit("gcc_arm64", "linux", "aarch64")
+    assert is_desktop_kit("msvc2022_64", "win32", "AMD64")
+    assert is_desktop_kit("msvc2022_arm64", "win32", "ARM64")
+    assert not is_desktop_kit("gcc_arm64", "linux", "x86_64")
+    assert not is_desktop_kit("mingw_64", "win32", "AMD64")
+    assert not is_desktop_kit("android_arm64_v8a", "linux", "x86_64")
+    assert not is_desktop_kit("wasm_singlethread", "darwin", "arm64")
+    assert not is_desktop_kit("ios", "darwin", "arm64")
+
+
+def test_an_android_kit_at_a_newer_version_is_not_taken_for_the_desktop_kit():
+    # The defect this replaces: the newest-first pick landed on android_arm64_v8a, which has
+    # no qmllint, and failed with "qmllint not executable".
+    candidates = _kits(("6.12.0", "android_arm64_v8a"), ("6.12.0", "gcc_64"), ("6.11.1", "gcc_64"))
+
+    assert choose_qt_prefix(candidates, "linux", "x86_64") == Path("/qt/6.12.0/gcc_64")
+
+
+def test_the_newest_desktop_kit_wins_by_version_not_by_string():
+    candidates = _kits(("6.9.0", "macos"), ("6.11.1", "macos"), ("6.10.2", "macos"))
+
+    assert choose_qt_prefix(candidates, "darwin", "arm64") == Path("/qt/6.11.1/macos")
+
+
+def test_a_host_with_only_foreign_kits_is_an_error_listing_them():
+    candidates = _kits(("6.12.0", "android_arm64_v8a"), ("6.12.0", "wasm_multithread"))
+
+    with pytest.raises(GateError, match=r"no desktop Qt kit.*android_arm64_v8a"):
+        choose_qt_prefix(candidates, "linux", "x86_64")
+
+
+def test_no_kits_at_all_is_an_error():
+    with pytest.raises(GateError, match="no desktop Qt kit"):
+        choose_qt_prefix([], "linux", "x86_64")
+
+
+def test_two_desktop_kits_at_the_newest_version_are_ambiguous():
+    candidates = _kits(("6.12.0", "msvc2019_64"), ("6.12.0", "msvc2022_64"))
+
+    with pytest.raises(GateError, match=r"more than one desktop Qt kit.*--qt-root"):
+        choose_qt_prefix(candidates, "win32", "AMD64")
+
+
+def test_an_older_second_kit_does_not_make_the_newest_ambiguous():
+    candidates = _kits(("6.12.0", "msvc2022_64"), ("6.10.0", "msvc2019_64"))
+
+    assert choose_qt_prefix(candidates, "win32", "AMD64") == Path("/qt/6.12.0/msvc2022_64")
+
+
+# --- Windows has no symlink privilege by default -------------------------------------------------------
+
+
+def test_a_failed_symlink_off_windows_is_an_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    origin = _touch(tmp_path / "origin")
+    monkeypatch.setattr(verifier, "is_windows", lambda: False)
+
+    def refuse(*_args: object) -> None:
+        raise OSError("not permitted")
+
+    monkeypatch.setattr(os, "symlink", refuse)
+
+    with pytest.raises(GateError, match="cannot link"):
+        link_path(origin, tmp_path / "link")
+
+
+def test_a_file_that_cannot_be_symlinked_on_windows_is_copied(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    origin = tmp_path / "origin.qmltypes"
+    origin.write_text("contents")
+    monkeypatch.setattr(verifier, "is_windows", lambda: True)
+
+    def refuse(*_args: object) -> None:
+        raise OSError("A required privilege is not held by the client")
+
+    monkeypatch.setattr(os, "symlink", refuse)
+
+    link_path(origin, tmp_path / "link.qmltypes")
+
+    assert (tmp_path / "link.qmltypes").read_text() == "contents"
+
+
+def test_a_directory_that_cannot_be_symlinked_on_windows_becomes_a_junction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    origin = tmp_path / "QtQuick"
+    origin.mkdir()
+    monkeypatch.setattr(verifier, "is_windows", lambda: True)
+    commands: list[tuple[str, ...]] = []
+
+    def refuse(*_args: object) -> None:
+        raise OSError("A required privilege is not held by the client")
+
+    def capture(self: Runner, *args: str | Path, cwd: Path | None = None) -> tuple[int, str]:
+        commands.append(tuple(str(arg) for arg in args))
+        return 0, ""
+
+    monkeypatch.setattr(os, "symlink", refuse)
+    monkeypatch.setattr(Runner, "capture", capture)
+
+    link_path(origin, tmp_path / "link")
+
+    assert commands == [("cmd", "/c", "mklink", "/J", str(tmp_path / "link"), str(origin))]
+
+
+def test_a_junction_that_cannot_be_made_is_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    origin = tmp_path / "QtQuick"
+    origin.mkdir()
+    monkeypatch.setattr(verifier, "is_windows", lambda: True)
+
+    def refuse(*_args: object) -> None:
+        raise OSError("A required privilege is not held by the client")
+
+    monkeypatch.setattr(os, "symlink", refuse)
+    monkeypatch.setattr(Runner, "capture", lambda self, *a, **k: (1, "access denied"))
+
+    with pytest.raises(GateError, match="cannot make a junction"):
+        link_path(origin, tmp_path / "link")
+
+
+def test_a_windows_qmllint_path_is_mapped_back_to_the_source_in_either_spelling():
+    # qmllint prints C:/... on Windows while the gate holds the path as C:\\... .
+    flat = PureWindowsPath("C:/Temp/flat-qml/A.qml")
+    forward = "Error: C:/Temp/flat-qml/A.qml:3:1: Failed [import]"
+    backward = forward.replace("/", "\\")
+
+    assert replace_path(forward, flat, "qml/A.qml") == "Error: qml/A.qml:3:1: Failed [import]"
+    assert replace_path(backward, flat, "qml/A.qml") == "Error: qml/A.qml:3:1: Failed [import]"
+
+
+def test_a_missing_origin_is_an_error_not_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(verifier, "is_windows", lambda: True)
+
+    def refuse(*_args: object) -> None:
+        raise OSError("A required privilege is not held by the client")
+
+    monkeypatch.setattr(os, "symlink", refuse)
+
+    with pytest.raises(GateError, match="cannot copy"):
+        link_path(tmp_path / "absent.qmltypes", tmp_path / "link.qmltypes")

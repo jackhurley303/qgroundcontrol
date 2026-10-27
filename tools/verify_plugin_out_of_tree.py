@@ -27,6 +27,10 @@ install's contents are deliberately not the source of truth for "guaranteed".
 Stdlib only, single file plus its schema: it installs into the SDK package and must run
 from an unpacked zip that contains no QGC checkout and no `tools/` package.
 
+Runs on macOS, Linux and Windows. On Windows run it from a shell where the MSVC toolchain is
+on PATH (a `vcvars64` shell): the build needs `cl`, and the build-marker axis reads the
+plugin's exports with `dumpbin`. A missing `dumpbin` fails the gate before anything builds.
+
 Usage:
     python3 verify_plugin_out_of_tree.py <plugin-dir> [--sdk <prefix>] [--build-dir <dir>]
         [--qt-root <dir>] [--work <dir>] [--parallel <n>]
@@ -38,14 +42,16 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import xml.etree.ElementTree as ElementTree
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import TYPE_CHECKING
 
 import _bootstrap as _bootstrap
@@ -159,6 +165,14 @@ BASE_MODULE_REACH_IMPORT = "QGroundControl.Controls"
 # The one resource prefix a plugin's QML may ship under. Sibling components resolve by
 # same-directory lookup at runtime, so every .qml has to land in the same flat prefix.
 QML_RESOURCE_PREFIX = "/qml"
+
+
+# Why the forbidden-symbol axis has nothing to check on Windows, stated once for the run
+# output and the tests.
+FORBIDDEN_SYMBOLS_NA_ON_WINDOWS = (
+    "MSVC resolves every import at link time, so a call into QGroundControl's own symbols "
+    "already fails the link; there is no load-time undefined symbol left to find"
+)
 
 
 class GateError(Exception):
@@ -724,7 +738,11 @@ def build_marker_script_for(source: Path) -> Path:
 
 
 def check_marker_symbol_exported(
-    artifact: Path, nm_runner: Callable[[Path], tuple[int, str]]
+    artifact: Path,
+    nm_runner: Callable[[Path], tuple[int, str]],
+    *,
+    exact_names: bool = False,
+    tool: str = "nm",
 ) -> None:
     """The symbol must be *exported*, not merely present in the source.
 
@@ -733,22 +751,33 @@ def check_marker_symbol_exported(
     answer. Here the direction is inverted — a broken measurement would report the symbol
     missing, and "missing" is exactly what this check treats as a failure — so the
     instrument checks come first and say so distinctly.
+
+    `tool` names the reader in the messages. `exact_names` is for a lister that prints one
+    bare export name per line (the dumpbin reader). The host resolves the marker by its plain
+    C name, so a C++-mangled export that merely contains the name must not pass.
     """
     if not artifact.is_file():
         raise GateError(f"no standalone artifact at {artifact} to read the build marker from")
     returncode, output = nm_runner(artifact)
     if returncode != 0:
         raise GateError(
-            f"nm could not read {artifact} (exit {returncode}) — its symbols were never "
+            f"{tool} could not read {artifact} (exit {returncode}) — its symbols were never "
             f"inspected, which is not the same as finding no marker.\n{output}"
         )
     if not output.strip():
         raise GateError(
-            f"nm listed no defined symbols at all in {artifact} — a linked plugin always has "
+            f"{tool} listed no defined symbols at all in {artifact} — a linked plugin always has "
             f"some, so this is broken instrumentation rather than a missing marker"
         )
     # Mach-O prefixes C symbols with an underscore; ELF does not.
-    if re.search(rf"\b_?{BUILD_MARKER_SYMBOL}\b", output) is None:
+    if exact_names:
+        found = any(
+            line.strip() in {BUILD_MARKER_SYMBOL, f"_{BUILD_MARKER_SYMBOL}"}
+            for line in output.splitlines()
+        )
+    else:
+        found = re.search(rf"\b_?{BUILD_MARKER_SYMBOL}\b", output) is not None
+    if not found:
         raise GateError(
             f"the standalone artifact exports no {BUILD_MARKER_SYMBOL} — the host would read "
             f"an empty build marker for a plugin built the way real plugins ship"
@@ -778,6 +807,97 @@ def check_marker_not_embedded(artifact: Path, marker: str, label: str) -> None:
             f"{label}: the artifact still contains the previous marker {marker!r} — it was "
             f"not relinked, so its marker names a build other than the one on disk"
         )
+
+
+# --- Windows exports: dumpbin ---------------------------------------------------------------
+#
+# Windows has no nm. `dumpbin /exports` comes with the MSVC toolchain and prints the export
+# table as text. A listing is only believed once it parses completely: the header must be
+# there, the table must be there, and the number of names it declares must equal the number
+# of rows read. A tool that printed an error, or a format this parser does not know, then
+# fails the gate instead of reading as a binary with no marker or, worse, a clean one.
+
+_DUMPBIN_EXPORTS_HEADER = "Section contains the following exports for"
+_DUMPBIN_TABLE_HEADER = re.compile(r"^\s*ordinal\s+hint\s+RVA\s+name\s*$")
+_DUMPBIN_NAME_COUNT = re.compile(r"^\s*(\d+)\s+number of names\s*$")
+# `ordinal hint RVA name [= forwarded-or-undecorated text]`. The hint is hex and a forwarded
+# export has no RVA column. An export by ordinal only has no name and is not matched.
+_DUMPBIN_EXPORT_ROW = re.compile(
+    r"^\s*(\d+)\s+[0-9A-Fa-f]+\s+(?:[0-9A-Fa-f]{8}\s+)?(?P<name>[^\s=]+)(?:\s+=\s+.*)?$"
+)
+
+
+def parse_dumpbin_exports(text: str) -> list[str]:
+    """The exported names from `dumpbin /exports` output; an unparseable table is an error."""
+    lines = text.splitlines()
+    if not any(_DUMPBIN_EXPORTS_HEADER in line for line in lines):
+        raise GateError(
+            f"dumpbin printed no export table (no '{_DUMPBIN_EXPORTS_HEADER}' line) — the "
+            f"binary exports nothing or the output is not what this gate reads, and neither "
+            f"may stand in for a marker that was found.\n{text}"
+        )
+    declared: int | None = None
+    table_start: int | None = None
+    for index, line in enumerate(lines):
+        count = _DUMPBIN_NAME_COUNT.match(line)
+        if count is not None:
+            declared = int(count.group(1))
+        if _DUMPBIN_TABLE_HEADER.match(line):
+            table_start = index + 1
+            break
+    if declared is None or table_start is None:
+        raise GateError(
+            "dumpbin printed an export section this gate cannot read (no 'number of names' "
+            f"count or no 'ordinal hint RVA name' table header).\n{text}"
+        )
+    names: list[str] = []
+    for line in lines[table_start:]:
+        if not line.strip():
+            if names:
+                break
+            continue
+        row = _DUMPBIN_EXPORT_ROW.match(line)
+        if row is None:
+            break
+        if row.group("name") != "[NONAME]":
+            names.append(row.group("name"))
+    if len(names) != declared:
+        raise GateError(
+            f"dumpbin declares {declared} exported name(s) but {len(names)} were read from "
+            f"its table — a partial read is not a measurement.\n{text}"
+        )
+    return names
+
+
+def require_dumpbin(which: Callable[[str], str | None] = shutil.which) -> str:
+    """The dumpbin executable, or an error naming the shell it needs.
+
+    Looked up once, before anything builds: a gate that only discovers at the marker axis
+    that it cannot read exports has spent a full build to learn nothing.
+    """
+    found = which("dumpbin")
+    if found is None:
+        raise GateError(
+            "dumpbin is not on PATH, so the build-marker axis cannot read the plugin's "
+            "exports. Run the gate from a shell with the MSVC toolchain on PATH (a "
+            "`vcvars64` shell); there is no fallback, because an unread export table is not "
+            "a pass."
+        )
+    return found
+
+
+def dumpbin_export_lister(
+    capture: Callable[..., tuple[int, str]], dumpbin: str
+) -> Callable[[Path], tuple[int, str]]:
+    """An nm-shaped runner over dumpbin: (exit code, one bare export name per line)."""
+
+    def lister(path: Path) -> tuple[int, str]:
+        returncode, output = capture(dumpbin, "/exports", str(path))
+        if returncode != 0:
+            return returncode, output
+        return 0, "\n".join(parse_dumpbin_exports(output))
+
+    return lister
 
 
 # --- The QML axis --------------------------------------------------------------------------
@@ -1060,12 +1180,44 @@ def assert_control_failed(label: str, returncode: int, output: str, pattern: str
 # --- Platform ------------------------------------------------------------------------------
 
 
+# The configuration every gate build uses. The SDK ships a Release QGCPluginAPI, and on
+# Windows a plugin must link the Release Qt and CRT (a Debug plugin loads a second Qt beside
+# the host's). Single-config generators ignore the --config flags this feeds.
+BUILD_CONFIG = "Release"
+
+
+def is_windows() -> bool:
+    return os.name == "nt"
+
+
 def artifact_filename(name: str) -> str:
     if sys.platform == "darwin":
         return f"lib{name}.dylib"
-    if os.name == "nt":
+    if is_windows():
         return f"{name}.dll"
     return f"lib{name}.so"
+
+
+def find_built_artifact(build_dir: Path, name: str, config: str = BUILD_CONFIG) -> Path:
+    """The one built artifact, from a single-config or a multi-config build dir.
+
+    A multi-config generator puts it in a per-configuration subfolder. Finding it in both
+    places is an error, not a choice: the gate cannot tell which one the build just made.
+    """
+    filename = artifact_filename(name)
+    searched = [build_dir / filename, build_dir / config / filename]
+    found = [path for path in searched if path.is_file()]
+    if not found:
+        raise GateError(
+            "the standalone build produced no artifact; looked in:\n  "
+            + "\n  ".join(str(path) for path in searched)
+        )
+    if len(found) > 1:
+        raise GateError(
+            "the standalone build dir holds the artifact in more than one place:\n  "
+            + "\n  ".join(str(path) for path in found)
+        )
+    return found[0]
 
 
 def host_plugin_dir(app_name: str, org_name: str, stable_build: bool) -> Path:
@@ -1073,7 +1225,7 @@ def host_plugin_dir(app_name: str, org_name: str, stable_build: bool) -> Path:
     directory = app_name if stable_build else f"{app_name} Daily"
     if sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support"
-    elif os.name == "nt":
+    elif is_windows():
         base = Path(os.environ.get("APPDATA", str(Path.home())))
     else:
         base = Path.home() / ".local" / "share"
@@ -1094,9 +1246,14 @@ class Runner:
         command = [str(arg) for arg in args]
         if self.verbose:
             print(f"  $ {' '.join(command)}", flush=True)
-        result = subprocess.run(
-            command, cwd=cwd, capture_output=True, text=True, check=False, env=self.env
-        )
+        try:
+            result = subprocess.run(
+                command, cwd=cwd, capture_output=True, text=True, check=False, env=self.env
+            )
+        except OSError as exc:
+            # A tool that is not installed must stop the gate with its name, not escape as a
+            # traceback and not read as an empty result.
+            raise GateError(f"could not run {command[0]}: {exc}") from exc
         return result.returncode, result.stdout + result.stderr
 
     def check(self, label: str, *args: str | Path, cwd: Path | None = None) -> str:
@@ -1121,26 +1278,72 @@ def version_key(name: str) -> tuple[int, ...]:
     return tuple(parts)
 
 
+def is_desktop_kit(kit: str, system: str, machine: str) -> bool:
+    """Whether a Qt kit directory name is a desktop kit for this host.
+
+    A Qt install holds one directory per kit under its version (`gcc_64`, `macos`,
+    `android_arm64_v8a`, `wasm_singlethread`, `ios`, ...). Only the host's own desktop kit
+    can build and lint a plugin that loads into this host's QGroundControl, and `qmllint`
+    exists only there. `system` is `sys.platform`; `machine` is `platform.machine()`.
+    """
+    arm = machine.lower() in {"arm64", "aarch64"}
+    if system == "darwin":
+        return kit == "macos"
+    if system.startswith("linux"):
+        return kit == ("gcc_arm64" if arm else "gcc_64")
+    if system == "win32":
+        return re.fullmatch(r"msvc\d{4}_arm64" if arm else r"msvc\d{4}_64", kit) is not None
+    return False
+
+
+def choose_qt_prefix(candidates: Sequence[Path], system: str, machine: str) -> Path:
+    """The newest desktop kit among `<qt>/<version>/<kit>` prefixes, or an error.
+
+    Ambiguity is an error: two desktop kits at the newest version (two MSVC years, or the
+    same kit under two install roots) mean the choice is the user's, and a silent pick
+    would build and lint against a Qt the plugin will not run on.
+    """
+    desktop = [path for path in candidates if is_desktop_kit(path.name, system, machine)]
+    if not desktop:
+        seen = ", ".join(sorted(f"{path.parent.name}/{path.name}" for path in candidates))
+        raise GateError(
+            f"no desktop Qt kit for this host ({system}, {machine}) among: {seen or 'none'}; "
+            f"pass --qt-root or set QT_ROOT"
+        )
+    # Version-ordered, not lexicographic: '6.9.0' sorts after '6.11.1' as a string, so a
+    # developer keeping an older Qt beside a newer one would silently have every run built,
+    # staged and linted against the old one.
+    newest = max(version_key(path.parent.name) for path in desktop)
+    top = sorted(path for path in desktop if version_key(path.parent.name) == newest)
+    if len(top) > 1:
+        raise GateError(
+            "more than one desktop Qt kit at the newest version; pass --qt-root or set "
+            "QT_ROOT to choose:\n  " + "\n  ".join(str(path) for path in top)
+        )
+    return top[0]
+
+
+def qt_install_roots() -> list[Path]:
+    """Where Qt's installer puts a kit tree: `~/Qt`, and `C:\\Qt` on Windows."""
+    roots = [Path.home() / "Qt"]
+    if is_windows():
+        roots.append(Path(os.environ.get("SYSTEMDRIVE", "C:") + "\\") / "Qt")
+    return roots
+
+
 def resolve_qt_root(explicit: str | None) -> Path:
     if explicit:
         root = Path(explicit).expanduser()
     elif os.environ.get("QT_ROOT"):
         root = Path(os.environ["QT_ROOT"]).expanduser()
     else:
-        candidates = sorted(
-            (
-                path
-                for path in Path.home().glob("Qt/*/*")
-                if (path / "lib" / "cmake" / "Qt6").is_dir()
-            ),
-            # Version-ordered, not lexicographic: '6.9.0' sorts after '6.11.1' as a string,
-            # so a developer keeping an older Qt beside a newer one would silently have
-            # every run built, staged and linted against the old one.
-            key=lambda path: version_key(path.parent.name),
-        )
-        if not candidates:
-            raise GateError("no Qt prefix found; pass --qt-root or set QT_ROOT")
-        root = candidates[-1]
+        candidates = [
+            path
+            for base in qt_install_roots()
+            for path in base.glob("*/*")
+            if (path / "lib" / "cmake" / "Qt6").is_dir()
+        ]
+        root = choose_qt_prefix(candidates, sys.platform, platform.machine())
     if not (root / "lib" / "cmake" / "Qt6" / "qt.toolchain.cmake").is_file():
         raise GateError(f"{root} is not a Qt prefix (no lib/cmake/Qt6/qt.toolchain.cmake)")
     return root
@@ -1151,7 +1354,7 @@ def resolve_qmllint(qt_root: Path) -> Path:
     qmllint = (
         Path(override)
         if override
-        else qt_root / "bin" / ("qmllint.exe" if os.name == "nt" else "qmllint")
+        else qt_root / "bin" / ("qmllint.exe" if is_windows() else "qmllint")
     )
     if not os.access(qmllint, os.X_OK):
         raise GateError(f"qmllint not executable at {qmllint} (set QMLLINT)")
@@ -1198,6 +1401,33 @@ def read_sdk_host_identity(sdk_prefix: Path) -> tuple[str, str, bool]:
     )
 
 
+def link_path(origin: Path, link: Path) -> None:
+    """Make `link` resolve to `origin`: a symlink, or on Windows what that host allows.
+
+    Creating a symlink on Windows needs a privilege most accounts lack. A directory falls
+    back to a junction, which needs none and which the QML import path follows the same
+    way. A file falls back to a copy. Anything else is an error: an import path that is
+    missing a module would fail every plugin for the wrong reason.
+    """
+    try:
+        os.symlink(origin, link)
+        return
+    except OSError as exc:
+        if not is_windows():
+            raise GateError(f"cannot link {link} to {origin}: {exc}") from exc
+    if origin.is_dir():
+        returncode, output = Runner(verbose=False).capture(
+            "cmd", "/c", "mklink", "/J", str(link), str(origin)
+        )
+        if returncode != 0:
+            raise GateError(f"cannot make a junction {link} to {origin}:\n{output}")
+    else:
+        try:
+            shutil.copy2(origin, link)
+        except OSError as exc:
+            raise GateError(f"cannot copy {origin} to {link}: {exc}") from exc
+
+
 def stage_guaranteed_qt_qml(qt_root: Path, destination: Path) -> Path:
     """Symlink the guaranteed Qt QML modules into an import path of exactly that set.
 
@@ -1213,7 +1443,7 @@ def stage_guaranteed_qt_qml(qt_root: Path, destination: Path) -> Path:
     for name in (*GUARANTEED_QML_MODULES, *GUARANTEED_QML_SUPPORT_FILES):
         origin = source / name
         if origin.exists():
-            os.symlink(origin, destination / name)
+            link_path(origin, destination / name)
             staged += 1
     if staged == 0:
         raise GateError(
@@ -1237,6 +1467,8 @@ class GateContext:
     qmllint: Path
     runner: Runner
     parallel: int
+    dumpbin: str | None = None
+    """The dumpbin executable, set on Windows only; the marker axis reads exports with it."""
     qml_import_paths: list[Path] = field(default_factory=list)
     linted_file_count: int | None = None
     """None when the QML axis was declared N/A — not the same as having linted nothing."""
@@ -1269,31 +1501,69 @@ def copy_plugin_to_scratch(plugin_root: Path, destination: Path) -> None:
             )
 
 
+def generator_args(
+    env: dict[str, str] | None = None, which: Callable[[str], str | None] = shutil.which
+) -> list[str]:
+    """`-G Ninja` when the caller chose no generator and Ninja is installed.
+
+    The default generator differs per host (Makefiles here, Visual Studio on Windows), and
+    the marker-regeneration check is sensitive to that. An explicit CMAKE_GENERATOR in the
+    environment is the caller's choice and is left alone.
+    """
+    if (env if env is not None else os.environ).get("CMAKE_GENERATOR"):
+        return []
+    return ["-G", "Ninja"] if which("ninja") else []
+
+
+def configure_command(
+    build_dir: Path, source: Path, sdk_prefix: Path, qt_root: Path, env: dict[str, str] | None
+) -> list[str | Path]:
+    """The standalone configure command, shared by the real build and the negative control."""
+    command: list[str | Path] = [
+        "cmake",
+        *generator_args(env),
+        "-B",
+        build_dir,
+        "-S",
+        source,
+        f"-DCMAKE_PREFIX_PATH={sdk_prefix};{qt_root}",
+        f"-DCMAKE_TOOLCHAIN_FILE={qt_root / 'lib' / 'cmake' / 'Qt6' / 'qt.toolchain.cmake'}",
+    ]
+    if is_windows():
+        # A single-config generator (Ninja) needs the configuration at configure time; a
+        # multi-config one ignores it and takes --config at build time.
+        command.append(f"-DCMAKE_BUILD_TYPE={BUILD_CONFIG}")
+    return command
+
+
+def build_command(build_dir: Path | str, parallel: int, *extra: str) -> list[str | Path]:
+    return [
+        "cmake",
+        "--build",
+        build_dir,
+        *extra,
+        "--config",
+        BUILD_CONFIG,
+        "--parallel",
+        str(parallel),
+    ]
+
+
 def configure_and_build(context: GateContext) -> Path:
     step("Configuring standalone (find_package(QGCPluginAPI), no QGC source present)")
     context.runner.check(
         "standalone configure",
-        "cmake",
-        "-B",
-        context.build_dir,
-        "-S",
-        context.scratch_plugin,
-        f"-DCMAKE_PREFIX_PATH={context.sdk_prefix};{context.qt_root}",
-        f"-DCMAKE_TOOLCHAIN_FILE={context.qt_root / 'lib' / 'cmake' / 'Qt6' / 'qt.toolchain.cmake'}",
+        *configure_command(
+            context.build_dir,
+            context.scratch_plugin,
+            context.sdk_prefix,
+            context.qt_root,
+            context.runner.env,
+        ),
     )
     step("Building standalone (plugin and every test target)")
-    context.runner.check(
-        "standalone build",
-        "cmake",
-        "--build",
-        context.build_dir,
-        "--parallel",
-        str(context.parallel),
-    )
-    artifact = context.build_dir / artifact_filename(context.manifest.artifact_name)
-    if not artifact.is_file():
-        raise GateError(f"the standalone build produced no artifact at {artifact}")
-    return artifact
+    context.runner.check("standalone build", *build_command(context.build_dir, context.parallel))
+    return find_built_artifact(context.build_dir, context.manifest.artifact_name)
 
 
 def run_test_axis(context: GateContext) -> None:
@@ -1332,6 +1602,8 @@ def run_test_axis(context: GateContext) -> None:
         "ctest",
         "--test-dir",
         str(context.build_dir),
+        "-C",
+        BUILD_CONFIG,
         "--output-on-failure",
     )
 
@@ -1341,12 +1613,14 @@ def run_forbidden_symbol_axis(context: GateContext, artifact: Path) -> None:
     if not axis.enabled:
         step(f"Forbidden-symbol axis declared N/A: {axis.reason}")
         return
+    if is_windows():
+        step(f"Forbidden-symbol axis N/A on Windows: {FORBIDDEN_SYMBOLS_NA_ON_WINDOWS}")
+        return
     step(f"Undefined-symbol check on the standalone artifact ({axis.reason})")
 
     # ELF: read the dynamic table, since a shared object's static symtab is routinely
     # stripped and `nm -u` would then report "no symbols" and exit 1. Mach-O has no such
-    # split, and macOS nm rejects -D. Windows has no nm at all — the check's own empty-output
-    # and exit-status guards are what stop a platform gap from reading as a clean result.
+    # split, and macOS nm rejects -D. Windows has no nm; it takes the N/A branch above.
     nm_flags = ["-u"] if sys.platform == "darwin" else ["-D", "-u"]
 
     def nm(path: Path) -> tuple[int, str]:
@@ -1361,7 +1635,7 @@ def run_build_marker_axis(context: GateContext, artifact: Path) -> None:
 
     # Defined symbols this time, not undefined ones. ELF: the dynamic table, since a
     # shared object's static symtab is routinely stripped. Mach-O has no such split and
-    # macOS nm rejects -D.
+    # macOS nm rejects -D. Windows reads the export table with dumpbin.
     nm_flags = ["-gU"] if sys.platform == "darwin" else ["-D", "--defined-only"]
 
     def nm(path: Path) -> tuple[int, str]:
@@ -1369,7 +1643,17 @@ def run_build_marker_axis(context: GateContext, artifact: Path) -> None:
 
     source = find_build_marker_source(context.build_dir)
     first = parse_build_marker_source(source.read_text(encoding="utf-8"))
-    check_marker_symbol_exported(artifact, nm)
+    if is_windows():
+        if context.dumpbin is None:
+            raise GateError("the build-marker axis ran on Windows with no dumpbin resolved")
+        check_marker_symbol_exported(
+            artifact,
+            dumpbin_export_lister(context.runner.capture, context.dumpbin),
+            exact_names=True,
+            tool="dumpbin",
+        )
+    else:
+        check_marker_symbol_exported(artifact, nm)
     check_marker_embedded(artifact, first, "the standalone build")
     print(f"{BUILD_MARKER_SYMBOL} exported, and this build's marker is in the artifact: {first}")
 
@@ -1380,14 +1664,11 @@ def run_build_marker_axis(context: GateContext, artifact: Path) -> None:
     # build — the half U1b adds. That the dependency SET is complete is the in-tree arm's
     # own proof (PluginLoaderGateTest), over the same shared generator.
     script = build_marker_script_for(source)
+    wait_for_next_mtime_tick()
     os.utime(script, None)
     context.runner.check(
         "rebuild after touching the marker generator",
-        "cmake",
-        "--build",
-        str(context.build_dir),
-        "--parallel",
-        str(context.parallel),
+        *build_command(str(context.build_dir), context.parallel),
     )
     second = parse_build_marker_source(source.read_text(encoding="utf-8"))
     if second == first:
@@ -1400,6 +1681,18 @@ def run_build_marker_axis(context: GateContext, artifact: Path) -> None:
     check_marker_not_embedded(artifact, first, "after regenerating the marker")
     context.build_marker = second
     print(f"Marker changes with the build: {first} -> {second}")
+
+
+# Some build tools compare file times at one-second resolution (GNU make 3.81, which macOS
+# ships). The first build compiles the marker source and the touch below regenerates it,
+# usually inside one second of each other, and the tool then sees the new source as no
+# newer than its object file and skips the recompile. Waiting past a whole second before the
+# touch makes the order visible at any resolution.
+MTIME_TICK_SECONDS = 1.1
+
+
+def wait_for_next_mtime_tick(sleep: Callable[[float], None] = time.sleep) -> None:
+    sleep(MTIME_TICK_SECONDS)
 
 
 def find_plugin_qrc(scratch_plugin: Path, artifact_name: str) -> Path:
@@ -1466,7 +1759,7 @@ def build_qml_import_paths(context: GateContext) -> list[Path]:
             if any(relative == parent or parent in relative.parents for parent in staged):
                 continue
             (stage / relative).parent.mkdir(parents=True, exist_ok=True)
-            os.symlink(generated, stage / relative)
+            link_path(generated, stage / relative)
             staged.append(relative)
         paths.append(stage)
     return paths
@@ -1552,6 +1845,18 @@ class QmlLintResult:
     unused: list[TriageEntry]
 
 
+def replace_path(text: str, path: PurePath, replacement: str) -> str:
+    """Replace a path in tool output in either spelling the tool may print it.
+
+    qmllint prints the path as it received it on macOS and Linux, but on Windows it prints
+    forward slashes, so the backslash spelling alone never matches and the diagnostics
+    keep temp-directory paths that no triage pattern was written against.
+    """
+    for spelling in {str(path), path.as_posix()}:
+        text = text.replace(spelling, replacement)
+    return text
+
+
 def lint_qml_set(
     context: GateContext,
     files: Sequence[Path],
@@ -1563,11 +1868,11 @@ def lint_qml_set(
         flat_dir = files[0].parent if files else None
         if flat_dir is not None:
             for alias, source in flat_map.items():
-                output = output.replace(str(flat_dir / alias), source)
+                output = replace_path(output, flat_dir / alias, source)
     if module_map:
         # Longest first, so one copy's path never rewrites the prefix of another's.
         for copy in sorted(module_map, key=len, reverse=True):
-            output = output.replace(copy, module_map[copy])
+            output = replace_path(output, Path(copy), module_map[copy])
     unaccepted, unused = triage_qmllint_output(output, context.manifest.qml.accepted_triage)
     return QmlLintResult(
         returncode=returncode,
@@ -1664,26 +1969,16 @@ def run_missing_dependency_control(context: GateContext) -> None:
 
     build = context.work_dir / "neg-build"
     returncode, output = context.runner.capture(
-        "cmake",
-        "-B",
-        str(build),
-        "-S",
-        str(context.scratch_plugin),
-        f"-DCMAKE_PREFIX_PATH={crippled};{context.qt_root}",
-        f"-DCMAKE_TOOLCHAIN_FILE={context.qt_root / 'lib' / 'cmake' / 'Qt6' / 'qt.toolchain.cmake'}",
+        *configure_command(
+            build, context.scratch_plugin, crippled, context.qt_root, context.runner.env
+        )
     )
     if returncode == 0:
         # Either layer may catch it and which one is not the point — only that the failure
         # is about the missing dependency. Asserting one specific stage would make this
         # control fail on a packaging improvement.
         returncode, build_output = context.runner.capture(
-            "cmake",
-            "--build",
-            str(build),
-            "--target",
-            axis.build_target,
-            "--parallel",
-            str(context.parallel),
+            *build_command(str(build), context.parallel, "--target", axis.build_target)
         )
         output += build_output
     assert_control_failed(
@@ -1785,6 +2080,7 @@ def run_gate(args: argparse.Namespace) -> int:
 
     qt_root = resolve_qt_root(args.qt_root)
     qmllint = resolve_qmllint(qt_root)
+    dumpbin = require_dumpbin() if is_windows() else None
 
     if args.work:
         work_dir = Path(args.work).expanduser().resolve()
@@ -1852,6 +2148,7 @@ def run_gate(args: argparse.Namespace) -> int:
             qmllint=qmllint,
             runner=runner,
             parallel=args.parallel,
+            dumpbin=dumpbin,
         )
 
         artifact = configure_and_build(context)
@@ -1906,7 +2203,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("plugin", help="the plugin directory to verify")
     parser.add_argument("--sdk", help="an already-installed QGCPluginSDK prefix")
     parser.add_argument("--build-dir", help="a QGC build dir to self-install the SDK from")
-    parser.add_argument("--qt-root", help="Qt prefix (default: $QT_ROOT, else the newest ~/Qt/*/*)")
+    parser.add_argument(
+        "--qt-root",
+        help="Qt prefix (default: $QT_ROOT, else the newest desktop kit for this host "
+        "under ~/Qt, or C:\\Qt on Windows; an ambiguous choice is an error)",
+    )
     parser.add_argument(
         "--work",
         help="scratch directory, kept after the run (default: a fresh temporary one, "

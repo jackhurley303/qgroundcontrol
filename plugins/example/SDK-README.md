@@ -156,6 +156,15 @@ from the unpacked SDK root:
 python3 tools/verify_plugin_out_of_tree.py example --sdk "$(pwd)" --qt-root <your Qt prefix>
 ```
 
+Leave `--qt-root` off (or set `QT_ROOT`) and the tool picks the newest desktop Qt kit for your
+machine under `~/Qt`, or `C:\Qt` on Windows. It stops and asks for `--qt-root` when it finds
+no desktop kit, or when two desktop kits share the newest Qt version (for example two MSVC years).
+
+On Windows, run the tool from the same `vcvars64` shell you build in: the build needs `cl`, and
+the build-marker check reads the library's exports with `dumpbin`. A shell without `dumpbin`
+stops the tool before it builds. The tool reports the forbidden-symbol check as N/A on Windows,
+even when the manifest enables it, because MSVC resolves every import at link time and an undefined symbol already fails the link.
+
 Your `CMakeLists.txt` should also call `qgc_plugin_build_marker()` (see
 `example/CMakeLists.txt`) and add the source it returns to your plugin target. It bakes a
 per-build value into an exported symbol that QGC reads back **from the loaded image**, so
