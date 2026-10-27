@@ -307,6 +307,11 @@ PLUGIN_SDK = PRSpec(
     ),
     patch_paths=(
         ".github/workflows/macos.yml",
+        # Installs QGCPluginAPI.dll in the Runtime component on Windows, so the installed app
+        # starts. A patch, because the file carries the rest of the fork's install rules. NB the
+        # patch is the whole source_ref→mainline delta on this path, so a second fork-only edit
+        # landing here would ride along and need splitting out.
+        "cmake/install/Install.cmake",
         # Shared with every other hook in the file, so it is patched rather than taken
         # wholesale. The delta this PR needs is the schema hook for plugin-verify.json —
         # without it the branch would carry the schema and the manifests with nothing
@@ -436,6 +441,7 @@ PLUGIN_SDK = PRSpec(
                 "plugins/CMakeLists.txt",
                 "cmake/modules/PluginHelpers.cmake",
                 "cmake/install/InstallPluginSDK.cmake",
+                "cmake/install/Install.cmake",
                 "cmake/install/InstallPluginUIScripts.cmake",
                 "cmake/install/QGCPluginBuildMarker.cmake",
                 "tools/derive_plugin_ui_sdk.py",

@@ -30,6 +30,13 @@ install(
     BUNDLE DESTINATION .
 )
 
+# The installed app links QGCPluginAPI.dll. It is in no other Runtime rule, and CPack packs
+# only Runtime, so without this the installed app exits 0xC0000135 (DLL not found). Other
+# platforms bundle the library through their own deploy step.
+if(WIN32)
+    install(TARGETS QGCPluginAPI RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Runtime)
+endif()
+
 # ----------------------------------------------------------------------------
 # Qt Deployment Script Generation
 # ----------------------------------------------------------------------------

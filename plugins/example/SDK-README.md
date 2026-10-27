@@ -177,8 +177,26 @@ cmake --build build
 ```
 
 (`CMAKE_PREFIX_PATH` points `find_package(QGCPluginAPI)` at this unpacked SDK — set it
-to wherever you extracted the zip.) Then copy the built library into QGC's per-user
-plugins directory and relaunch:
+to wherever you extracted the zip.)
+
+On Windows, open the **x64 Native Tools Command Prompt for VS** (or run `vcvars64.bat` in
+cmd first). Build with the MSVC toolset family that built the SDK, in the **Release**
+configuration. Put the Qt prefix for that toolset on `CMAKE_PREFIX_PATH` beside the SDK,
+separated by `;`:
+
+```bat
+cmake -G Ninja -B build -S example -DCMAKE_BUILD_TYPE=Release ^
+  -DCMAKE_PREFIX_PATH="<sdk>;<Qt>\<version>\msvc2022_64"
+cmake --build build
+```
+
+A Release QGC refuses a Debug build when you install it, before you consent: a Debug plugin
+would load a second Qt and CRT beside the host's.
+
+The build copies the library into QGC's per-user plugins directory for you (the example's
+CMake does this); the table shows where. Relaunch QGC to load it. To copy it yourself, take
+it from `build`. Delete the auto-deployed copy before you test an installed `.qgcplugin`
+package (the zip `tools/pack_plugin.py` makes), or the copy loads in its place.
 
 | Platform | Plugins directory |
 | --- | --- |
