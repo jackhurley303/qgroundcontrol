@@ -30,7 +30,7 @@ namespace {
 constexpr const char* kLoadingPluginIdKey = "PluginSystem/loadingPluginId";
 constexpr const char* kCrashedPluginIdKey = "PluginSystem/crashedPluginId";
 
-PluginSettings* pluginSettings()
+PluginSettings* recordStoreSettings()
 {
     return SettingsManager::instance()->pluginSettings();
 }
@@ -92,35 +92,35 @@ QScopeGuard<std::function<void()>> PluginRecordStore::armLoadingSentinel(const Q
 
 void PluginRecordStore::registerPlugin(const QString& pluginId, const QString& displayName, bool defaultEnabled)
 {
-    pluginSettings()->registerPlugin(pluginId, displayName, defaultEnabled);
+    recordStoreSettings()->registerPlugin(pluginId, displayName, defaultEnabled);
 }
 
 bool PluginRecordStore::isPluginEnabled(const QString& pluginId) const
 {
-    return pluginSettings()->isPluginEnabled(pluginId);
+    return recordStoreSettings()->isPluginEnabled(pluginId);
 }
 
 Fact* PluginRecordStore::pluginEnabledFact(const QString& pluginId)
 {
-    return pluginSettings()->pluginEnabledFact(pluginId);
+    return recordStoreSettings()->pluginEnabledFact(pluginId);
 }
 
 QString PluginRecordStore::approvedPluginDigest(const QString& pluginId) const
 {
-    return pluginSettings()->approvedPluginDigest(pluginId);
+    return recordStoreSettings()->approvedPluginDigest(pluginId);
 }
 
 void PluginRecordStore::setApprovedPluginDigest(const QString& pluginId, const QString& digest)
 {
-    pluginSettings()->setApprovedPluginDigest(pluginId, digest);
+    recordStoreSettings()->setApprovedPluginDigest(pluginId, digest);
 }
 
 QString PluginRecordStore::stagedPluginDigest(const QString& pluginId) const
 {
-    return pluginSettings()->stagedPluginDigest(pluginId);
+    return recordStoreSettings()->stagedPluginDigest(pluginId);
 }
 
 void PluginRecordStore::setStagedPluginDigest(const QString& pluginId, const QString& digest)
 {
-    pluginSettings()->setStagedPluginDigest(pluginId, digest);
+    recordStoreSettings()->setStagedPluginDigest(pluginId, digest);
 }

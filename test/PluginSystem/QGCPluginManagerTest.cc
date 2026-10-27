@@ -20,6 +20,7 @@
 #include "PluginInstaller.h"
 #include "PluginInstallerTest.h"
 #include "PluginSettings.h"
+#include "PluginTestSupport.h"
 #include "QGCPlugin.h"
 #include "QGCPluginInterface.h"
 #include "QGCPluginManager.h"
@@ -48,14 +49,11 @@ PluginLoadInfo discoveredFixture(const QString& id, const QString& name)
     return info;
 }
 
-PluginSettings* pluginSettings()
-{
-    return SettingsManager::instance()->pluginSettings();
-}
-
-// Crash-sentinel keys, mirroring QGCPluginManager's constants
-constexpr const char* kLoadingPluginIdKey = "PluginSystem/loadingPluginId";
-constexpr const char* kCrashedPluginIdKey = "PluginSystem/crashedPluginId";
+using PluginTestSupport::kCrashedPluginIdKey;
+using PluginTestSupport::kLoadingPluginIdKey;
+using PluginTestSupport::pluginSettings;
+using PluginTestSupport::testPluginFixturePath;
+using PluginTestSupport::testPluginFixtureV2Path;
 
 // Minimal stub satisfying QGCReplayExtension's pure virtuals — never invoked,
 // only its identity (pointer value) matters to the emission-ordering test.
@@ -112,22 +110,6 @@ PluginLoadInfo activeReplayProviderFixture(const QString& id, QObject* parent)
     info.contributions.providesReplayExtension = true;
     info.plugin = new ReplayProvidingPlugin(parent);
     return info;
-}
-
-// Path to the real TestPluginFixture dylib, injected by
-// test/PluginSystem/CMakeLists.txt as a compile definition. Its qrc registers
-// TestPluginFixturePanel.qml into /qml when the library is loaded, which is the
-// late registration _lateActivationResolvesPluginQml_test is about.
-QString testPluginFixturePath()
-{
-    return QStringLiteral(QGC_TEST_PLUGIN_FIXTURE_PATH);
-}
-
-// A second fixture target built from identical sources, so it differs from the
-// first only in its build marker — the "other build" of an in-place upgrade.
-QString testPluginFixtureV2Path()
-{
-    return QStringLiteral(QGC_TEST_PLUGIN_FIXTURE_V2_PATH);
 }
 
 } // namespace

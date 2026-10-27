@@ -6,19 +6,15 @@
 #include "Fact.h"
 #include "PluginRecordStore.h"
 #include "PluginSettings.h"
+#include "PluginTestSupport.h"
 #include "QGCPluginInterface.h"
 #include "SettingsManager.h"
 
 namespace {
 
-// Crash-sentinel keys, mirroring PluginRecordStore's constants
-constexpr const char* kLoadingPluginIdKey = "PluginSystem/loadingPluginId";
-constexpr const char* kCrashedPluginIdKey = "PluginSystem/crashedPluginId";
-
-PluginSettings* pluginSettings()
-{
-    return SettingsManager::instance()->pluginSettings();
-}
+using PluginTestSupport::kCrashedPluginIdKey;
+using PluginTestSupport::kLoadingPluginIdKey;
+using PluginTestSupport::pluginSettings;
 
 // A minimal Discovered record — the fields find()/removeIf() key on.
 PluginLoadInfo recordFixture(const QString& id)

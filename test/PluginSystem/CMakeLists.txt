@@ -25,6 +25,7 @@ target_sources(${CMAKE_PROJECT_NAME}
         PluginRecordStoreTest.h
         PluginTeardownTest.cc
         PluginTeardownTest.h
+        PluginTestSupport.h
         PluginTrustGateTest.cc
         PluginTrustGateTest.h
         PluginUIModuleTest.cc

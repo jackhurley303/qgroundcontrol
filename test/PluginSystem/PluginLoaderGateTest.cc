@@ -11,6 +11,7 @@
 
 #include "PluginManifest.h"
 #include "PluginRecordStore.h"
+#include "PluginTestSupport.h"
 #include "PluginTrustGate.h"
 #include "QGCPlugin.h"
 #include "QGCPluginInterface.h"
@@ -19,20 +20,8 @@
 
 namespace {
 
-// Path to the real TestPluginFixture dylib, injected by
-// test/PluginSystem/CMakeLists.txt as a compile definition.
-QString testPluginFixturePath()
-{
-    return QStringLiteral(QGC_TEST_PLUGIN_FIXTURE_PATH);
-}
-
-// Path to a second, independently-built dylib from the identical sources/manifest
-// (same plugin id and version) — TestPlugin/CMakeLists.txt's TestPluginFixtureV2
-// target, injected the same way as the primary fixture.
-QString testPluginFixtureV2Path()
-{
-    return QStringLiteral(QGC_TEST_PLUGIN_FIXTURE_V2_PATH);
-}
+using PluginTestSupport::testPluginFixturePath;
+using PluginTestSupport::testPluginFixtureV2Path;
 
 // The bin/ subdirectory inspectPackage() resolves a binary from on this platform.
 QString platformBinSubdir(const QString& packageName)

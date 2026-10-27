@@ -11,10 +11,10 @@ QGC_LOGGING_CATEGORY(VehicleProfileEntryLog, "VehicleProfile.VehicleProfileEntry
 
 namespace {
 
-constexpr const char* kSensorTypeKey = "type";
-constexpr const char* kSensorModelKey = "model";
-constexpr const char* kBatteryCellCountKey = "cellCount";
-constexpr const char* kBatteryCapacityMahKey = "capacityMah";
+constexpr const char* kEntrySensorTypeKey = "type";
+constexpr const char* kEntrySensorModelKey = "model";
+constexpr const char* kEntryBatteryCellCountKey = "cellCount";
+constexpr const char* kEntryBatteryCapacityMahKey = "capacityMah";
 
 }  // namespace
 
@@ -180,8 +180,8 @@ QVariantList VehicleProfileEntry::batteries() const
     QVariantList batteries;
     for (const VehicleProfile::Battery& battery : _profile.batteries()) {
         QVariantMap batteryMap;
-        batteryMap[kBatteryCellCountKey] = battery.cellCount;
-        batteryMap[kBatteryCapacityMahKey] = battery.capacityMah;
+        batteryMap[kEntryBatteryCellCountKey] = battery.cellCount;
+        batteryMap[kEntryBatteryCapacityMahKey] = battery.capacityMah;
         batteries.append(batteryMap);
     }
     return batteries;
@@ -194,8 +194,8 @@ void VehicleProfileEntry::setBatteries(const QVariantList& batteries)
     for (const QVariant& batteryVariant : batteries) {
         const QVariantMap batteryMap = batteryVariant.toMap();
         VehicleProfile::Battery battery;
-        battery.cellCount = batteryMap.value(kBatteryCellCountKey).toInt();
-        battery.capacityMah = batteryMap.value(kBatteryCapacityMahKey).toInt();
+        battery.cellCount = batteryMap.value(kEntryBatteryCellCountKey).toInt();
+        battery.capacityMah = batteryMap.value(kEntryBatteryCapacityMahKey).toInt();
         newBatteries.append(battery);
     }
     if (newBatteries == _profile.batteries()) {
@@ -210,8 +210,8 @@ QVariantList VehicleProfileEntry::sensors() const
     QVariantList sensors;
     for (const VehicleProfile::Sensor& sensor : _profile.sensors()) {
         QVariantMap sensorMap;
-        sensorMap[kSensorTypeKey] = sensor.type;
-        sensorMap[kSensorModelKey] = sensor.model;
+        sensorMap[kEntrySensorTypeKey] = sensor.type;
+        sensorMap[kEntrySensorModelKey] = sensor.model;
         sensors.append(sensorMap);
     }
     return sensors;
@@ -224,8 +224,8 @@ void VehicleProfileEntry::setSensors(const QVariantList& sensors)
     for (const QVariant& sensorVariant : sensors) {
         const QVariantMap sensorMap = sensorVariant.toMap();
         VehicleProfile::Sensor sensor;
-        sensor.type = sensorMap.value(kSensorTypeKey).toString();
-        sensor.model = sensorMap.value(kSensorModelKey).toString();
+        sensor.type = sensorMap.value(kEntrySensorTypeKey).toString();
+        sensor.model = sensorMap.value(kEntrySensorModelKey).toString();
         newSensors.append(sensor);
     }
     if (newSensors == _profile.sensors()) {
