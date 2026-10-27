@@ -313,6 +313,8 @@ PLUGIN_SDK = PRSpec(
     ),
     patch_paths=(
         ".github/workflows/macos.yml",
+        ".github/workflows/linux.yml",
+        ".github/workflows/windows.yml",
         # Installs QGCPluginAPI.dll in the Runtime component on Windows, so the installed app
         # starts. A patch, because the file carries the rest of the fork's install rules. NB the
         # patch is the whole source_ref→mainline delta on this path, so a second fork-only edit
@@ -481,6 +483,8 @@ PLUGIN_SDK = PRSpec(
                 "tools/tests/test_pack_plugin.py",
                 "tools/README.md",
                 ".github/workflows/macos.yml",
+                ".github/workflows/linux.yml",
+                ".github/workflows/windows.yml",
                 ".pre-commit-config.yaml",
             ),
         ),

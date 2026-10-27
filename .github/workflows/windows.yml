@@ -214,6 +214,57 @@ jobs:
           aws-distribution-id: ${{ secrets.AWS_DISTRIBUTION_ID }}
           upload-aws: ${{ matrix.variant == 'arm64-cross' && 'false' || 'true' }}
 
+      # Plugin SDK steps: the amd64 Release leg only. The job's default shell is cmd; these run
+      # under bash (Git for Windows), as the composite actions do, so a path stays one shape and
+      # the GUI-subsystem QGroundControl.exe is waited on. setup-msvc-dev already put dumpbin on PATH.
+      - name: Package plugin SDK
+        if: matrix.variant == 'amd64' && matrix.build_type == 'Release'
+        shell: bash
+        working-directory: ${{ runner.temp }}/build
+        run: |
+          SDK_VERSION=$(cat qgc-plugin-sdk-version.txt)
+          SDK_NAME="qgc-plugin-sdk-windows-x64-${SDK_VERSION}"
+          cmake --install . --config Release --component QGCPluginSDK --prefix "${SDK_NAME}"
+          python3 -m zipfile -c "${SDK_NAME}.zip" "${SDK_NAME}"
+          echo "SDK_ZIP=${SDK_NAME}.zip" >> "$GITHUB_ENV"
+          echo "SDK_NAME=${SDK_NAME}" >> "$GITHUB_ENV"
+
+      - name: Verify plugin builds and lints out-of-tree (plugins/example)
+        if: matrix.variant == 'amd64' && matrix.build_type == 'Release'
+        shell: bash
+        working-directory: ${{ runner.temp }}/build
+        run: |
+          python3 "${GITHUB_WORKSPACE}/tools/verify_plugin_out_of_tree.py" \
+            "${GITHUB_WORKSPACE}/plugins/example" \
+            --sdk "$(pwd)/${SDK_NAME}" \
+            --qt-root "${QT_ROOT_DIR}" \
+            --keep \
+            --report-json out-of-tree-report.json
+          echo "TEMPLATE_PLUGIN_PATH=$(python3 -c 'import json; print(json.load(open("out-of-tree-report.json"))["artifact"])')" >> "$GITHUB_ENV"
+
+      # The test skips when QGC_TEMPLATE_PLUGIN_PATH is unset, so the step refuses an empty path first.
+      - name: Run SDK-example ABI watchdog (PluginAbiTest)
+        if: matrix.variant == 'amd64' && matrix.build_type == 'Release'
+        shell: bash
+        working-directory: ${{ runner.temp }}/build
+        env:
+          QGC_TEMPLATE_PLUGIN_PATH: ${{ env.TEMPLATE_PLUGIN_PATH }}
+        run: |
+          test -n "$QGC_TEMPLATE_PLUGIN_PATH" || { echo "::error::TEMPLATE_PLUGIN_PATH is empty"; exit 1; }
+          Release/PluginAbiTest.exe -o sdk-example-plugin-results.xml,junitxml -o -,txt
+
+      - name: Attest and Upload plugin SDK
+        if: matrix.variant == 'amd64' && matrix.build_type == 'Release'
+        uses: ./.github/actions/attest-and-upload
+        with:
+          artifact-name: ${{ env.SDK_ZIP }}
+          package-name: QGCPluginSDK-windows-x64
+          upload-aws: 'false'
+          aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
+          aws-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-distribution-id: ${{ secrets.AWS_DISTRIBUTION_ID }}
+
       - name: Debug failed runner
         if: ${{ failure() && !cancelled() && inputs.debug_runner && github.ref_type == 'branch' }}
         timeout-minutes: 15

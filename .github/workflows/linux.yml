@@ -68,12 +68,14 @@ jobs:
             hosted_runner: ubuntu-24.04-arm
             package: QGroundControl-aarch64
             host: linux_arm64
+            sdk_key: linux-arm64
 
           - arch: linux_gcc_64
             runson_runner: linux-x64-builder-60gb
             hosted_runner: ubuntu-24.04
             package: QGroundControl-x86_64
             host: linux
+            sdk_key: linux-x64
 
     defaults:
       run:
@@ -119,7 +121,10 @@ jobs:
         uses: ./.github/actions/cmake-configure
         with:
           preset: ${{ matrix.arch == 'linux_gcc_arm64' && 'Linux-arm64' || 'Linux' }}
-          extra-args: -DQGC_APPIMAGE_UPDATE_INFORMATION=${{ env.QGC_APPIMAGE_UPDATE_INFORMATION }}
+          # PluginAbiTest, the plugin SDK ABI watchdog below, is a portable test.
+          extra-args: >-
+            -DQGC_APPIMAGE_UPDATE_INFORMATION=${{ env.QGC_APPIMAGE_UPDATE_INFORMATION }}
+            -DQGC_BUILD_PORTABLE_TESTS=ON
 
       - name: Build
         id: build
@@ -157,6 +162,54 @@ jobs:
           additional-artifact-paths: |
             ${{ env.QGC_APPIMAGE_UPDATE_INFORMATION != '' && format('{0}/build/{1}.AppImage.zsync', runner.temp, matrix.package) || '' }}
             ${{ matrix.arch == 'linux_gcc_64' && format('{0}/build/appimagelint-report.json', runner.temp) || '' }}
+          aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
+          aws-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-distribution-id: ${{ secrets.AWS_DISTRIBUTION_ID }}
+
+      # Plugin SDK: a separate install pass of only the QGCPluginSDK component, packed into
+      # its own zip, independent of the AppImage above.
+      - name: Package plugin SDK
+        working-directory: ${{ runner.temp }}/build
+        run: |
+          SDK_VERSION=$(cat qgc-plugin-sdk-version.txt)
+          SDK_NAME="qgc-plugin-sdk-${{ matrix.sdk_key }}-${SDK_VERSION}"
+          cmake --install . --config Release --component QGCPluginSDK --prefix "${SDK_NAME}"
+          zip -q -r -y "${SDK_NAME}.zip" "${SDK_NAME}"
+          echo "SDK_ZIP=${SDK_NAME}.zip" >> "$GITHUB_ENV"
+          echo "SDK_NAME=${SDK_NAME}" >> "$GITHUB_ENV"
+
+      # Builds plugins/example standalone against the packaged SDK with no QGC source in its
+      # scratch tree, then runs the Qt-component, QML-lint and negative-control axes. --keep
+      # and --report-json hand the built artifact to the watchdog below.
+      - name: Verify plugin builds and lints out-of-tree (plugins/example)
+        working-directory: ${{ runner.temp }}/build
+        run: |
+          python3 "${GITHUB_WORKSPACE}/tools/verify_plugin_out_of_tree.py" \
+            "${GITHUB_WORKSPACE}/plugins/example" \
+            --sdk "$(pwd)/${SDK_NAME}" \
+            --qt-root "${QT_ROOT_DIR}" \
+            --keep \
+            --report-json out-of-tree-report.json
+          echo "TEMPLATE_PLUGIN_PATH=$(python3 -c 'import json; print(json.load(open("out-of-tree-report.json"))["artifact"])')" >> "$GITHUB_ENV"
+
+      # Loads the verifier's artifact through the PluginAbiTest portable test, so an ABI break
+      # between this SDK and this host fails here. The test skips when QGC_TEMPLATE_PLUGIN_PATH
+      # is unset, so the step refuses an empty path first.
+      - name: Run SDK-example ABI watchdog (PluginAbiTest)
+        working-directory: ${{ runner.temp }}/build
+        env:
+          QGC_TEMPLATE_PLUGIN_PATH: ${{ env.TEMPLATE_PLUGIN_PATH }}
+        run: |
+          test -n "$QGC_TEMPLATE_PLUGIN_PATH" || { echo "::error::TEMPLATE_PLUGIN_PATH is empty"; exit 1; }
+          Release/PluginAbiTest -o sdk-example-plugin-results.xml,junitxml -o -,txt
+
+      - name: Attest and Upload plugin SDK
+        uses: ./.github/actions/attest-and-upload
+        with:
+          artifact-name: ${{ env.SDK_ZIP }}
+          package-name: QGCPluginSDK-${{ matrix.sdk_key }}
+          upload-aws: 'false'
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           aws-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
