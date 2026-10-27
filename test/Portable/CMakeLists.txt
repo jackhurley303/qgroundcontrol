@@ -57,3 +57,12 @@ qgc_add_portable_test(GeoTest ../Utilities/Geo/GeoTest)
 target_link_libraries(GeoTest PRIVATE QGCGeoMath)
 qgc_add_benchmark_support(GeoTest)
 qgc_add_property_support(GeoTest)
+
+qgc_add_portable_test(PluginAbiTest PluginAbiTest)
+target_sources(PluginAbiTest PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/PluginSystem/QGCPluginLoader.cc
+    ${PROJECT_SOURCE_DIR}/src/PluginSystem/PluginManifest.cc
+    ${PROJECT_SOURCE_DIR}/src/PluginSystem/PluginContributions.cc
+)
+target_include_directories(PluginAbiTest PRIVATE ${PROJECT_SOURCE_DIR}/src/PluginSystem)
+target_link_libraries(PluginAbiTest PRIVATE QGCLoggingCategory QGCPluginAPI)

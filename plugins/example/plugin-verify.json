@@ -10,7 +10,7 @@
   },
   "tests": {
     "enabled": false,
-    "reason": "The reference plugin ships no test suite of its own; its C++ axis is proven by the ABI watchdog, which loads this plugin's standalone-built artifact through PluginLoaderGateTest in the host."
+    "reason": "The reference plugin ships no test suite of its own; its C++ axis is proven by the ABI watchdog, which loads this plugin's standalone-built artifact through the PluginAbiTest portable test in the host."
   },
   "forbidden_symbols": {
     "enabled": false,

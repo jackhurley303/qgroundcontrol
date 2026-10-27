@@ -269,40 +269,6 @@ void PluginLoaderGateTest::_inspectMissingFileFails_test()
     QVERIFY(!info.errorString.isEmpty());
 }
 
-// The permanent "different-SDK-zip-host" ABI proof (04 §11 Spike S3, DoD #1's residue):
-// a dylib built against a standalone SDK zip must still satisfy today's QGCPluginLoader
-// gate. CI points this at a real path via env var; outside CI (or before U5.1's
-// macos.yml wiring lands) the var is unset and the slot skips rather than failing.
-//
-// Exercises both compiled-in vtables a plugin binary carries: QGCPluginInterface's
-// (pluginInterfaceVersion()/createPlugin(), invoked by activate() itself) and
-// QGCPlugin's own (replayExtension(), invoked explicitly below, mirroring
-// _activateRealPlugin_test's real-fixture check).
-void PluginLoaderGateTest::_inspectAndActivateExternalDylib(const QByteArray& envVarName, const QString& skipContext)
-{
-    const QString path = qEnvironmentVariable(envVarName.constData());
-    if (path.isEmpty()) {
-        QSKIP(qPrintable(QStringLiteral("%1 not set; skipping %2 ABI check (set by CI)")
-                          .arg(QString::fromUtf8(envVarName), skipContext)));
-    }
-    QVERIFY2(QFile::exists(path), qPrintable(QStringLiteral("%1 does not exist: %2").arg(skipContext, path)));
-
-    PluginLoadInfo info = QGCPluginLoader::inspect(path);
-    QCOMPARE(info.state, PluginState::Discovered);
-    QCOMPARE(info.manifest.tier, PluginManifest::Tier::Sdk);
-
-    QGCPluginLoader::activate(info);
-    QCOMPARE(info.state, PluginState::Active);
-    QVERIFY(info.plugin != nullptr);
-    QCOMPARE(info.plugin->replayExtension(), nullptr);
-    delete info.plugin;
-}
-
-void PluginLoaderGateTest::_activateTemplateBuiltPluginAgainstCurrentHost_test()
-{
-    _inspectAndActivateExternalDylib(QByteArrayLiteral("QGC_TEMPLATE_PLUGIN_PATH"), QStringLiteral("SDK-template plugin"));
-}
-
 // Package discovery + Tier A synthesis (U3.1) — recreates S4's manifest-only package
 // recipe as a permanent fixture (the spike harness was throwaway and deleted).
 

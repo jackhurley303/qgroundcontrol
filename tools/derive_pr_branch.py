@@ -178,6 +178,10 @@ PLUGIN_SDK = PRSpec(
         "src/PluginAPI",
         "src/PluginSystem",
         "test/PluginSystem",
+        # The ABI watchdog's portable test; the patched-in macos.yml step runs it.
+        "test/Portable/CMakeLists.txt",
+        "test/Portable/PluginAbiTest.h",
+        "test/Portable/PluginAbiTest.cc",
         "test/UnitTestFramework/BaseClasses/TempDirectoryTest.h",
         "test/UnitTestFramework/BaseClasses/CMakeLists.txt",
         "plugins/example",
@@ -456,6 +460,9 @@ PLUGIN_SDK = PRSpec(
             "test(PluginSystem): add plugin system tests and CI gates",
             (
                 "test/PluginSystem",
+                "test/Portable/CMakeLists.txt",
+                "test/Portable/PluginAbiTest.h",
+                "test/Portable/PluginAbiTest.cc",
                 "test/UnitTestFramework/BaseClasses/TempDirectoryTest.h",
                 "test/UnitTestFramework/BaseClasses/CMakeLists.txt",
                 "test/QmlUITests/ToolDrawerEscapeUITest.h",

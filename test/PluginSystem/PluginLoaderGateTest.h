@@ -16,8 +16,6 @@ private slots:
     void _buildMarkerDistinguishesSeparateBuilds_test();
     void _inPlaceUpgradeChangesBuildMarker_test();
 
-    void _activateTemplateBuiltPluginAgainstCurrentHost_test();
-
     void _inspectQmlPackageActivatesWithoutBinary_test();
     void _inspectSdkPackageLoadsBinary_test();
     void _inspectPackageBadLayoutErrorsLegible_test();
@@ -34,5 +32,4 @@ private slots:
 
 private:
     QString _writePackage(const QString& subdirName, const QJsonObject& manifestJson);
-    void _inspectAndActivateExternalDylib(const QByteArray& envVarName, const QString& skipContext);
 };
