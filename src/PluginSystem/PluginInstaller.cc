@@ -338,6 +338,8 @@ PluginInstallResult applyPendingUpdate(const QString& pluginsDir, const QString&
     const QString installedDir = QDir(pluginsDir).filePath(pluginId);
     const QString previousDir = previousPackageDir(pluginsDir, pluginId);
 
+    // A staged copy that is not fit to install is discarded, so it is refused once and not at
+    // every start.
     const auto fail = [&](const QString& error) {
         result.errorString = error;
         qCWarning(PluginInstallerLog) << "Update of" << pluginId << "not applied -" << error;
@@ -347,13 +349,27 @@ PluginInstallResult applyPendingUpdate(const QString& pluginsDir, const QString&
         return result;
     };
 
+    // A move can fail for a reason that goes away, such as a file another process holds open
+    // on Windows. The staged copy is still good, so it stays for the next start to try again.
+    const auto failKeepingUpdate = [&](const QString& error) {
+        result.errorString = error;
+        qCWarning(PluginInstallerLog) << "Update of" << pluginId << "not applied -" << error
+                                      << "- the staged update is kept for the next start";
+        return result;
+    };
+
     if (pendingDir.isEmpty()) {
         return fail(QStringLiteral("'%1' is not a valid plugin id").arg(pluginId));
     }
 
-    // An update replaces an installed package; it never installs one. Runs after
-    // finishInterruptedUpdates(), so a package an interrupted swap set aside is back by now.
+    // An update replaces an installed package; it never installs one. A package still under
+    // .previous is installed: finishInterruptedUpdates() could not put it back this start, and
+    // tries again at the next one.
     if (!QFileInfo::exists(installedDir)) {
+        if (QFileInfo::exists(previousDir)) {
+            return failKeepingUpdate(
+                QStringLiteral("the previous version could not be restored from '%1'").arg(previousDir));
+        }
         return fail(QStringLiteral("'%1' is not installed, so there is nothing to update").arg(pluginId));
     }
 
@@ -368,23 +384,24 @@ PluginInstallResult applyPendingUpdate(const QString& pluginsDir, const QString&
     }
 
     if (!QDir().mkpath(QFileInfo(previousDir).absolutePath())) {
-        return fail(QStringLiteral("could not create '%1'").arg(QFileInfo(previousDir).absolutePath()));
+        return failKeepingUpdate(QStringLiteral("could not create '%1'").arg(QFileInfo(previousDir).absolutePath()));
     }
 
     // Rename the installed package aside, then rename the staged one into its place. A
     // directory rename either happens whole or not at all, so the old package is always
     // complete at one of the two paths.
     if (!QDir().rename(installedDir, previousDir)) {
-        return fail(QStringLiteral("could not move the installed package aside"));
+        return failKeepingUpdate(QStringLiteral("could not move the installed package aside"));
     }
 
     if (!QDir().rename(pendingDir, installedDir)) {
         if (!QDir().rename(previousDir, installedDir)) {
             // finishInterruptedUpdates() retries the restore at the next start.
-            return fail(QStringLiteral("could not move the update into place, and the previous version is at '%1'")
-                            .arg(previousDir));
+            return failKeepingUpdate(
+                QStringLiteral("could not move the update into place, and the previous version is at '%1'")
+                    .arg(previousDir));
         }
-        return fail(QStringLiteral("could not move the update into place"));
+        return failKeepingUpdate(QStringLiteral("could not move the update into place"));
     }
 
     if (!QDir(previousDir).removeRecursively()) {

@@ -1174,6 +1174,69 @@ void QGCPluginManagerTest::_failedUpdateKeepsOldActive_test()
     QVERIFY(foundRow);
 }
 
+void QGCPluginManagerTest::_delayedUpdateActivatesWithoutPrompt_test()
+{
+    if (const QString reason = PackageMoveBlocker::unsupportedReason(); !reason.isEmpty()) {
+        QSKIP(qPrintable(reason));
+    }
+
+    const QString id = QStringLiteral("org.test.stageddelayed");
+    const QString v1Zip = _writePackageZip(id, QStringLiteral("1.0.0"));
+    const QString v2Zip = _writePackageZip(id, QStringLiteral("2.0.0"));
+    QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty());
+
+    QGCPluginManager manager;
+    QCOMPARE(manager.installPlugin(v1Zip), QString());
+    const QString v1Digest = pluginSettings()->approvedPluginDigest(id);
+    QCOMPARE(manager.stagePluginUpdate(id, v2Zip), QString());
+    const QString stagedDigest = pluginSettings()->stagedPluginDigest(id);
+    QVERIFY(!stagedDigest.isEmpty());
+
+    // The first start cannot move the update into place: the old version runs, and the
+    // staged copy and its consent wait for the next start
+    {
+        PackageMoveBlocker blocker(PluginInstaller::pendingUpdateDir(id));
+        QVERIFY(blocker.isBlocking());
+
+        QGCPluginManager blocked;
+        expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg,
+                         QRegularExpression("not applied.*kept for the next start"));
+        blocked._loadPluginsFrom({PluginInstaller::userPluginsDir()});
+        verifyExpectedLogMessage();
+
+        const PluginLoadInfo* record = blocked._recordStore.find(id);
+        QVERIFY(record);
+        QCOMPARE(record->manifest.version, QVersionNumber(1, 0, 0));
+        QCOMPARE(record->state, PluginState::Active);
+        QVERIFY(!record->updateError.isEmpty());
+        QCOMPARE(pluginSettings()->approvedPluginDigest(id), v1Digest);
+        QCOMPARE(pluginSettings()->stagedPluginDigest(id), stagedDigest);
+
+        bool foundRow = false;
+        for (const QVariant& item : blocked.knownPlugins()) {
+            const QVariantMap row = item.toMap();
+            if (row[QStringLiteral("id")].toString() == id) {
+                foundRow = true;
+                QVERIFY(row[QStringLiteral("updateStaged")].toBool());
+                QVERIFY2(row[QStringLiteral("statusText")].toString().contains(QStringLiteral("update failed")),
+                         qPrintable(row[QStringLiteral("statusText")].toString()));
+            }
+        }
+        QVERIFY(foundRow);
+    }
+
+    // The next start moves it in, and the consent given at staging still covers it
+    QGCPluginManager restarted;
+    restarted._loadPluginsFrom({PluginInstaller::userPluginsDir()});
+    const PluginLoadInfo* record = restarted._recordStore.find(id);
+    QVERIFY(record);
+    QCOMPARE(record->manifest.version, QVersionNumber(2, 0, 0));
+    QCOMPARE(record->state, PluginState::Active);
+    QVERIFY(record->updateError.isEmpty());
+    QVERIFY(pluginSettings()->stagedPluginDigest(id).isEmpty());
+    QCOMPARE(pluginSettings()->approvedPluginDigest(id), stagedDigest);
+}
+
 void QGCPluginManagerTest::_removeDiscardsStagedUpdate_test()
 {
     const QString id = QStringLiteral("org.test.stagedremoved");

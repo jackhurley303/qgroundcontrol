@@ -46,6 +46,7 @@ private slots:
     void _stageForOtherIdRefused_test();
     void _editedStagedUpdatePrompts_test();
     void _failedUpdateKeepsOldActive_test();
+    void _delayedUpdateActivatesWithoutPrompt_test();
     void _removeDiscardsStagedUpdate_test();
     void _manualInstallDiscardsStagedUpdate_test();
 

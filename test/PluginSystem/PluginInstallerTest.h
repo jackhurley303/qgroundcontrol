@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtCore/QByteArray>
+#include <QtCore/QFileDevice>
 #include <QtCore/QJsonObject>
 #include <QtCore/QList>
 #include <QtCore/QPair>
@@ -11,6 +12,35 @@
 /// The bytes of a zip with the given entries (archive-relative path -> content), in order,
 /// stored uncompressed. Also used by QGCPluginManagerTest to build update packages.
 QByteArray storedZipArchive(const QList<QPair<QString, QByteArray>>& entries);
+
+/// Makes a rename that moves packageDir to another directory fail, until release() or
+/// destruction. On Windows it holds packageDir's qgcplugin.json open without
+/// FILE_SHARE_DELETE, the way an antivirus scan holds a fresh file. Elsewhere it makes
+/// packageDir's parent read-only, because a move out of a directory needs write
+/// permission on it. Also used by QGCPluginManagerTest.
+class PackageMoveBlocker
+{
+public:
+    explicit PackageMoveBlocker(const QString& packageDir);
+    ~PackageMoveBlocker();
+    Q_DISABLE_COPY_MOVE(PackageMoveBlocker)
+
+    /// Non-empty where the block cannot work: root ignores directory permissions.
+    static QString unsupportedReason();
+
+    bool isBlocking() const { return _blocking; }
+
+    void release();
+
+private:
+    bool _blocking = false;
+#if defined(Q_OS_WIN)
+    Qt::HANDLE _handle = nullptr;
+#else
+    QString _parentDir;
+    QFileDevice::Permissions _originalPermissions{};
+#endif
+};
 
 /// TempDirectoryTest: builds real .qgcplugin zip fixtures on disk and installs them
 /// into a temp-dir-backed user plugins directory (U3.2).
@@ -44,7 +74,9 @@ private slots:
     void _applyInvalidPendingKeepsOldPackage_test();
     void _applyPendingIdMismatchKeepsOldPackage_test();
     void _applyFailedMoveKeepsOldPackage_test();
+    void _applyFailedSetAsideKeepsStagedUpdate_test();
     void _applyFinishesInterruptedSwap_test();
+    void _applyUnfinishedRestoreKeepsStagedUpdate_test();
     void _scanIgnoresPendingContent_test();
     void _stageMismatchedIdRefused_test();
     void _applyWithNothingInstalledDiscards_test();

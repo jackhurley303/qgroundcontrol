@@ -5,14 +5,15 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QRegularExpression>
-#include <QtCore/QScopeGuard>
 #include <QtCore/QStandardPaths>
 
 #include "PluginInstaller.h"
 #include "PluginManifest.h"
 #include "QGCPluginLoader.h"
 
-#if !defined(Q_OS_WIN)
+#if defined(Q_OS_WIN)
+#include <qt_windows.h>
+#else
 #include <unistd.h>
 #endif
 
@@ -168,6 +169,54 @@ QByteArray storedZipArchive(const QList<QPair<QString, QByteArray>>& entries)
     appendU16(archive, 0);  // archive comment length
 
     return archive;
+}
+
+PackageMoveBlocker::PackageMoveBlocker(const QString& packageDir)
+{
+#if defined(Q_OS_WIN)
+    // Without FILE_SHARE_DELETE, no directory above the open file can be renamed.
+    const QString manifestPath = QDir::toNativeSeparators(QDir(packageDir).filePath(QStringLiteral("qgcplugin.json")));
+    const HANDLE handle = CreateFileW(reinterpret_cast<LPCWSTR>(manifestPath.utf16()), GENERIC_READ, FILE_SHARE_READ,
+                                      nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle != INVALID_HANDLE_VALUE) {
+        _handle = handle;
+        _blocking = true;
+    }
+#else
+    _parentDir = QFileInfo(packageDir).absolutePath();
+    _originalPermissions = QFile::permissions(_parentDir);
+    _blocking = unsupportedReason().isEmpty() &&
+                QFile::setPermissions(_parentDir, QFileDevice::ReadOwner | QFileDevice::ExeOwner);
+#endif
+}
+
+PackageMoveBlocker::~PackageMoveBlocker()
+{
+    release();
+}
+
+QString PackageMoveBlocker::unsupportedReason()
+{
+#if !defined(Q_OS_WIN)
+    if (geteuid() == 0) {
+        return QStringLiteral("root ignores directory write permission, so a move cannot be made to fail");
+    }
+#endif
+    return QString();
+}
+
+void PackageMoveBlocker::release()
+{
+    if (!_blocking) {
+        return;
+    }
+    _blocking = false;
+#if defined(Q_OS_WIN)
+    CloseHandle(_handle);
+    _handle = nullptr;
+#else
+    QFile::setPermissions(_parentDir, _originalPermissions);
+#endif
 }
 
 QString PluginInstallerTest::_writeZipOrdered(const QString& zipRelPath,
@@ -691,19 +740,14 @@ void PluginInstallerTest::_applyPendingIdMismatchKeepsOldPackage_test()
 
     QCOMPARE(_manifestVersionAt(QDir(PluginInstaller::userPluginsDir()).filePath(id)), QStringLiteral("1.0.0"));
     QVERIFY(!QFileInfo::exists(QDir(PluginInstaller::userPluginsDir()).filePath(QStringLiteral("org.test.other"))));
+    QVERIFY(!QFileInfo::exists(PluginInstaller::pendingUpdateDir(id)));
 }
 
 void PluginInstallerTest::_applyFailedMoveKeepsOldPackage_test()
 {
-    // The failure is produced with POSIX directory permissions: Windows has no write bit
-    // on a directory (setPermissions only sets the read-only attribute), and root ignores it.
-#if defined(Q_OS_WIN)
-    QSKIP("needs POSIX directory write permission to make a rename fail");
-#else
-    if (geteuid() == 0) {
-        QSKIP("root ignores directory write permission, so the rename cannot be made to fail");
+    if (const QString reason = PackageMoveBlocker::unsupportedReason(); !reason.isEmpty()) {
+        QSKIP(qPrintable(reason));
     }
-#endif
 
     const QString id = QStringLiteral("org.test.lockedmove");
     const QString v1Zip =
@@ -715,20 +759,15 @@ void PluginInstallerTest::_applyFailedMoveKeepsOldPackage_test()
     QVERIFY(PluginInstaller::installFromFile(v1Zip).success);
     QVERIFY(PluginInstaller::stageUpdate(id, v2Zip).success);
 
-    // Moving a directory out of its parent needs write permission on that parent. With
-    // the staging root read-only, the installed package is renamed aside and then the
-    // staged one cannot follow — the failure between the two renames.
-    const QString pendingRoot = QFileInfo(PluginInstaller::pendingUpdateDir(id)).absolutePath();
-    const QFileDevice::Permissions originalPermissions = QFile::permissions(pendingRoot);
-    QVERIFY(QFile::setPermissions(pendingRoot, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
-    const auto restorePermissions = qScopeGuard([&] { QFile::setPermissions(pendingRoot, originalPermissions); });
+    // The installed package is renamed aside, and then the staged one cannot follow: the
+    // failure between the two renames.
+    const QString pendingDir = PluginInstaller::pendingUpdateDir(id);
+    PackageMoveBlocker blocker(pendingDir);
+    QVERIFY(blocker.isBlocking());
 
     expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg,
-                     QRegularExpression("not applied.*could not move the update into place"));
-    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg,
-                     QRegularExpression("Could not discard the staged update"));
+                     QRegularExpression("not applied.*could not move the update into place.*kept for the next start"));
     const QList<PluginInstallResult> results = PluginInstaller::applyPendingUpdates();
-    verifyExpectedLogMessage();
     verifyExpectedLogMessage();
     QCOMPARE(results.size(), 1);
     QVERIFY(!results.first().success);
@@ -743,6 +782,66 @@ void PluginInstallerTest::_applyFailedMoveKeepsOldPackage_test()
     QVERIFY(QFile::exists(installedDir + QStringLiteral("/v1-only.txt")));
     QVERIFY(!QFile::exists(installedDir + QStringLiteral("/v2-only.txt")));
     QVERIFY(!QFileInfo::exists(QDir(PluginInstaller::userPluginsDir()).filePath(QStringLiteral(".previous/") + id)));
+
+    // The staged update is kept whole for the next start
+    QCOMPARE(_manifestVersionAt(pendingDir), QStringLiteral("2.0.0"));
+    QVERIFY(QFile::exists(pendingDir + QStringLiteral("/v2-only.txt")));
+
+    // Once the block is gone, the next start applies it
+    blocker.release();
+    const QList<PluginInstallResult> retried = PluginInstaller::applyPendingUpdates();
+    QCOMPARE(retried.size(), 1);
+    QVERIFY2(retried.first().success, qPrintable(retried.first().errorString));
+    QCOMPARE(_manifestVersionAt(installedDir), QStringLiteral("2.0.0"));
+    QVERIFY(!QFile::exists(installedDir + QStringLiteral("/v1-only.txt")));
+    QVERIFY(!QFileInfo::exists(pendingDir));
+}
+
+void PluginInstallerTest::_applyFailedSetAsideKeepsStagedUpdate_test()
+{
+    if (const QString reason = PackageMoveBlocker::unsupportedReason(); !reason.isEmpty()) {
+        QSKIP(qPrintable(reason));
+    }
+
+    const QString id = QStringLiteral("org.test.lockedinstalled");
+    const QString v1Zip = _writePackageZip(QStringLiteral("lockedinstalled-v1.qgcplugin"), _validManifestJson(id),
+                                           QStringLiteral("v1-only.txt"));
+    const QString v2Zip =
+        _writePackageZip(QStringLiteral("lockedinstalled-v2.qgcplugin"),
+                         _validManifestJson(id, QStringLiteral("2.0.0")), QStringLiteral("v2-only.txt"));
+    QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty());
+    QVERIFY(PluginInstaller::installFromFile(v1Zip).success);
+    QVERIFY(PluginInstaller::stageUpdate(id, v2Zip).success);
+
+    // The set-aside directory exists already, so the first rename is the first write the
+    // apply makes to the plugins directory, and it fails.
+    const QString installedDir = QDir(PluginInstaller::userPluginsDir()).filePath(id);
+    QVERIFY(QDir().mkpath(QDir(PluginInstaller::userPluginsDir()).filePath(QStringLiteral(".previous"))));
+    PackageMoveBlocker blocker(installedDir);
+    QVERIFY(blocker.isBlocking());
+
+    expectLogMessage(
+        "PluginSystem.PluginInstaller", QtWarningMsg,
+        QRegularExpression("not applied.*could not move the installed package aside.*kept for the next start"));
+    const QList<PluginInstallResult> results = PluginInstaller::applyPendingUpdates();
+    verifyExpectedLogMessage();
+    QCOMPARE(results.size(), 1);
+    QVERIFY(!results.first().success);
+    QVERIFY2(results.first().errorString == QStringLiteral("could not move the installed package aside"),
+             qPrintable(results.first().errorString));
+
+    QCOMPARE(_manifestVersionAt(installedDir), QStringLiteral("1.0.0"));
+    QVERIFY(QFile::exists(installedDir + QStringLiteral("/v1-only.txt")));
+    const QString pendingDir = PluginInstaller::pendingUpdateDir(id);
+    QCOMPARE(_manifestVersionAt(pendingDir), QStringLiteral("2.0.0"));
+
+    blocker.release();
+    const QList<PluginInstallResult> retried = PluginInstaller::applyPendingUpdates();
+    QCOMPARE(retried.size(), 1);
+    QVERIFY2(retried.first().success, qPrintable(retried.first().errorString));
+    QCOMPARE(_manifestVersionAt(installedDir), QStringLiteral("2.0.0"));
+    QVERIFY(QFile::exists(installedDir + QStringLiteral("/v2-only.txt")));
+    QVERIFY(!QFileInfo::exists(pendingDir));
 }
 
 void PluginInstallerTest::_applyFinishesInterruptedSwap_test()
@@ -769,6 +868,58 @@ void PluginInstallerTest::_applyFinishesInterruptedSwap_test()
     QCOMPARE(results.size(), 1);
     QVERIFY2(results.first().success, qPrintable(results.first().errorString));
     QCOMPARE(_manifestVersionAt(installedDir), QStringLiteral("2.0.0"));
+    QVERIFY(!QFileInfo::exists(previousDir));
+}
+
+void PluginInstallerTest::_applyUnfinishedRestoreKeepsStagedUpdate_test()
+{
+    if (const QString reason = PackageMoveBlocker::unsupportedReason(); !reason.isEmpty()) {
+        QSKIP(qPrintable(reason));
+    }
+
+    const QString id = QStringLiteral("org.test.unrestored");
+    const QString v1Zip = _writePackageZip(QStringLiteral("unrestored-v1.qgcplugin"), _validManifestJson(id),
+                                           QStringLiteral("v1-only.txt"));
+    const QString v2Zip =
+        _writePackageZip(QStringLiteral("unrestored-v2.qgcplugin"), _validManifestJson(id, QStringLiteral("2.0.0")),
+                         QStringLiteral("v2-only.txt"));
+    QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty());
+    QVERIFY(PluginInstaller::installFromFile(v1Zip).success);
+    QVERIFY(PluginInstaller::stageUpdate(id, v2Zip).success);
+
+    // An earlier apply moved the old package aside, could not move the update in, and could
+    // not put the old package back. The restore at this start fails too.
+    const QString installedDir = QDir(PluginInstaller::userPluginsDir()).filePath(id);
+    const QString previousDir = QDir(PluginInstaller::userPluginsDir()).filePath(QStringLiteral(".previous/") + id);
+    QVERIFY(QDir().mkpath(QFileInfo(previousDir).absolutePath()));
+    QVERIFY(QDir().rename(installedDir, previousDir));
+    PackageMoveBlocker blocker(previousDir);
+    QVERIFY(blocker.isBlocking());
+
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("Could not restore"));
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg,
+                     QRegularExpression("not applied.*could not be restored.*kept for the next start"));
+    const QList<PluginInstallResult> results = PluginInstaller::applyPendingUpdates();
+    verifyExpectedLogMessage();
+    verifyExpectedLogMessage();
+    QCOMPARE(results.size(), 1);
+    QVERIFY(!results.first().success);
+
+    // Neither the old package nor the update is lost
+    const QString pendingDir = PluginInstaller::pendingUpdateDir(id);
+    QCOMPARE(_manifestVersionAt(previousDir), QStringLiteral("1.0.0"));
+    QCOMPARE(_manifestVersionAt(pendingDir), QStringLiteral("2.0.0"));
+    QVERIFY(!QFileInfo::exists(installedDir));
+
+    // Once the block is gone, the next start restores the old package and then applies the update
+    blocker.release();
+    expectLogMessage("PluginSystem.PluginInstaller", QtWarningMsg, QRegularExpression("after an interrupted update"));
+    const QList<PluginInstallResult> retried = PluginInstaller::applyPendingUpdates();
+    verifyExpectedLogMessage();
+    QCOMPARE(retried.size(), 1);
+    QVERIFY2(retried.first().success, qPrintable(retried.first().errorString));
+    QCOMPARE(_manifestVersionAt(installedDir), QStringLiteral("2.0.0"));
+    QVERIFY(!QFileInfo::exists(pendingDir));
     QVERIFY(!QFileInfo::exists(previousDir));
 }
 

@@ -292,15 +292,20 @@ QHash<QString, QString> QGCPluginManager::_applyPendingUpdates()
     QHash<QString, QString> updateErrors;
     const QList<PluginInstallResult> results = PluginInstaller::applyPendingUpdates();
     for (const PluginInstallResult& result : results) {
-        // The staged digest is spent either way, so it can never vouch for a later
-        // package with the same id.
-        const QString stagedDigest = _recordStore.stagedPluginDigest(result.pluginId);
-        _recordStore.setStagedPluginDigest(result.pluginId, QString());
-
         if (!result.success) {
             updateErrors.insert(result.pluginId, result.errorString);
+            // The digest stays with a staged copy kept for the next start, so a later
+            // successful move still runs it without asking again. A discarded copy takes
+            // its digest with it, and it can never vouch for a later package with the same id.
+            const QString pendingDir = PluginInstaller::pendingUpdateDir(result.pluginId);
+            if (pendingDir.isEmpty() || !QFileInfo::exists(pendingDir)) {
+                _recordStore.setStagedPluginDigest(result.pluginId, QString());
+            }
             continue;
         }
+
+        const QString stagedDigest = _recordStore.stagedPluginDigest(result.pluginId);
+        _recordStore.setStagedPluginDigest(result.pluginId, QString());
 
         // The digest covers content only, not paths, so the staged files still match it
         // after the move — unless they were edited while staged, and then the trust gate

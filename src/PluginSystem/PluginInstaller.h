@@ -76,8 +76,8 @@ public:
     /// Per package: the installed package is renamed aside, then the staged one is
     /// renamed into its place. A staged package that would not load, one with no
     /// installed package to replace, or a move that fails, leaves the installed
-    /// package as it was. The staged copy is discarded
-    /// either way, so a failure is reported once rather than retried at every start.
+    /// package as it was. A staged package that cannot be installed is discarded, so it
+    /// is refused once. One whose move failed is kept, and the next start tries again.
     /// Also finishes a swap a previous run was killed in the middle of.
     /// @return One result per staged package, keyed by its directory name
     static QList<PluginInstallResult> applyPendingUpdates();
