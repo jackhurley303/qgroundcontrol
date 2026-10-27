@@ -101,13 +101,13 @@ add_custom_command(
     COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tools/derive_plugin_ui_sdk.py"
         --qmldir "${QGC_PLUGIN_UI_ROSTER}"
         --out-qmldir "${_qgc_plugin_ui_sdk_dir}/qmldir"
-        --qmltypes "${CMAKE_BINARY_DIR}/qml/QGC/QGroundControl.qmltypes"
+        --qmltypes "${CMAKE_BINARY_DIR}/qml/QGC/${CMAKE_PROJECT_NAME}.qmltypes"
         --out-qmltypes "${_qgc_plugin_ui_sdk_dir}/QGroundControl.PluginUI.qmltypes"
         ${_qgc_plugin_ui_cpp_args}
     DEPENDS
         "${CMAKE_SOURCE_DIR}/tools/derive_plugin_ui_sdk.py"
         "${QGC_PLUGIN_UI_ROSTER}"
-        "${CMAKE_BINARY_DIR}/qml/QGC/QGroundControl.qmltypes"
+        "${CMAKE_BINARY_DIR}/qml/QGC/${CMAKE_PROJECT_NAME}.qmltypes"
         ${CMAKE_PROJECT_NAME}_qmltyperegistration
     COMMENT "Deriving the packaged QGroundControl.PluginUI module"
     VERBATIM
