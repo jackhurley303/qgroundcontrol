@@ -774,6 +774,18 @@ MOCKLINK_BYTESSENT = PRSpec(
     include_paths=("src/Comms/MockLink/MockLink.cc",),
 )
 
+# Routing rule 1, a sibling like the three above. A host kernel with Bluetooth support but no
+# adapter (GitHub's 7.0 Azure runner kernel) lets Qt open its HCI socket, so BlueZ warns about
+# the missing device instead of the socket, and the test's strict log check failed on the two
+# new warnings.
+BLUETOOTH_TEST_HCI = PRSpec(
+    branch="upstream-pr-bluetooth-test-hci",
+    source_ref="upstream/master",
+    mainline_ref="plugin-infrastructure-with-qdrive",
+    commit_subject="test(Bluetooth): ignore BlueZ warnings on hosts with no HCI device",
+    include_paths=("test/Comms/Bluetooth/BluetoothWorkerTest.cc",),
+)
+
 # Stock QGC gains a vehicle library (name, image, airframe, sensors, flight controller, notes),
 # one `.vehicle` JSON file per vehicle under a new `Vehicles` save folder — routing rule 1, a
 # stock-QGC capability with no plugin loaded. Builds up over several units
@@ -937,6 +949,7 @@ SPECS: dict[str, PRSpec] = {
     "media-backend": MEDIA_BACKEND,
     "initial-connect-skip": INITIAL_CONNECT_SKIP,
     "mocklink-bytessent": MOCKLINK_BYTESSENT,
+    "bluetooth-test-hci": BLUETOOTH_TEST_HCI,
     "vehicle-profiles": VEHICLE_PROFILES,
 }
 
