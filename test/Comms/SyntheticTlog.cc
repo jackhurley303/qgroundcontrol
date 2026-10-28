@@ -52,10 +52,14 @@ SyntheticTlog &SyntheticTlog::heartbeatBurst(double atSecs, int cMessages)
 
 SyntheticTlog &SyntheticTlog::paramValue(double atSecs, const QString &paramId, float value, uint8_t paramType)
 {
+    // The pack call copies all 16 bytes of param_id, so a shorter name needs a zero-padded buffer.
+    char paramIdBuffer[16]{};
     const QByteArray paramIdBytes = paramId.toLatin1();
+    (void) std::copy_n(paramIdBytes.constData(), std::min<qsizetype>(paramIdBytes.size(), sizeof(paramIdBuffer)),
+                       paramIdBuffer);
 
     mavlink_message_t msg{};
-    (void) mavlink_msg_param_value_pack(kSysId, MAV_COMP_ID_AUTOPILOT1, &msg, paramIdBytes.constData(),
+    (void) mavlink_msg_param_value_pack(kSysId, MAV_COMP_ID_AUTOPILOT1, &msg, paramIdBuffer,
                                         value, paramType, 1, 0);
     _append(atSecs, msg);
 

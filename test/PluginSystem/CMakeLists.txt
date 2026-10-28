@@ -3,7 +3,8 @@
 # Tests for plugin manifest/contributions parsing and host-compatibility validation
 # ============================================================================
 
-target_sources(${CMAKE_PROJECT_NAME}
+target_sources(
+    ${CMAKE_PROJECT_NAME}
     PRIVATE
         HostServicesTest.cc
         HostServicesTest.h
@@ -38,7 +39,8 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_
 
 # Compiled into the app's own qrc:/qml tree, so it exists before any QML engine
 # does — the host half of the late-activation cache test (see the file's comment).
-qt_add_resources(${CMAKE_PROJECT_NAME} "PluginSystemTest_qml"
+qt_add_resources(
+    ${CMAKE_PROJECT_NAME} "PluginSystemTest_qml"
     PREFIX "/qml"
     FILES
         PluginActivationHostProbe.qml
@@ -48,9 +50,11 @@ qt_add_resources(${CMAKE_PROJECT_NAME} "PluginSystemTest_qml"
 # same qgc_add_plugin() every real plugin uses (see TestPlugin/CMakeLists.txt).
 add_subdirectory(TestPlugin)
 add_dependencies(${CMAKE_PROJECT_NAME} TestPluginFixture TestPluginFixtureV2)
-target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
-    QGC_TEST_PLUGIN_FIXTURE_PATH="$<TARGET_FILE:TestPluginFixture>"
-    QGC_TEST_PLUGIN_FIXTURE_V2_PATH="$<TARGET_FILE:TestPluginFixtureV2>"
+target_compile_definitions(
+    ${CMAKE_PROJECT_NAME}
+    PRIVATE
+        QGC_TEST_PLUGIN_FIXTURE_PATH="$<TARGET_FILE:TestPluginFixture>"
+        QGC_TEST_PLUGIN_FIXTURE_V2_PATH="$<TARGET_FILE:TestPluginFixtureV2>"
 )
 
 # The reference plugin itself, built by plugins/CMakeLists.txt (added before this
@@ -64,13 +68,12 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
 # test would otherwise skip on what is really a build failure.
 if(TARGET ExamplePlugin)
     add_dependencies(${CMAKE_PROJECT_NAME} ExamplePlugin)
-    target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
-        QGC_EXAMPLE_PLUGIN_PATH="$<TARGET_FILE:ExamplePlugin>"
-    )
+    target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE QGC_EXAMPLE_PLUGIN_PATH="$<TARGET_FILE:ExamplePlugin>")
 elseif(EXISTS "${CMAKE_SOURCE_DIR}/plugins/example/CMakeLists.txt")
-    message(FATAL_ERROR
-        "plugins/example exists but target ExamplePlugin was never defined; "
-        "PluginTeardownTest cannot verify the plugin lifecycle contract without it")
+    message(
+        FATAL_ERROR "plugins/example exists but target ExamplePlugin was never defined; "
+                    "PluginTeardownTest cannot verify the plugin lifecycle contract without it"
+    )
 endif()
 
 add_qgc_test(HostServicesTest LABELS Unit)
