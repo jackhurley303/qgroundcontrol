@@ -138,8 +138,13 @@ QString noBinaryMessage(PluginManifest::Tier tier)
 
 bool validateHostCompatibility(PluginLoadInfo& info)
 {
+    const HostInfo host = QGCPluginLoader::hostInfo();
+    if (host.version.isNull()) {
+        qCDebug(QGCPluginLoaderLog) << "Host version unknown in" << QGC_APP_VERSION_STR << "- not checking"
+                                    << info.manifest.id << "hostVersion range";
+    }
     QString reason;
-    if (!info.manifest.validateForHost(QGCPluginLoader::hostInfo(), &reason)) {
+    if (!info.manifest.validateForHost(host, &reason)) {
         info.state = PluginState::Incompatible;
         info.errorString = reason;
         return false;
@@ -424,14 +429,7 @@ HostInfo QGCPluginLoader::hostInfo()
 {
     HostInfo host;
 
-    // QGC_APP_VERSION_STR is a git describe string, e.g. "v5.0.3-1040-gabc1234"
-    QString versionStr = QStringLiteral(QGC_APP_VERSION_STR);
-    if (versionStr.startsWith(u'v')) {
-        versionStr.remove(0, 1);
-    }
-    qsizetype suffixIndex = 0;
-    host.version = QVersionNumber::fromString(versionStr, &suffixIndex);
-
+    host.version = hostVersionFromDescribe(QStringLiteral(QGC_APP_VERSION_STR));
     host.apiVersion = QGCPluginApiVersion;
     host.buildId = QStringLiteral(QGC_GIT_HASH);
     host.qmlApiVersion = QGCPluginQmlApiLevel;
@@ -442,6 +440,20 @@ HostInfo QGCPluginLoader::hostInfo()
     host.debugBuild = true;
 #endif
     return host;
+}
+
+QVersionNumber QGCPluginLoader::hostVersionFromDescribe(const QString& describe)
+{
+    // Only a tag names a version: "X.Y.Z", then nothing or "-<suffix>". A bare hash can
+    // start with digits ("08add38"), which QVersionNumber::fromString alone reads as 8.
+    const QString versionStr = describe.startsWith(u'v') ? describe.mid(1) : describe;
+    qsizetype suffixIndex = 0;
+    const QVersionNumber version = QVersionNumber::fromString(versionStr, &suffixIndex);
+    if ((version.segmentCount() != 3) || ((suffixIndex < versionStr.size()) && (versionStr.at(suffixIndex) != u'-'))) {
+        return QVersionNumber();
+    }
+    // Git.cmake's v0.0.0 means it found no version, not version 0
+    return (version == QVersionNumber(0, 0, 0)) ? QVersionNumber() : version;
 }
 
 QString QGCPluginLoader::platformKey()

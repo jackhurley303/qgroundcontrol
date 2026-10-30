@@ -658,11 +658,9 @@ void PluginInstallerTest::_stageIncompatiblePackageRefused_test()
     const QString id = QStringLiteral("org.test.stageincompatible");
     const QString v1Zip = _writePackageZip(QStringLiteral("incompat-v1.qgcplugin"), _validManifestJson(id),
                                            QStringLiteral("v1-only.txt"));
+    // Not a hostVersion range: a build with no tag has no host version and skips that check
     QJsonObject future = _validManifestJson(id, QStringLiteral("2.0.0"));
-    QJsonObject hostVersion;
-    hostVersion[QStringLiteral("min")] = QStringLiteral("999.0");
-    hostVersion[QStringLiteral("max")] = QString();
-    future[QStringLiteral("hostVersion")] = hostVersion;
+    future[QStringLiteral("qmlApiVersion")] = QGCPluginQmlApiLevel + 1;
     const QString v2Zip =
         _writePackageZip(QStringLiteral("incompat-v2.qgcplugin"), future, QStringLiteral("v2-only.txt"));
     QVERIFY(!v1Zip.isEmpty() && !v2Zip.isEmpty());

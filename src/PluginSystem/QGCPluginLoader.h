@@ -96,6 +96,11 @@ public:
     /// @brief Identity/compatibility facts of the running host, used to validate manifests
     static HostInfo hostInfo();
 
+    /// @brief The host version a `git describe` string names, or a null version when it names none
+    /// @param describe e.g. "v5.0.3", "v5.0.3-1040-gabc1234" or "v5.2.0-dev"; a checkout with no tags
+    /// gives a bare hash and a tree with no .git gives "v0.0.0", and both yield null
+    static QVersionNumber hostVersionFromDescribe(const QString& describe);
+
     /// @brief This build's platform key: `macos-universal`, else `<os>-<arch>` (os windows, linux or
     /// android; arch x64 or arm64): the bin/ subdirectory a package's binary sits in, and the plugin
     /// catalog's package key

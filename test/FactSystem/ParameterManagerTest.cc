@@ -164,9 +164,13 @@ void ParameterManagerTest::_requestListNoResponse()
     expectAppMessage(QRegularExpression("did not respond to request for parameters"));
     expectLogMessage("FactSystem.ParameterManager", QtWarningMsg,
                      QRegularExpression("did not respond to request for parameters"));
+    // The download starts with the _HASH_CHECK read, after the initial connect sequence has
+    // fetched and parsed the component metadata. That parse is slow under sanitizers and is not
+    // part of the retry budget below, so start the budget when the download starts.
+    QVERIFY_TRUE_WAIT(_mockLink->hashCheckRequestCount() > 0, TestTimeout::mediumMs());
     // ParameterManager exhausts initial request retries in bounded test intervals and gives up
     // without any progress bar updates or a parameter ready signal.
-    QVERIFY_SIGNAL_WAIT(spyRequestFailed, ParameterManager::kTestMaxInitialRequestTimeMs);
+    QVERIFY_SIGNAL_COUNT_WAIT(spyRequestFailed, 1, ParameterManager::kTestMaxInitialRequestTimeMs);
     QCOMPARE(spyProgress.count(), 0);
     QCOMPARE(spyParamsReady.count(), 0);
     verifyExpectedLogMessage();

@@ -271,10 +271,9 @@ void PluginCatalogManagerTest::_fetchListsEntries_test()
     const QString id = QStringLiteral("org.test.catalog.list");
     const QByteArray zip = _packageBytes(id, QStringLiteral("2.0.0"));
     const QString zipPath = _writeFile(QStringLiteral("list.qgcplugin"), zip);
+    // Not a hostVersion range: a build with no tag has no host version and skips that check
     QJsonObject incompatible = _versionJson(QStringLiteral("3.0.0"), QStringLiteral("any"), zipPath, zip);
-    QJsonObject hostVersion;
-    hostVersion[QStringLiteral("min")] = QStringLiteral("999.0");
-    incompatible[QStringLiteral("hostVersion")] = hostVersion;
+    incompatible[QStringLiteral("qmlApiVersion")] = QGCPluginQmlApiLevel + 1;
     (void) _setCatalog(
         {_pluginJson(id, {_versionJson(QStringLiteral("2.0.0"), QStringLiteral("any"), zipPath, zip), incompatible})});
 
@@ -655,9 +654,7 @@ void PluginCatalogManagerTest::_installRefusedBeforeDownload_test()
         QStringLiteral("1.0.0"), QStringLiteral("any"),
         caseName == QStringLiteral("http") ? QStringLiteral("http://example.com/refused.qgcplugin") : zipPath, zip);
     if (caseName == QStringLiteral("incompatible")) {
-        QJsonObject hostVersion;
-        hostVersion[QStringLiteral("min")] = QStringLiteral("999.0");
-        version[QStringLiteral("hostVersion")] = hostVersion;
+        version[QStringLiteral("qmlApiVersion")] = QGCPluginQmlApiLevel + 1;
     }
     (void) _setCatalog({_pluginJson(id, {version})});
 

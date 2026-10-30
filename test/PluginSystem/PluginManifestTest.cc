@@ -7,6 +7,7 @@
 #include "PluginManifest.h"
 #include "QGCPluginInterface.h"
 #include "QGCPluginLoader.h"
+#include "qgc_version.h"
 
 namespace {
 
@@ -426,7 +427,8 @@ void PluginManifestTest::_metaDataInvalidManifest_test()
 void PluginManifestTest::_hostInfo_test()
 {
     const HostInfo host = QGCPluginLoader::hostInfo();
-    QVERIFY(!host.version.isNull());
+    // Null in a build with no tag; the describe cases are in _hostVersionFromDescribe_test
+    QCOMPARE(host.version, QGCPluginLoader::hostVersionFromDescribe(QStringLiteral(QGC_APP_VERSION_STR)));
     QVERIFY(!host.buildId.isEmpty());
     QCOMPARE(host.apiVersion, QGCPluginApiVersion);
     QCOMPARE(host.qmlApiVersion, QGCPluginQmlApiLevel);
@@ -437,6 +439,34 @@ void PluginManifestTest::_hostInfo_test()
 #else
     QVERIFY(host.debugBuild);
 #endif
+}
+
+void PluginManifestTest::_hostVersionFromDescribe_test_data()
+{
+    QTest::addColumn<QString>("describe");
+    QTest::addColumn<QVersionNumber>("version");
+
+    QTest::newRow("tag") << QStringLiteral("v5.0.3") << QVersionNumber(5, 0, 3);
+    QTest::newRow("after tag") << QStringLiteral("v5.0.3-1040-gabc1234") << QVersionNumber(5, 0, 3);
+    QTest::newRow("marker tag") << QStringLiteral("v5.2.0-dev") << QVersionNumber(5, 2, 0);
+    QTest::newRow("after marker tag") << QStringLiteral("v5.2.0-dev-12-gb93eece") << QVersionNumber(5, 2, 0);
+    QTest::newRow("no v") << QStringLiteral("5.1.0") << QVersionNumber(5, 1, 0);
+    QTest::newRow("hash, letter first") << QStringLiteral("b93eece") << QVersionNumber();
+    QTest::newRow("hash, digit first") << QStringLiteral("08add38") << QVersionNumber();
+    QTest::newRow("hash, digits only") << QStringLiteral("1234567") << QVersionNumber();
+    QTest::newRow("no git") << QStringLiteral("v0.0.0") << QVersionNumber();
+    QTest::newRow("empty") << QString() << QVersionNumber();
+    QTest::newRow("two parts") << QStringLiteral("v5.2") << QVersionNumber();
+    QTest::newRow("four parts") << QStringLiteral("v5.2.0.1") << QVersionNumber();
+    QTest::newRow("suffix without dash") << QStringLiteral("v5.2.0rc1") << QVersionNumber();
+}
+
+void PluginManifestTest::_hostVersionFromDescribe_test()
+{
+    QFETCH(QString, describe);
+    QFETCH(QVersionNumber, version);
+
+    QCOMPARE(QGCPluginLoader::hostVersionFromDescribe(describe), version);
 }
 
 void PluginManifestTest::_qtVersionRule_test_data()

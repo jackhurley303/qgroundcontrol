@@ -786,6 +786,22 @@ BLUETOOTH_TEST_HCI = PRSpec(
     include_paths=("test/Comms/Bluetooth/BluetoothWorkerTest.cc",),
 )
 
+# Routing rule 1, a sibling like the four above. A mission-visual delegate removed while its
+# asynchronous Loader is still loading keeps the Loader alive with an invalid context, and the
+# completed load then warns "Cannot create a component in an invalid context". The UI tests'
+# strict log check failed on it intermittently. Upstream fixed the same race for the editors
+# by loading them synchronously; the map visuals keep their asynchronous load.
+MAP_VISUAL_LOADER = PRSpec(
+    branch="upstream-pr-map-visual-loader",
+    source_ref="upstream/master",
+    mainline_ref="plugin-infrastructure-with-qdrive",
+    commit_subject="fix(PlanView): stop mission map visual loads in removed delegates",
+    include_paths=(
+        "src/PlanView/MissionItemMapVisual.qml",
+        "src/GeoMap/GeoMapMissionItems.qml",
+    ),
+)
+
 # Stock QGC gains a vehicle library (name, image, airframe, sensors, flight controller, notes),
 # one `.vehicle` JSON file per vehicle under a new `Vehicles` save folder — routing rule 1, a
 # stock-QGC capability with no plugin loaded. Builds up over several units
@@ -950,6 +966,7 @@ SPECS: dict[str, PRSpec] = {
     "initial-connect-skip": INITIAL_CONNECT_SKIP,
     "mocklink-bytessent": MOCKLINK_BYTESSENT,
     "bluetooth-test-hci": BLUETOOTH_TEST_HCI,
+    "map-visual-loader": MAP_VISUAL_LOADER,
     "vehicle-profiles": VEHICLE_PROFILES,
 }
 

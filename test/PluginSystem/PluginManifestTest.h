@@ -30,6 +30,8 @@ private slots:
     void _metaDataMissingMetaData_test();
     void _metaDataInvalidManifest_test();
     void _hostInfo_test();
+    void _hostVersionFromDescribe_test_data();
+    void _hostVersionFromDescribe_test();
     void _qtVersionRule_test_data();
     void _qtVersionRule_test();
     void _qtVersionIgnoredOnQmlTier_test();

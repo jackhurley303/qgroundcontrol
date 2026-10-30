@@ -23,6 +23,11 @@ Item {
 
         asynchronous: true
 
+        // A delegate removed while its asynchronous load is pending keeps the Loader alive until deleteLater, with
+        // an invalid context. When the load then completes, the Loader warns "Cannot create a component in an
+        // invalid context". An inactive Loader ignores the completed load.
+        Component.onDestruction: active = false
+
         Component.onCompleted: {
             const properties = {
                 map: _root.map,
