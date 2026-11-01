@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from ..._helpers import REPO_ROOT, get_step, get_steps, load_action, load_workflow
 
@@ -55,7 +56,9 @@ def test_official_appimages_publish_delta_update_metadata() -> None:
     )
     expected = "${{ env.QGC_APPIMAGE_UPDATE_INFORMATION }}"
     configure = get_step(LINUX_STEPS, "Configure")
-    assert configure["with"]["extra-args"] == f"-DQGC_APPIMAGE_UPDATE_INFORMATION={expected}"
+    # The flag value holds spaces, so split before each "-D" instead of on every space.
+    extra_args = re.split(r"\s+(?=-D)", configure["with"]["extra-args"])
+    assert f"-DQGC_APPIMAGE_UPDATE_INFORMATION={expected}" in extra_args
     verify = get_step(LINUX_STEPS, "Verify AppImage")
     assert verify["with"]["expected-appimage-update-information"] == expected
     assert "expected-appimage-update-information" in load_action("verify-executable")["inputs"]
