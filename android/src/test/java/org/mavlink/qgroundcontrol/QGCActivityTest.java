@@ -68,6 +68,15 @@ public class QGCActivityTest {
         assertFalse(QGCActivity.isValidImportFileName("mission.plan.bak"));
     }
 
+    @Test
+    public void isValidImportFileName_matchesTheGivenExtension() {
+        assertTrue(QGCActivity.isValidImportFileName("hello.qgcplugin", ".qgcplugin"));
+        assertTrue(QGCActivity.isValidImportFileName("HELLO.QGCPLUGIN", ".qgcplugin"));
+        assertFalse(QGCActivity.isValidImportFileName("mission.plan", ".qgcplugin"));
+        assertFalse(QGCActivity.isValidImportFileName("hello.qgcplugin", ""));
+        assertFalse(QGCActivity.isValidImportFileName("hello.qgcplugin", null));
+    }
+
     // -----------------------------------------------------------------------
     // resolveDestFile — unique-name resolution with _1, _2, … suffixes
     // -----------------------------------------------------------------------
@@ -160,6 +169,8 @@ public class QGCActivityTest {
                 Modifier.isPublic(method.getModifiers()));
         assertTrue("onImportResult must be native (jniOnImportResult JNI bridge)",
                 Modifier.isNative(method.getModifiers()));
+        assertTrue("onImportResult must be static (called before the activity exists)",
+                Modifier.isStatic(method.getModifiers()));
         assertEquals("onImportResult must return void",
                 void.class, method.getReturnType());
     }

@@ -177,25 +177,33 @@ QString getSDCardPath()
     return result.toString();
 }
 
-void openFileImportDialog(const QString& destPath, std::function<void(const QString&)> callback)
+void openFileImportDialog(const QString& destPath, std::function<void(const QString&)> callback,
+                          const QString& fileExtension)
 {
     s_importCallback = std::move(callback);
 
-    const QJniObject jDestPath = QJniObject::fromString(destPath);
-    QJniObject::callStaticMethod<void>(
-        kJniQGCActivityClassName,
-        "openFileImportDialog",
-        "(Ljava/lang/String;)V",
-        jDestPath.object<jstring>());
-
+    // Java reports every outcome through onImportResult(), including its own exceptions,
+    // which QJniObject would clear silently. Only a method that cannot be found is left to
+    // report here.
     QJniEnvironment env;
-    if (env.checkAndClearExceptions()) {
-        qCWarning(AndroidInterfaceLog) << "Exception in openFileImportDialog";
+    const jclass activityClass = env.findClass(kJniQGCActivityClassName);
+    const jmethodID method = activityClass ? env.findStaticMethod(activityClass, "openFileImportDialog",
+                                                                  "(Ljava/lang/String;Ljava/lang/String;)V")
+                                           : nullptr;
+    (void) env.checkAndClearExceptions();
+    if (!method) {
+        qCWarning(AndroidInterfaceLog) << "QGCActivity.openFileImportDialog not found";
         if (s_importCallback) {
             auto cb = std::move(s_importCallback);
             cb(QString());
         }
+        return;
     }
+
+    const QJniObject jDestPath = QJniObject::fromString(destPath);
+    const QJniObject jFileExtension = QJniObject::fromString(fileExtension);
+    QJniObject::callStaticMethod<void>(activityClass, method, jDestPath.object<jstring>(),
+                                       jFileExtension.object<jstring>());
 }
 
 static QSharedPointer<QLocks::QLockBase> s_partialWakeLock;

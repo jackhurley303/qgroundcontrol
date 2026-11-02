@@ -57,7 +57,9 @@ ColumnLayout {
         objectName:         "pluginRestartLine_" + root.plugin.id
         Layout.fillWidth:   true
         visible:            root._updateStaged
-        text:               qsTr("Restart QGroundControl to finish the update")
+        text:               Qt.platform.os === "android" ?
+                            qsTr("Close QGroundControl from its menu, or swipe it out of Recents, to finish the update") :
+                            qsTr("Restart QGroundControl to finish the update")
         wrapMode:           Text.Wrap
         font.pointSize:     ScreenTools.smallFontPointSize
         color:              qgcPal.colorOrange

@@ -271,6 +271,12 @@ PLUGIN_SDK = PRSpec(
         "src/Toolbar/SelectViewDropdown.qml",
         "src/AppSettings/PluginSettings.qml",
         "src/AppSettings/CMakeLists.txt",
+        # "Install plugin…" on Android: the native picker's copy accepts a caller-named file
+        # extension, so PluginPackagePicker can stage a .qgcplugin through it.
+        "android/src/org/mavlink/qgroundcontrol/QGCActivity.java",
+        "android/src/test/java/org/mavlink/qgroundcontrol/QGCActivityTest.java",
+        "src/Android/AndroidInterface.h",
+        "src/Android/AndroidInterface.cc",
         "src/Settings/PluginSettings.h",
         "src/Settings/PluginSettings.cc",
         "src/Settings/CMakeLists.txt",
@@ -376,6 +382,10 @@ PLUGIN_SDK = PRSpec(
             "feat(PluginSystem): add the runtime plugin system",
             (
                 "src/PluginSystem",
+                # PluginPackagePicker calls the picker's extension-taking form
+                "android/src/org/mavlink/qgroundcontrol/QGCActivity.java",
+                "src/Android/AndroidInterface.h",
+                "src/Android/AndroidInterface.cc",
                 "src/API/QGCCorePlugin.h",
                 "src/API/QGCCorePlugin.cc",
                 "src/API/README.md",
@@ -474,6 +484,7 @@ PLUGIN_SDK = PRSpec(
                 "test/QmlUITests/CMakeLists.txt",
                 "test/Comms/LinkConfigurationTest.h",
                 "test/Comms/LinkConfigurationTest.cc",
+                "android/src/test/java/org/mavlink/qgroundcontrol/QGCActivityTest.java",
                 "test/CMakeLists.txt",
                 "tools/verify_plugin_out_of_tree.py",
                 "tools/plugin-verify.schema.json",

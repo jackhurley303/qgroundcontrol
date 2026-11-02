@@ -22,6 +22,8 @@ target_sources(
         PluginLoaderGateTest.h
         PluginManifestTest.cc
         PluginManifestTest.h
+        PluginPackagePickerTest.cc
+        PluginPackagePickerTest.h
         PluginRecordStoreTest.cc
         PluginRecordStoreTest.h
         PluginTeardownTest.cc
@@ -84,6 +86,7 @@ add_qgc_test(PluginContributionsTest LABELS Unit)
 add_qgc_test(PluginInstallerTest LABELS Unit)
 add_qgc_test(PluginLoaderGateTest LABELS Unit)
 add_qgc_test(PluginManifestTest LABELS Unit)
+add_qgc_test(PluginPackagePickerTest LABELS Unit)
 add_qgc_test(PluginRecordStoreTest LABELS Unit)
 add_qgc_test(PluginTeardownTest LABELS Unit)
 add_qgc_test(PluginTrustGateTest LABELS Unit)

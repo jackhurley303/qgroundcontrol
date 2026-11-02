@@ -25,6 +25,7 @@ public class QGCActivity extends QtActivity {
 
     private static final int IMPORT_FILE_REQUEST_CODE = 42;
     private static String s_importDestPath = "";
+    private static String s_importExtension = ".plan";
 
     private WifiManager.MulticastLock m_wifiMulticastLock;
     private volatile QGCStoragePermissionController m_storagePermissionController;
@@ -146,7 +147,7 @@ public class QGCActivity extends QtActivity {
             if (cursor != null && cursor.moveToFirst()) {
                 final int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
                 if (nameIndex >= 0) {
-                    displayName = cursor.getString(nameIndex);                    
+                    displayName = cursor.getString(nameIndex);
                     displayName = sanitizeFilename(displayName);
                 }
             }
@@ -164,8 +165,8 @@ public class QGCActivity extends QtActivity {
             return null;
         }
 
-        if (!isValidImportFileName(displayName)) {
-            QGCLogger.w(TAG, "Rejected non-.plan file: " + displayName);
+        if (!isValidImportFileName(displayName, s_importExtension)) {
+            QGCLogger.w(TAG, "Rejected file without " + s_importExtension + " extension: " + displayName);
             return null;
         }
 
@@ -236,10 +237,18 @@ public class QGCActivity extends QtActivity {
      * A valid name is non-null, non-empty, and ends with the .plan extension
      */
     public static boolean isValidImportFileName(final String displayName) {
-        if (displayName == null || displayName.isEmpty()) {
+        return isValidImportFileName(displayName, ".plan");
+    }
+
+    /**
+     * Returns true when displayName is non-null, non-empty, and ends with extension (case-insensitive).
+     */
+    public static boolean isValidImportFileName(final String displayName, final String extension) {
+        if (displayName == null || displayName.isEmpty() || extension == null || extension.isEmpty()) {
             return false;
         }
-        return displayName.toLowerCase(java.util.Locale.ROOT).endsWith(".plan");
+        final java.util.Locale root = java.util.Locale.ROOT;
+        return displayName.toLowerCase(root).endsWith(extension.toLowerCase(root));
     }
 
     public static String getSDCardPath() {
@@ -276,20 +285,30 @@ public class QGCActivity extends QtActivity {
     /**
      * Opens Android's native file picker using ACTION_OPEN_DOCUMENT.
      * The selected file will be copied to the provided destination directory.
+     * Every call ends in exactly one onImportResult(), with an empty path on failure.
      *
-     * @param destPath Fully-qualified path of the destination Missions directory.
+     * @param destPath  Fully-qualified path of the destination directory.
+     * @param extension File extension the picked file must have, such as ".plan".
      */
-    public static void openFileImportDialog(final String destPath) {
-        if (m_instance == null) {
+    public static void openFileImportDialog(final String destPath, final String extension) {
+        final QGCActivity activity = m_instance;
+        if (activity == null) {
             QGCLogger.e(TAG, "Activity instance is null");
+            onImportResult("");
             return;
         }
         s_importDestPath = (destPath != null) ? destPath : "";
-        m_instance.runOnUiThread(() -> {
-            final Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType("*/*");
-            m_instance.startActivityForResult(intent, IMPORT_FILE_REQUEST_CODE);
+        s_importExtension = (extension != null) ? extension : "";
+        activity.runOnUiThread(() -> {
+            try {
+                final Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("*/*");
+                activity.startActivityForResult(intent, IMPORT_FILE_REQUEST_CODE);
+            } catch (Exception e) {
+                QGCLogger.e(TAG, "Failed to open the file picker", e);
+                onImportResult("");
+            }
         });
     }
 
@@ -326,5 +345,6 @@ public class QGCActivity extends QtActivity {
     public native void qgcLogDebug(final String message);
     public native void qgcLogWarning(final String message);
     public native void nativeStoragePermissionsResult(boolean granted);
-    public native void onImportResult(final String filePath);
+    // Static so the picker can report a failure before the activity exists
+    public static native void onImportResult(final String filePath);
 }

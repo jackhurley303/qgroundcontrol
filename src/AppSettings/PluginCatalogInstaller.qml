@@ -94,7 +94,9 @@ ColumnLayout {
             if (!success) {
                 root._resultText = qsTr("Installing %1 failed: %2").arg(name).arg(errorString)
             } else if (staged) {
-                root._resultText = qsTr("The update to %1 is ready. Restart QGroundControl to finish the update.").arg(name)
+                root._resultText = Qt.platform.os === "android" ?
+                                   qsTr("The update to %1 is ready. Close QGroundControl from its menu, or swipe it out of Recents, to finish the update.").arg(name) :
+                                   qsTr("The update to %1 is ready. Restart QGroundControl to finish the update.").arg(name)
             } else {
                 root._resultText = qsTr("%1 is installed.").arg(name)
             }

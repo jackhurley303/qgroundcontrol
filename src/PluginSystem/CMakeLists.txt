@@ -34,6 +34,8 @@ target_sources(
         PluginJsonUtils.h
         PluginManifest.cc
         PluginManifest.h
+        PluginPackagePicker.cc
+        PluginPackagePicker.h
         PluginRecordStore.cc
         PluginRecordStore.h
         PluginTrustGate.cc

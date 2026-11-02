@@ -21,11 +21,13 @@ SettingsPage {
 
     property var _pluginSettings: QGroundControl.settingsManager.pluginSettings
 
-    // Runtime plugin unload/reload supported on desktop platforms
+    // Runtime plugin unload/reload supported on desktop platforms and Android
     // Note: Plugin code changes still require rebuilding the app
+    readonly property bool _isAndroid: Qt.platform.os === "android"
     readonly property bool _supportsRuntimeReload: Qt.platform.os === "osx" ||
                                                      Qt.platform.os === "linux" ||
-                                                     Qt.platform.os === "windows"
+                                                     Qt.platform.os === "windows" ||
+                                                     _isAndroid
 
     QGCPalette { id: qgcPal }
 
@@ -54,6 +56,16 @@ SettingsPage {
         id: catalogInstaller
     }
 
+    // On Android QGCFileDialog lists only one folder, so "Install plugin…" uses the native picker
+    PluginPackagePicker {
+        id: packagePicker
+
+        onInstallFailed: (errorString) => {
+            installErrorDialog.text = errorString
+            installErrorDialog.open()
+        }
+    }
+
     QGCGroupBox {
         Layout.fillWidth:   true
         heading:            qsTr("Installed")
@@ -61,7 +73,9 @@ SettingsPage {
 
         QGCLabel {
             Layout.fillWidth:   true
-            text:               _supportsRuntimeReload ?
+            text:               _isAndroid ?
+                                qsTr("Enable or disable plugins. Plugins load at run time: an installed plugin starts at once, and disabling a plugin stops it.") :
+                                _supportsRuntimeReload ?
                                 qsTr("Enable or disable plugins. Disabling a plugin will unload it from memory. Plugin code changes require rebuilding the application.") :
                                 qsTr("Enable or disable plugins. Toggle settings to control which plugins load at startup, but changing which plugins are included requires rebuilding the APK.")
             wrapMode:           Text.WordWrap
@@ -81,8 +95,8 @@ SettingsPage {
             Layout.alignment:   Qt.AlignRight
             text:               qsTr("Install plugin…")
             visible:            _supportsRuntimeReload
-            enabled:            PluginCatalogManager.installingId === ""
-            onClicked:          installDialog.openForLoad()
+            enabled:            PluginCatalogManager.installingId === "" && !packagePicker.picking
+            onClicked:          _isAndroid ? packagePicker.pick() : installDialog.openForLoad()
         }
 
         Repeater {

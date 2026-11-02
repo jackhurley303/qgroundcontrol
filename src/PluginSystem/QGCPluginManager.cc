@@ -197,7 +197,15 @@ QString QGCPluginManager::_statusText(const PluginLoadInfo& record) const
         // The plugin runs either way, so this is a status line and not an error:
         // what the user needs to know is that the build they just installed is not
         // the one executing.
-        return record.staleImage ? tr("Active (restart to run the updated build)") : tr("Active");
+        if (!record.staleImage) {
+            return tr("Active");
+        }
+#ifdef Q_OS_ANDROID
+        // Home and Back leave the process running; only these end it
+        return tr("Active (close QGroundControl from its menu, or swipe it out of Recents, to run the updated build)");
+#else
+        return tr("Active (restart to run the updated build)");
+#endif
     case PluginState::Disabled:
         return tr("Disabled");
     case PluginState::Incompatible:

@@ -11,7 +11,10 @@ void setNativeMethods();
 bool checkStoragePermissions();
 QString getSDCardPath();
 void setKeepScreenOn(bool on);
-void openFileImportDialog(const QString& destPath, std::function<void(const QString&)> callback);
+/// Opens the native picker and copies the picked file into destPath. The callback receives the copy's path,
+/// or an empty string when the pick is cancelled or the copy fails. Only a file ending in fileExtension is copied.
+void openFileImportDialog(const QString& destPath, std::function<void(const QString&)> callback,
+                          const QString& fileExtension = QStringLiteral(".plan"));
 
 constexpr const char* kJniQGCActivityClassName = "org/mavlink/qgroundcontrol/QGCActivity";
 
