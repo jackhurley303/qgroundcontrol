@@ -323,6 +323,7 @@ PLUGIN_SDK = PRSpec(
         # Asserts linux.yml's Configure extra-args, which carry a second flag on this branch.
         "tools/tests/ci/contracts/test_appimage_packaging_contract.py",
         ".github/workflows/windows.yml",
+        ".github/workflows/android.yml",
         # Installs QGCPluginAPI.dll in the Runtime component on Windows, so the installed app
         # starts. A patch, because the file carries the rest of the fork's install rules. NB the
         # patch is the whole source_ref→mainline delta on this path, so a second fork-only edit
@@ -499,6 +500,7 @@ PLUGIN_SDK = PRSpec(
                 ".github/workflows/linux.yml",
                 "tools/tests/ci/contracts/test_appimage_packaging_contract.py",
                 ".github/workflows/windows.yml",
+                ".github/workflows/android.yml",
                 ".pre-commit-config.yaml",
             ),
         ),

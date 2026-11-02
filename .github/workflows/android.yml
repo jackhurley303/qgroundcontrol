@@ -241,6 +241,48 @@ jobs:
             --pattern '*.apk' --top-level \
             --copy-to "${RUNNER_TEMP}/build/${PACKAGE}.apk"
 
+      # Plugin SDK: a separate install pass of only the QGCPluginSDK component, packed into its own
+      # zip, independent of the APK. A dispatched or master run builds arm64-v8a and armeabi-v7a on
+      # this leg, so the check refuses an SDK whose QGCPluginAPI library is not aarch64. Only the
+      # arm64-v8a library installs into the SDK; armeabi-v7a stays in the APK.
+      - name: Package plugin SDK
+        if: ${{ matrix.primary && env.BUILD_TYPE == 'Release' }}
+        working-directory: ${{ runner.temp }}/build
+        run: |
+          SDK_VERSION=$(cat qgc-plugin-sdk-version.txt)
+          SDK_NAME="qgc-plugin-sdk-android-arm64-${SDK_VERSION}"
+          cmake --install . --config Release --component QGCPluginSDK --prefix "${SDK_NAME}"
+          SDK_LIB=$(find "${SDK_NAME}/lib" -maxdepth 1 -name 'libQGCPluginAPI*.so' | head -n 1)
+          test -n "${SDK_LIB}" || { echo "::error::no QGCPluginAPI library in ${SDK_NAME}/lib"; exit 1; }
+          readelf -h "${SDK_LIB}" | grep -q 'Machine:.*AArch64' || { echo "::error::${SDK_LIB} is not aarch64"; exit 1; }
+          zip -q -r -y "${SDK_NAME}.zip" "${SDK_NAME}"
+          echo "SDK_ZIP=${SDK_NAME}.zip" >> "$GITHUB_ENV"
+          echo "SDK_NAME=${SDK_NAME}" >> "$GITHUB_ENV"
+
+      # Cross-builds plugins/example against the packaged SDK with no QGC source in its scratch tree,
+      # then runs the Qt-component, QML-lint, ELF and negative-control axes. The test axis reports
+      # N/A on Android: the tests are Android binaries and the runner cannot run them.
+      - name: Verify plugin builds and lints out-of-tree (plugins/example)
+        if: ${{ matrix.primary && env.BUILD_TYPE == 'Release' }}
+        working-directory: ${{ runner.temp }}/build
+        env:
+          TARGET_QT_ROOT: ${{ steps.setup.outputs.target_qt_root_dir }}
+          HOST_QT_ROOT: ${{ steps.setup.outputs.host_qt_root_dir }}
+        run: |
+          python3 "${GITHUB_WORKSPACE}/tools/verify_plugin_out_of_tree.py" \
+            "${GITHUB_WORKSPACE}/plugins/example" \
+            --sdk "$(pwd)/${SDK_NAME}" \
+            --qt-root "${TARGET_QT_ROOT}" \
+            --host-qt-root "${HOST_QT_ROOT}"
+
+      - name: Attest and Upload plugin SDK
+        if: ${{ matrix.primary && env.BUILD_TYPE == 'Release' }}
+        uses: ./.github/actions/attest-and-upload
+        with:
+          artifact-name: ${{ env.SDK_ZIP }}
+          package-name: QGCPluginSDK-android-arm64
+          upload-aws: 'false'
+
       # Master pushes also publish an App Bundle of the same multi-ABI release build. androiddeployqt runs
       # Gradle's all-variant `bundle` task, so only outputs/bundle/release holds the release bundle.
       - name: Build Android App Bundle
