@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import struct
 import sys
 from pathlib import Path, PureWindowsPath
 
@@ -31,6 +32,7 @@ from verify_plugin_out_of_tree import (
     assert_control_failed,
     build_command,
     build_marker_script_for,
+    check_android_elf,
     check_forbidden_symbols,
     check_marker_embedded,
     check_marker_not_embedded,
@@ -47,11 +49,13 @@ from verify_plugin_out_of_tree import (
     find_built_artifact,
     find_cmake_lists,
     find_forbidden_symbols,
+    find_ndk_llvm_nm,
     find_qml_sources,
     flatten_qml_entries,
     generator_args,
     host_plugin_dir,
     inject_import,
+    is_android_key,
     is_desktop_kit,
     link_path,
     parse_build_marker_source,
@@ -63,9 +67,15 @@ from verify_plugin_out_of_tree import (
     parse_qt_components,
     qmllint_error_lines,
     qmllint_syntax_lines,
+    read_load_alignments,
+    read_sdk_platform_key,
     replace_path,
     require_dumpbin,
+    resolve_android_qt_root,
+    resolve_host_qt_root,
+    run_elf_axis,
     run_forbidden_symbol_axis,
+    run_test_axis,
     triage_qmllint_output,
     version_key,
     wait_for_next_mtime_tick,
@@ -1491,3 +1501,329 @@ def test_a_missing_origin_is_an_error_not_a_traceback(
 
     with pytest.raises(GateError, match="cannot copy"):
         link_path(tmp_path / "absent.qmltypes", tmp_path / "link.qmltypes")
+
+
+# --- Android SDK: the cross-build branch ----------------------------------------------------------
+
+
+def make_android_elf(
+    *, machine: int = 183, android: bool = True, aligns: tuple[int, ...] = (0x4000, 0x4000)
+) -> bytes:
+    """A minimal 64-bit little-endian ELF: PT_LOAD program headers with the given p_align, a
+    section-name table, and a `.note.android.ident` section when `android`. Made here so no
+    binary is committed."""
+    names = b"\0.shstrtab\0" + (b".note.android.ident\0" if android else b"")
+    ehsize, phentsize, shentsize = 64, 56, 64
+    phoff = ehsize
+    names_at = phoff + phentsize * len(aligns)
+    shoff = names_at + len(names)
+    sections = 3 if android else 2
+    header = struct.pack(
+        "<16sHHIQQQIHHHHHH",
+        b"\x7fELF\x02\x01\x01" + bytes(9),
+        3,
+        machine,
+        1,
+        0,
+        phoff,
+        shoff,
+        0,
+        ehsize,
+        phentsize,
+        len(aligns),
+        shentsize,
+        sections,
+        1,
+    )
+    phdrs = b"".join(
+        struct.pack("<IIQQQQQQ", 1, 5, 0, 0, 0, 0x100, 0x100, align) for align in aligns
+    )
+
+    def section(name: int) -> bytes:
+        return struct.pack("<IIQQQQIIQQ", name, 3, 0, 0, names_at, len(names), 0, 0, 1, 0)
+
+    table = bytes(shentsize) + section(1)
+    if android:
+        table += section(names.index(b".note"))
+    return header + phdrs + names + table
+
+
+def _write_elf(tmp_path: Path, **kwargs: object) -> Path:
+    path = tmp_path / "libPlugin.so"
+    path.write_bytes(make_android_elf(**kwargs))  # type: ignore[arg-type]
+    return path
+
+
+def test_load_alignments_are_read_from_the_program_headers(tmp_path: Path):
+    path = _write_elf(tmp_path, aligns=(0x4000, 0x1000, 0x10000))
+
+    assert read_load_alignments(path) == [0x4000, 0x1000, 0x10000]
+
+
+@pytest.mark.parametrize("data", [b"", b"not an elf file at all", b"\x7fELF\x02\x01\x01"])
+def test_a_file_that_is_not_an_elf_file_has_no_alignments(tmp_path: Path, data: bytes):
+    path = tmp_path / "x.so"
+    path.write_bytes(data)
+
+    assert read_load_alignments(path) is None
+
+
+def test_a_truncated_program_header_table_has_no_alignments_not_an_empty_list(tmp_path: Path):
+    path = tmp_path / "x.so"
+    path.write_bytes(make_android_elf()[:100])
+
+    assert read_load_alignments(path) is None
+
+
+def test_a_missing_file_has_no_alignments(tmp_path: Path):
+    assert read_load_alignments(tmp_path / "absent.so") is None
+
+
+def test_an_android_library_with_16k_pages_passes_the_elf_axis(tmp_path: Path):
+    assert check_android_elf(_write_elf(tmp_path), "android-arm64") == [0x4000, 0x4000]
+
+
+def test_a_4k_aligned_android_library_fails_the_elf_axis(tmp_path: Path):
+    path = _write_elf(tmp_path, aligns=(0x4000, 0x1000))
+
+    with pytest.raises(GateError, match=r"alignment 0x1000, below 0x4000"):
+        check_android_elf(path, "android-arm64")
+
+
+def test_a_glibc_library_fails_the_elf_axis_for_its_libc(tmp_path: Path):
+    path = _write_elf(tmp_path, android=False)
+
+    with pytest.raises(GateError, match=r"Linux \(glibc\) binary"):
+        check_android_elf(path, "android-arm64")
+
+
+def test_a_library_for_the_wrong_machine_fails_the_elf_axis(tmp_path: Path):
+    path = _write_elf(tmp_path, machine=62)
+
+    with pytest.raises(GateError, match=r"built for x86-64, but key 'android-arm64' needs AArch64"):
+        check_android_elf(path, "android-arm64")
+
+
+def test_an_unreadable_artifact_fails_the_elf_axis_rather_than_passing(tmp_path: Path):
+    path = tmp_path / "libPlugin.so"
+    path.write_bytes(b"MZ not an elf")
+
+    with pytest.raises(GateError, match="not a readable ELF file"):
+        check_android_elf(path, "android-arm64")
+    with pytest.raises(GateError, match="no standalone artifact"):
+        check_android_elf(tmp_path / "absent.so", "android-arm64")
+
+
+def test_a_library_with_no_load_segments_fails_the_elf_axis(tmp_path: Path):
+    path = _write_elf(tmp_path, aligns=())
+
+    with pytest.raises(GateError, match="no readable PT_LOAD"):
+        check_android_elf(path, "android-arm64")
+
+
+def test_the_elf_axis_runs_its_control_and_counts_it(tmp_path: Path):
+    context = _context(tmp_path, _manifest())
+    context.platform_key = "android-arm64"
+
+    run_elf_axis(context, _write_elf(tmp_path))
+
+    assert context.controls_run == 1
+
+
+def test_the_elf_axis_does_nothing_on_a_desktop_sdk(tmp_path: Path):
+    context = _context(tmp_path, _manifest())
+    context.platform_key = "linux-x64"
+
+    run_elf_axis(context, tmp_path / "absent.so")
+
+    assert context.controls_run == 0
+
+
+def test_the_test_axis_is_na_on_android_whatever_the_manifest_says(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    context = _context(
+        tmp_path,
+        _manifest(
+            tests={"enabled": True, "cmake_lists": "t/CMakeLists.txt", "count_pattern": "^x"}
+        ),
+    )
+    context.platform_key = "android-arm64"
+
+    run_test_axis(context)
+
+    out = capsys.readouterr().out
+    assert "Android binaries and this host cannot run them" in out
+
+
+def _sdk_with_key(tmp_path: Path, key_line: str) -> Path:
+    config = tmp_path / "lib" / "cmake" / "QGCPluginAPI" / "QGCPluginAPIConfig.cmake"
+    config.parent.mkdir(parents=True)
+    config.write_text(f'set(QGCPluginAPI_APP_NAME "X")\n{key_line}\n', encoding="utf-8")
+    return tmp_path
+
+
+def test_the_sdk_platform_key_is_read_from_its_config(tmp_path: Path):
+    sdk = _sdk_with_key(tmp_path, 'set(QGCPluginAPI_PLATFORM_KEY "android-arm64")')
+
+    assert read_sdk_platform_key(sdk) == "android-arm64"
+    assert is_android_key("android-arm64")
+    assert not is_android_key("linux-x64")
+    assert not is_android_key(None)
+
+
+def test_an_sdk_that_records_no_key_keeps_the_desktop_path(tmp_path: Path):
+    assert read_sdk_platform_key(tmp_path) is None
+    assert read_sdk_platform_key(_sdk_with_key(tmp_path / "a", "")) is None
+
+
+def _ndk(tmp_path: Path, *, tool: bool = True) -> Path:
+    bin_dir = tmp_path / "ndk" / "toolchains" / "llvm" / "prebuilt" / "linux-x86_64" / "bin"
+    bin_dir.mkdir(parents=True)
+    if tool:
+        nm = bin_dir / "llvm-nm"
+        nm.write_text("#!/bin/sh\n", encoding="utf-8")
+        nm.chmod(0o755)
+    return tmp_path / "ndk"
+
+
+def test_the_ndk_llvm_nm_is_found_under_the_ndk_root(tmp_path: Path):
+    ndk = _ndk(tmp_path)
+
+    assert find_ndk_llvm_nm({"ANDROID_NDK_ROOT": str(ndk)}).name == "llvm-nm"
+
+
+def test_a_missing_ndk_or_llvm_nm_is_an_error_not_a_pass(tmp_path: Path):
+    with pytest.raises(GateError, match="set ANDROID_NDK_ROOT"):
+        find_ndk_llvm_nm({})
+    with pytest.raises(GateError, match="not a directory"):
+        find_ndk_llvm_nm({"ANDROID_NDK_ROOT": str(tmp_path / "absent")})
+    with pytest.raises(GateError, match="no llvm-nm"):
+        find_ndk_llvm_nm({"ANDROID_NDK_ROOT": str(_ndk(tmp_path, tool=False))})
+
+
+def test_a_desktop_kit_is_refused_as_the_android_kit(tmp_path: Path):
+    with pytest.raises(GateError, match="needs the Qt kit 'android_arm64_v8a'"):
+        resolve_android_qt_root(tmp_path / "6.12.0" / "gcc_64", "android-arm64")
+    kit = tmp_path / "6.12.0" / "android_arm64_v8a"
+    assert resolve_android_qt_root(kit, "android-arm64") == kit
+
+
+def _make_kits(tmp_path: Path, *names: tuple[str, str]) -> None:
+    for version, kit in names:
+        (tmp_path / version / kit / "lib" / "cmake" / "Qt6").mkdir(parents=True)
+
+
+def test_the_host_kit_defaults_to_the_desktop_kit_beside_the_android_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(verifier.platform, "machine", lambda: "x86_64")
+    _make_kits(tmp_path, ("6.12.0", "android_arm64_v8a"), ("6.12.0", "gcc_64"))
+
+    host = resolve_host_qt_root(None, tmp_path / "6.12.0" / "android_arm64_v8a")
+
+    assert host == tmp_path / "6.12.0" / "gcc_64"
+
+
+def test_a_missing_host_kit_is_an_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(verifier.platform, "machine", lambda: "x86_64")
+    _make_kits(tmp_path, ("6.12.0", "android_arm64_v8a"))
+
+    with pytest.raises(GateError, match=r"no host Qt kit beside the Android kit.*--host-qt-root"):
+        resolve_host_qt_root(None, tmp_path / "6.12.0" / "android_arm64_v8a")
+    with pytest.raises(GateError, match="not a host Qt prefix"):
+        resolve_host_qt_root(str(tmp_path / "6.12.0" / "gcc_64"), tmp_path / "6.12.0" / "a")
+
+
+def test_a_host_kit_at_another_qt_version_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(verifier.platform, "machine", lambda: "x86_64")
+    _make_kits(tmp_path, ("6.12.0", "android_arm64_v8a"), ("6.11.1", "gcc_64"))
+
+    with pytest.raises(GateError, match="needs the same version"):
+        resolve_host_qt_root(
+            str(tmp_path / "6.11.1" / "gcc_64"), tmp_path / "6.12.0" / "android_arm64_v8a"
+        )
+
+
+def test_the_android_configure_names_the_sdk_dir_the_host_kit_and_the_abi():
+    command = [
+        str(part)
+        for part in configure_command(
+            Path("b"),
+            Path("s"),
+            Path("/sdk"),
+            Path("/qt/android_arm64_v8a"),
+            {"CMAKE_GENERATOR": "Ninja"},
+            android_key="android-arm64",
+            host_qt_root=Path("/qt/gcc_64"),
+        )
+    ]
+
+    assert "-DQGCPluginAPI_DIR=/sdk/lib/cmake/QGCPluginAPI" in command
+    assert "-DQT_HOST_PATH=/qt/gcc_64" in command
+    assert "-DQT_ANDROID_ABIS=arm64-v8a" in command
+    assert "-DCMAKE_BUILD_TYPE=Release" in command
+    assert not any(part.startswith("-DCMAKE_PREFIX_PATH") for part in command)
+
+
+def test_an_android_configure_without_a_host_kit_is_an_error():
+    with pytest.raises(GateError, match="host Qt kit"):
+        configure_command(
+            Path("b"), Path("s"), Path("/sdk"), Path("/qt"), None, android_key="android-arm64"
+        )
+
+
+def test_a_desktop_configure_is_unchanged_by_the_android_parameters(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(verifier, "is_windows", lambda: False)
+    command = [
+        str(part)
+        for part in configure_command(
+            Path("b"), Path("s"), Path("/sdk"), Path("/qt"), {"CMAKE_GENERATOR": "x"}
+        )
+    ]
+
+    assert "-DCMAKE_PREFIX_PATH=/sdk;/qt" in command
+    assert not any("QGCPluginAPI_DIR" in part or "QT_HOST_PATH" in part for part in command)
+
+
+def test_a_non_utf8_sdk_config_is_a_gate_error(tmp_path: Path):
+    config = tmp_path / "lib" / "cmake" / "QGCPluginAPI" / "QGCPluginAPIConfig.cmake"
+    config.parent.mkdir(parents=True)
+    config.write_bytes(b"set(X \xff\xfe)\n")
+
+    with pytest.raises(GateError, match="cannot read"):
+        read_sdk_platform_key(tmp_path)
+
+
+def test_two_host_kits_are_ambiguous_and_the_message_does_not_say_none_exist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(verifier.platform, "machine", lambda: "AMD64")
+    _make_kits(
+        tmp_path,
+        ("6.12.0", "android_arm64_v8a"),
+        ("6.12.0", "msvc2022_64"),
+        ("6.12.0", "msvc2019_64"),
+    )
+
+    with pytest.raises(GateError, match=r"more than one desktop Qt kit.*--host-qt-root") as raised:
+        resolve_host_qt_root(None, tmp_path / "6.12.0" / "android_arm64_v8a")
+    assert "no host Qt kit" not in str(raised.value)
+    assert "--qt-root or set QT_ROOT" not in str(raised.value)
+
+
+def test_an_unreadable_sdk_config_is_a_gate_error(tmp_path: Path):
+    config = tmp_path / "lib" / "cmake" / "QGCPluginAPI" / "QGCPluginAPIConfig.cmake"
+    config.parent.mkdir(parents=True)
+    config.mkdir()  # a directory where the file should be: read_text raises OSError
+
+    with pytest.raises(GateError, match="cannot read"):
+        read_sdk_platform_key(tmp_path)

@@ -169,6 +169,20 @@ the build-marker check reads the library's exports with `dumpbin`. A shell witho
 stops the tool before it builds. The tool reports the forbidden-symbol check as N/A on Windows,
 even when the manifest enables it, because MSVC resolves every import at link time and an undefined symbol already fails the link.
 
+For an Android SDK, the same tool cross-builds. Pass the Android kit as `--qt-root`. Pass the
+host's desktop kit of the same Qt version as `--host-qt-root`. Without it, the tool uses the
+desktop kit beside the Android one. Set `ANDROID_NDK_ROOT` to the NDK folder. This command is for
+an x86_64 Linux host. On arm64 Linux use `gcc_arm64`; on macOS use `<Qt>/<version>/macos`.
+
+```bash
+ANDROID_NDK_ROOT=<ndk> python3 tools/verify_plugin_out_of_tree.py example --sdk "$(pwd)" \
+  --qt-root <Qt>/<version>/android_arm64_v8a --host-qt-root <Qt>/<version>/gcc_64
+```
+
+The tool reports the test axis as N/A, because the tests are Android binaries the host cannot
+run. It reads symbols with the NDK's `llvm-nm`. An ELF check confirms the library's machine,
+its Android mark and 16 KB page alignment. A missing NDK, `llvm-nm` or host kit stops the tool.
+
 Your `CMakeLists.txt` should also call `qgc_plugin_build_marker()` (see
 `example/CMakeLists.txt`) and add the source it returns to your plugin target. It bakes a
 per-build value into an exported symbol that QGC reads back **from the loaded image**, so

@@ -178,8 +178,8 @@ install(
 )
 
 # The out-of-tree gate itself (out-of-tree-verifier.md U2), so a third-party author runs
-# the same tool CI runs rather than a description of it. It is stdlib-only and single-file
-# precisely so it can ship here: only _bootstrap.py (below) comes with it, and there is no
+# the same tool CI runs rather than a description of it. It is stdlib-only precisely so it
+# can ship here: only _bootstrap.py and pack_plugin.py (below) come with it, and there is no
 # QGC checkout to fall back on. PROGRAMS, not FILES, so the shebang is usable. The schema
 # ships beside it as the human- and editor-readable statement of the manifest contract; the
 # tool validates manifests itself and never depends on it being present.

@@ -24,16 +24,24 @@ on a Qt module the SDK does not guarantee fails here, not three weeks later in s
 else's leaner Qt. The allowlists are data this tool ships and versions — the local Qt
 install's contents are deliberately not the source of truth for "guaranteed".
 
-Stdlib only, single file plus its schema: it installs into the SDK package and must run
-from an unpacked zip that contains no QGC checkout and no `tools/` package.
+Stdlib only, one file plus its schema and the sibling _bootstrap.py and pack_plugin.py: it
+installs into the SDK package and must run from an unpacked zip that contains no QGC checkout
+and no `tools/` package.
 
 Runs on macOS, Linux and Windows. On Windows run it from a shell where the MSVC toolchain is
 on PATH (a `vcvars64` shell): the build needs `cl`, and the build-marker axis reads the
 plugin's exports with `dumpbin`. A missing `dumpbin` fails the gate before anything builds.
 
+An SDK that records an `android-*` platform key makes this a cross-build. `--qt-root` then
+names the Android Qt kit and `--host-qt-root` the host's desktop kit of the same version, which
+supplies `qmllint` and `QT_HOST_PATH`. The NDK comes from `ANDROID_NDK_ROOT`; its `llvm-nm`
+reads the symbols. The tests are Android binaries the host cannot run, so that axis reports
+N/A. An ELF axis checks the built library's machine, its Android mark and its 16 KB `PT_LOAD`
+alignment, through `pack_plugin.py`, which sits beside this file in the SDK.
+
 Usage:
     python3 verify_plugin_out_of_tree.py <plugin-dir> [--sdk <prefix>] [--build-dir <dir>]
-        [--qt-root <dir>] [--work <dir>] [--parallel <n>]
+        [--qt-root <dir>] [--host-qt-root <dir>] [--work <dir>] [--parallel <n>]
         [--deploy] [--keep] [--report-json <file>]
 """
 
@@ -55,6 +63,7 @@ from pathlib import Path, PurePath
 from typing import TYPE_CHECKING
 
 import _bootstrap as _bootstrap
+import pack_plugin
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
@@ -1232,6 +1241,206 @@ def host_plugin_dir(app_name: str, org_name: str, stable_build: bool) -> Path:
     return base / org_name / directory / "plugins"
 
 
+# --- Android cross-build ------------------------------------------------------------------------
+
+# The PT_LOAD alignment Android 16 KB-page devices need. The packer's loader check does not
+# read segments, so this axis does.
+ANDROID_PAGE_ALIGNMENT = 16384
+
+# The Qt kit name and the CMake ABI for each android-* key's arch.
+_ANDROID_KITS = {"arm64": ("android_arm64_v8a", "arm64-v8a")}
+
+ANDROID_TESTS_NA_REASON = (
+    "the plugin's tests are Android binaries and this host cannot run them; the plugin's tests "
+    "run on the desktop legs"
+)
+
+_PT_LOAD = 1
+_MAX_PROGRAM_HEADERS = 4096
+
+
+def read_sdk_platform_key(sdk_prefix: Path) -> str | None:
+    """The platform key the SDK records, or None when the config records none.
+
+    None means no config, or a config with no key (a pre-key SDK); both keep the desktop path.
+    A config that exists but cannot be read raises GateError. An android-* key is what turns
+    the cross-build on.
+    """
+    matches = list(sdk_prefix.glob("lib/cmake/QGCPluginAPI/QGCPluginAPIConfig.cmake"))
+    if not matches:
+        return None
+    try:
+        text = matches[0].read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise GateError(f"cannot read {matches[0]}: {exc}") from exc
+    found = re.search(r'^set\(QGCPluginAPI_PLATFORM_KEY\s+"([^"]*)"\)', text, re.MULTILINE)
+    return found.group(1) if found and found.group(1) else None
+
+
+def is_android_key(key: str | None) -> bool:
+    return key is not None and key.startswith("android-")
+
+
+def android_kit_for_key(key: str) -> tuple[str, str]:
+    """(Qt kit directory name, CMake ABI) for an android-* key."""
+    arch = key.partition("-")[2]
+    if arch not in _ANDROID_KITS:
+        raise GateError(
+            f"the SDK's platform key '{key}' has no Android kit this gate knows "
+            f"(known: {', '.join('android-' + known for known in _ANDROID_KITS)})"
+        )
+    return _ANDROID_KITS[arch]
+
+
+def resolve_android_qt_root(qt_root: Path, key: str) -> Path:
+    """The Android kit named by --qt-root, checked against the SDK's key.
+
+    A desktop kit here would configure a desktop build against an Android SDK, and the failure
+    would show up far from its cause.
+    """
+    kit, _ = android_kit_for_key(key)
+    if qt_root.name != kit:
+        raise GateError(
+            f"the SDK's platform key is '{key}', which needs the Qt kit '{kit}', but --qt-root "
+            f"(or QT_ROOT) names {qt_root}; pass the Android kit's prefix as --qt-root"
+        )
+    return qt_root
+
+
+def resolve_host_qt_root(explicit: str | None, android_qt_root: Path) -> Path:
+    """The desktop kit that supplies qmllint and QT_HOST_PATH, at the Android kit's version.
+
+    Without --host-qt-root, the desktop kit beside the Android one is used. Nothing found is an
+    error: a cross-build without the host kit has no moc, rcc or qmllint.
+    """
+    if explicit:
+        host = Path(explicit).expanduser()
+    else:
+        siblings = [path for path in android_qt_root.parent.iterdir() if path.is_dir()]
+        desktop = [
+            path for path in siblings if is_desktop_kit(path.name, sys.platform, platform.machine())
+        ]
+        if not desktop:
+            raise GateError(
+                f"no host Qt kit beside the Android kit {android_qt_root}; pass --host-qt-root"
+            )
+        if len(desktop) > 1:
+            raise GateError(
+                f"more than one desktop Qt kit beside the Android kit {android_qt_root}; pass "
+                f"--host-qt-root to choose:\n  "
+                + "\n  ".join(str(path) for path in sorted(desktop))
+            )
+        host = desktop[0]
+    if not (host / "lib" / "cmake" / "Qt6").is_dir():
+        raise GateError(f"{host} is not a host Qt prefix (no lib/cmake/Qt6); pass --host-qt-root")
+    if not is_desktop_kit(host.name, sys.platform, platform.machine()):
+        raise GateError(f"--host-qt-root {host} is not a desktop kit for this host")
+    if host.parent.name != android_qt_root.parent.name:
+        raise GateError(
+            f"the host Qt {host.parent.name} and the Android Qt {android_qt_root.parent.name} "
+            f"differ; the cross-build needs the same version"
+        )
+    return host
+
+
+def find_ndk_llvm_nm(env: dict[str, str] | None = None) -> Path:
+    """The NDK's llvm-nm, from ANDROID_NDK_ROOT. A missing NDK or tool is an error.
+
+    The system nm reads an ELF file, but it is not the NDK's tool, and a host without one
+    (macOS) would pass the symbol axes by reading nothing.
+    """
+    root = (env if env is not None else os.environ).get("ANDROID_NDK_ROOT")
+    if not root:
+        raise GateError(
+            "an Android SDK needs the NDK that built it: set ANDROID_NDK_ROOT to the NDK folder"
+        )
+    ndk = Path(root).expanduser()
+    if not ndk.is_dir():
+        raise GateError(f"ANDROID_NDK_ROOT is {ndk}, which is not a directory")
+    found = sorted(ndk.glob("toolchains/llvm/prebuilt/*/bin/llvm-nm"))
+    if not found:
+        raise GateError(f"no llvm-nm under {ndk}/toolchains/llvm/prebuilt/*/bin")
+    if not os.access(found[0], os.X_OK):
+        raise GateError(f"{found[0]} is not executable")
+    return found[0]
+
+
+def read_load_alignments(path: Path) -> list[int] | None:
+    """p_align of every PT_LOAD segment, or None when the file is not a readable ELF file.
+
+    Bounds-checked like pack_plugin.read_elf_info: a truncated or hostile header yields None,
+    never an exception and never an empty list that reads as "no segments to misalign".
+    """
+    try:
+        with path.open("rb") as handle:
+            size = os.fstat(handle.fileno()).st_size
+            ident = handle.read(16)
+            if len(ident) < 16 or ident[:4] != b"\x7fELF" or ident[4] not in (1, 2):
+                return None
+            if ident[5] not in (1, 2):
+                return None
+            is_64 = ident[4] == 2
+            order = "little" if ident[5] == 1 else "big"
+
+            def uint(offset: int, width: int) -> int | None:
+                if offset < 0 or offset + width > size:
+                    return None
+                handle.seek(offset)
+                raw = handle.read(width)
+                return int.from_bytes(raw, order) if len(raw) == width else None
+
+            if is_64:
+                phoff, phentsize, phnum = uint(32, 8), uint(54, 2), uint(56, 2)
+                align_at, align_width, min_entry = 48, 8, 56
+            else:
+                phoff, phentsize, phnum = uint(28, 4), uint(42, 2), uint(44, 2)
+                align_at, align_width, min_entry = 28, 4, 32
+            if phoff is None or phentsize is None or phnum is None:
+                return None
+            if phnum == 0 or phnum > _MAX_PROGRAM_HEADERS or phentsize < min_entry:
+                return None
+            alignments: list[int] = []
+            for index in range(phnum):
+                base = phoff + index * phentsize
+                kind = uint(base, 4)
+                align = uint(base + align_at, align_width)
+                if kind is None or align is None:
+                    return None
+                if kind == _PT_LOAD:
+                    alignments.append(align)
+            return alignments
+    except (OSError, ValueError, OverflowError):
+        return None
+
+
+def check_android_elf(artifact: Path, key: str) -> list[int]:
+    """The built library is what `key` promises: machine, Android mark, 16 KB PT_LOAD pages.
+
+    The machine and the mark come from pack_plugin.check_binary_matches_key, the same check the
+    packer runs, so a library this passes is one the packer accepts. Returns the alignments.
+    """
+    if not artifact.is_file():
+        raise GateError(f"no standalone artifact at {artifact} to read as an ELF file")
+    try:
+        pack_plugin.check_binary_matches_key(artifact, key)
+    except pack_plugin.PackError as exc:
+        raise GateError(f"ELF axis: {exc}") from exc
+    alignments = read_load_alignments(artifact)
+    if not alignments:
+        raise GateError(
+            f"ELF axis: {artifact.name} has no readable PT_LOAD segments, so its page "
+            f"alignment was never measured"
+        )
+    short = [align for align in alignments if align < ANDROID_PAGE_ALIGNMENT]
+    if short:
+        listed = ", ".join(hex(align) for align in short)
+        raise GateError(
+            f"ELF axis: {artifact.name} has PT_LOAD alignment {listed}, below "
+            f"{hex(ANDROID_PAGE_ALIGNMENT)} (16 KB). A device with 16 KB pages cannot map it"
+        )
+    return alignments
+
+
 # --- Process plumbing -----------------------------------------------------------------------
 
 
@@ -1475,10 +1684,20 @@ class GateContext:
     tests_registered: int | None = None
     build_marker: str | None = None
     """The marker the standalone artifact ends the run carrying."""
+    platform_key: str | None = None
+    """The SDK's platform key. An android-* key makes this a cross-build."""
+    host_qt_root: Path | None = None
+    """The desktop kit of an Android cross-build: qmllint, the QML allowlist and QT_HOST_PATH."""
+    nm: str | Path = "nm"
+    """The symbol reader. The NDK's llvm-nm on Android."""
     controls_run: int = 0
     """How many negative controls actually ran. The closing summary claims they all went
     red; that claim has to be counted, not assumed, since an axis declared N/A takes its
     controls with it."""
+
+
+def is_android_build(context: GateContext) -> bool:
+    return is_android_key(context.platform_key)
 
 
 def copy_plugin_to_scratch(plugin_root: Path, destination: Path) -> None:
@@ -1516,9 +1735,39 @@ def generator_args(
 
 
 def configure_command(
-    build_dir: Path, source: Path, sdk_prefix: Path, qt_root: Path, env: dict[str, str] | None
+    build_dir: Path,
+    source: Path,
+    sdk_prefix: Path,
+    qt_root: Path,
+    env: dict[str, str] | None,
+    *,
+    android_key: str | None = None,
+    host_qt_root: Path | None = None,
 ) -> list[str | Path]:
-    """The standalone configure command, shared by the real build and the negative control."""
+    """The standalone configure command, shared by the real build and the negative control.
+
+    An android-* key adds the cross-build's inputs. `CMAKE_PREFIX_PATH` does not reach the SDK
+    under the Android toolchain (it limits the find roots), so the SDK's package dir is passed
+    as `QGCPluginAPI_DIR` and the prefix path is left out.
+    """
+    toolchain = f"-DCMAKE_TOOLCHAIN_FILE={qt_root / 'lib' / 'cmake' / 'Qt6' / 'qt.toolchain.cmake'}"
+    if is_android_key(android_key):
+        assert android_key is not None
+        if host_qt_root is None:
+            raise GateError("an Android configure needs the host Qt kit (QT_HOST_PATH)")
+        return [
+            "cmake",
+            *generator_args(env),
+            "-B",
+            build_dir,
+            "-S",
+            source,
+            f"-DCMAKE_BUILD_TYPE={BUILD_CONFIG}",
+            toolchain,
+            f"-DQT_HOST_PATH={host_qt_root}",
+            f"-DQT_ANDROID_ABIS={android_kit_for_key(android_key)[1]}",
+            f"-DQGCPluginAPI_DIR={sdk_prefix / 'lib' / 'cmake' / 'QGCPluginAPI'}",
+        ]
     command: list[str | Path] = [
         "cmake",
         *generator_args(env),
@@ -1527,7 +1776,7 @@ def configure_command(
         "-S",
         source,
         f"-DCMAKE_PREFIX_PATH={sdk_prefix};{qt_root}",
-        f"-DCMAKE_TOOLCHAIN_FILE={qt_root / 'lib' / 'cmake' / 'Qt6' / 'qt.toolchain.cmake'}",
+        toolchain,
     ]
     if is_windows():
         # A single-config generator (Ninja) needs the configuration at configure time; a
@@ -1559,6 +1808,8 @@ def configure_and_build(context: GateContext) -> Path:
             context.sdk_prefix,
             context.qt_root,
             context.runner.env,
+            android_key=context.platform_key,
+            host_qt_root=context.host_qt_root,
         ),
     )
     step("Building standalone (plugin and every test target)")
@@ -1568,6 +1819,10 @@ def configure_and_build(context: GateContext) -> Path:
 
 def run_test_axis(context: GateContext) -> None:
     axis = context.manifest.tests
+    if is_android_build(context):
+        # Not the manifest's call: no manifest can make an Android binary run on this host.
+        step(f"Test axis N/A on {context.platform_key}: {ANDROID_TESTS_NA_REASON}")
+        return
     if not axis.enabled:
         step(f"Test axis declared N/A: {axis.reason}")
         # "Declared N/A" is a claim, and this gate does not take claims on trust. If the
@@ -1608,6 +1863,31 @@ def run_test_axis(context: GateContext) -> None:
     )
 
 
+def run_elf_axis(context: GateContext, artifact: Path) -> None:
+    """Android only: the artifact is an NDK-built ELF for the key's machine with 16 KB pages."""
+    key = context.platform_key
+    if not is_android_build(context) or key is None:
+        return
+    step(f"ELF check: machine, Android mark and 16 KB alignment for {key}")
+    alignments = check_android_elf(artifact, key)
+    print(f"{artifact.name}: machine and Android mark match {key}; PT_LOAD align {alignments}.")
+    # The check passing proves nothing until it is seen failing. This asks the same function
+    # about the same file under the Linux key, which must refuse an Android library.
+    linux_key = "linux-" + key.partition("-")[2]
+    try:
+        pack_plugin.check_binary_matches_key(artifact, linux_key)
+    except pack_plugin.PackError as exc:
+        if "Android (bionic) binary" not in str(exc):
+            raise GateError(f"ELF control failed for the wrong reason: {exc}") from exc
+    else:
+        raise GateError(
+            f"ELF control: the Android library was accepted under '{linux_key}', so the mark "
+            f"check cannot tell the two libcs apart"
+        )
+    context.controls_run += 1
+    print(f"OK — the same file is refused under {linux_key}, as an Android (bionic) binary.")
+
+
 def run_forbidden_symbol_axis(context: GateContext, artifact: Path) -> None:
     axis = context.manifest.forbidden_symbols
     if not axis.enabled:
@@ -1621,10 +1901,13 @@ def run_forbidden_symbol_axis(context: GateContext, artifact: Path) -> None:
     # ELF: read the dynamic table, since a shared object's static symtab is routinely
     # stripped and `nm -u` would then report "no symbols" and exit 1. Mach-O has no such
     # split, and macOS nm rejects -D. Windows has no nm; it takes the N/A branch above.
-    nm_flags = ["-u"] if sys.platform == "darwin" else ["-D", "-u"]
+    # An Android library is ELF whatever the host is, and is read with the NDK's llvm-nm.
+    nm_flags = (
+        ["-u"] if sys.platform == "darwin" and not is_android_build(context) else ["-D", "-u"]
+    )
 
     def nm(path: Path) -> tuple[int, str]:
-        return context.runner.capture("nm", *nm_flags, str(path))
+        return context.runner.capture(context.nm, *nm_flags, str(path))
 
     check_forbidden_symbols(artifact, axis.patterns, nm)
     print("No forbidden undefined symbols.")
@@ -1636,10 +1919,11 @@ def run_build_marker_axis(context: GateContext, artifact: Path) -> None:
     # Defined symbols this time, not undefined ones. ELF: the dynamic table, since a
     # shared object's static symtab is routinely stripped. Mach-O has no such split and
     # macOS nm rejects -D. Windows reads the export table with dumpbin.
-    nm_flags = ["-gU"] if sys.platform == "darwin" else ["-D", "--defined-only"]
+    darwin_nm = sys.platform == "darwin" and not is_android_build(context)
+    nm_flags = ["-gU"] if darwin_nm else ["-D", "--defined-only"]
 
     def nm(path: Path) -> tuple[int, str]:
-        return context.runner.capture("nm", *nm_flags, str(path))
+        return context.runner.capture(context.nm, *nm_flags, str(path))
 
     source = find_build_marker_source(context.build_dir)
     first = parse_build_marker_source(source.read_text(encoding="utf-8"))
@@ -1726,7 +2010,10 @@ def stage_flat_qml(context: GateContext) -> tuple[Path, dict[str, str]]:
 
 
 def build_qml_import_paths(context: GateContext) -> list[Path]:
-    paths = [stage_guaranteed_qt_qml(context.qt_root, context.work_dir / "qt-qml-allowlist")]
+    # The lint runs on the host, so the allowlist comes from the host kit: an Android kit's
+    # qml/ holds the target's modules, and qmllint cannot load them.
+    lint_qt = context.host_qt_root or context.qt_root
+    paths = [stage_guaranteed_qt_qml(lint_qt, context.work_dir / "qt-qml-allowlist")]
     published = context.sdk_prefix / "qml"
     if not (published / "QGroundControl" / "PluginUI").is_dir():
         raise GateError(f"{context.sdk_prefix} publishes no QML module under qml/QGroundControl")
@@ -1970,7 +2257,13 @@ def run_missing_dependency_control(context: GateContext) -> None:
     build = context.work_dir / "neg-build"
     returncode, output = context.runner.capture(
         *configure_command(
-            build, context.scratch_plugin, crippled, context.qt_root, context.runner.env
+            build,
+            context.scratch_plugin,
+            crippled,
+            context.qt_root,
+            context.runner.env,
+            android_key=context.platform_key,
+            host_qt_root=context.host_qt_root,
         )
     )
     if returncode == 0:
@@ -2078,10 +2371,6 @@ def run_gate(args: argparse.Namespace) -> int:
     check_qt_components(manifest.qt_components, cmake_texts)
     print(f"Declared components all guaranteed: {', '.join(manifest.qt_components)}")
 
-    qt_root = resolve_qt_root(args.qt_root)
-    qmllint = resolve_qmllint(qt_root)
-    dumpbin = require_dumpbin() if is_windows() else None
-
     if args.work:
         work_dir = Path(args.work).expanduser().resolve()
         if work_dir.exists():
@@ -2133,6 +2422,38 @@ def run_gate(args: argparse.Namespace) -> int:
         if not (sdk_prefix / "include" / "QGCPluginAPI").is_dir():
             raise GateError(f"{sdk_prefix} is not a QGCPluginSDK prefix (no include/QGCPluginAPI)")
 
+        # The SDK's key decides which Qt kits and which symbol reader this run needs, so the
+        # toolchain is resolved only now that the SDK is known.
+        platform_key = read_sdk_platform_key(sdk_prefix)
+        qt_root = resolve_qt_root(args.qt_root)
+        host_qt_root: Path | None = None
+        nm_tool: str | Path = "nm"
+        if is_android_key(platform_key):
+            assert platform_key is not None
+            if is_windows():
+                raise GateError("an Android SDK is verified from a Linux or macOS host only")
+            if args.deploy:
+                raise GateError(
+                    "--deploy copies a library into the host's runtime plugin dir; an Android "
+                    "library does not belong there and never runs on this host"
+                )
+            qt_root = resolve_android_qt_root(qt_root, platform_key)
+            host_qt_root = resolve_host_qt_root(args.host_qt_root, qt_root)
+            nm_tool = find_ndk_llvm_nm()
+            qmllint = resolve_qmllint(host_qt_root)
+            print(
+                f"Android cross-build for {platform_key}: Android kit {qt_root}, host kit "
+                f"{host_qt_root}, symbols read by {nm_tool}"
+            )
+        else:
+            if args.host_qt_root:
+                raise GateError(
+                    "--host-qt-root is for an Android SDK, but this SDK records no Android "
+                    f"platform key (key: {platform_key or 'none recorded'})"
+                )
+            qmllint = resolve_qmllint(qt_root)
+        dumpbin = require_dumpbin() if is_windows() else None
+
         step("Copying the plugin to a scratch tree with no QGroundControl source")
         scratch_plugin = work_dir / plugin_root.name
         copy_plugin_to_scratch(plugin_root, scratch_plugin)
@@ -2149,9 +2470,13 @@ def run_gate(args: argparse.Namespace) -> int:
             runner=runner,
             parallel=args.parallel,
             dumpbin=dumpbin,
+            platform_key=platform_key,
+            host_qt_root=host_qt_root,
+            nm=nm_tool,
         )
 
         artifact = configure_and_build(context)
+        run_elf_axis(context, artifact)
         run_test_axis(context)
         run_forbidden_symbol_axis(context, artifact)
         run_build_marker_axis(context, artifact)
@@ -2168,6 +2493,7 @@ def run_gate(args: argparse.Namespace) -> int:
                 "plugin": str(plugin_root),
                 "artifact": str(artifact),
                 "sdk_prefix": str(sdk_prefix),
+                "platform_key": platform_key,
                 "tests_registered": context.tests_registered,
                 "build_marker": context.build_marker,
                 "qml_files_linted": context.linted_file_count,
@@ -2205,8 +2531,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--build-dir", help="a QGC build dir to self-install the SDK from")
     parser.add_argument(
         "--qt-root",
-        help="Qt prefix (default: $QT_ROOT, else the newest desktop kit for this host "
+        help="Qt prefix; for an Android SDK, the Android kit "
+        "(default: $QT_ROOT, else the newest desktop kit for this host "
         "under ~/Qt, or C:\\Qt on Windows; an ambiguous choice is an error)",
+    )
+    parser.add_argument(
+        "--host-qt-root",
+        help="Android SDKs only: the host's desktop Qt prefix (qmllint, QT_HOST_PATH); default "
+        "is the desktop kit beside --qt-root. The NDK comes from $ANDROID_NDK_ROOT",
     )
     parser.add_argument(
         "--work",
