@@ -27,6 +27,7 @@ private slots:
     void _apiVersionMismatchHidden_test();
     void _noPackageForPlatformHidden_test();
     void _linuxArm64PackageOffered_test();
+    void _androidArm64PackageOffered_test();
     void _qtVersionAboveHostHidden_test();
     void _invalidQtVersionRefused_test();
     void _qtVersionIgnoredOnQmlTier_test();

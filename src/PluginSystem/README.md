@@ -369,8 +369,10 @@ first maps it, flags `PluginLoadInfo::staleImage` when a later activation finds 
 changed, and says so in the record's `statusText` — the install succeeded, but the build
 the user just installed is not the one executing.
 
-Android has no dynamic load/unload: plugins compile into the APK; the enabled toggle
-only controls which ones activate at startup.
+On Android, a package's `.so` loads at run time like any other platform's. The
+`android-arm64` key holds an NDK-built binary; the packer and Qt's plugin loader
+(`QPluginLoader`) refuse an x86-64 binary. Only the packer refuses a glibc one; if one
+gets past it, activation fails at `dlopen`.
 
 ## Creating a Plugin
 

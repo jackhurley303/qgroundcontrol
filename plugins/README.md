@@ -241,7 +241,7 @@ org.example.qgc.mypackage/
   fails inspection.
 - **Tier `sdk`/`internal`** — the binary is looked up under the build's platform key:
   `bin/macos-universal/` on macOS, `bin/<os>-<arch>/` elsewhere (packages ship `windows-x64`, `linux-x64`
-  and `linux-arm64`). On macOS only, if that's absent, the loader falls back to any single binary
+  and `linux-arm64`; `android-arm64` is accepted, but no SDK package ships it yet). On macOS only, if that's absent, the loader falls back to any single binary
   under a `bin/macos-*/` directory. Anything else (missing, or more than one candidate)
   fails inspection with a legible reason rather than guessing.
 - Package identity/contributions always come from the sidecar `qgcplugin.json`, never

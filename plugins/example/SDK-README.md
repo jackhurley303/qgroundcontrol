@@ -111,7 +111,8 @@ Concretely, for this package:
   currently Ubuntu 24.04 (glibc 2.39). A plugin built against a newer glibc than the host's
   fails to load.
 - **Package keys:** `macos-universal`, `windows-x64`, `linux-x64` and `linux-arm64` have an
-  SDK package. `windows-arm64` and `android-*` are loader keys only.
+  SDK package. `android-arm64` is a package key, but its SDK package is not built yet.
+  `windows-arm64` and `android-x64` are loader keys only.
 - **Compiler ABI (macOS):** build with the same Xcode/Clang toolchain family QGC itself
   ships with (libc++). Mixed Debug/Release configs are accepted looseness — not
   guaranteed, but libc++ makes it mostly work in practice.
@@ -239,8 +240,9 @@ for your users.
   way `libQGCPluginAPI.2.dylib` does on macOS. Rely on the manifest's
   `apiVersion` gate (which rejects before any of your code runs) rather than assuming the
   DLL filename tells you anything.
-- **Android** supports only `tier: "qml"` packages today; this SDK builds no native
-  Android plugin. Modern Android's W^X enforcement forbids `dlopen`-ing a native library from
-  app-writable storage, full stop. A native (Tier B/C) plugin on Android ships as its own
-  installed APK instead; that's a different, larger distribution model than this package
-  covers.
+- **Android** loads a native plugin from the `android-arm64` key. Build it with the NDK:
+  `pack_plugin.py` refuses a glibc binary under that key, and an Android binary under a
+  `linux-*` key. A Linux arm64 and an Android arm64 library share a machine type, so the
+  loader does not tell them apart. A package not built by `pack_plugin.py` skips that
+  check, and a glibc library under `android-arm64` then fails only at `dlopen`.
+  A plugin must be NDK-built for arm64; `android-x64` and 32-bit ARM have no package key.

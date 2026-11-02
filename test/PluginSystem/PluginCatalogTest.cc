@@ -14,6 +14,7 @@ namespace {
 const QString MacKey = QStringLiteral("macos-universal");
 const QString WinKey = QStringLiteral("windows-x64");
 const QString LinuxArmKey = QStringLiteral("linux-arm64");
+const QString AndroidArmKey = QStringLiteral("android-arm64");
 const QString Sha = QStringLiteral("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
 
 QJsonObject packageJson(const QString& name = QStringLiteral("pkg"))
@@ -446,6 +447,25 @@ void PluginCatalogTest::_linuxArm64PackageOffered_test()
     QVERIFY(offer.has_value());
     QVERIFY(offer->package.url.endsWith(QStringLiteral("linux-arm.qgcplugin")));
     QVERIFY(!entry.newestCompatible(hostWithVersion(QStringLiteral("5.1")), QStringLiteral("linux-x64")).has_value());
+}
+
+void PluginCatalogTest::_androidArm64PackageOffered_test()
+{
+    QJsonObject version = sdkVersionJson();
+    QJsonObject packages = version.value(QStringLiteral("packages")).toObject();
+    packages[AndroidArmKey] = packageJson(QStringLiteral("android-arm"));
+    version[QStringLiteral("packages")] = packages;
+
+    const PluginCatalog catalog = PluginCatalog::fromJson(singleVersionIndex(version));
+    QCOMPARE(catalog.plugins.size(), 1);
+    const PluginCatalogEntry& entry = catalog.plugins.at(0);
+    QVERIFY(entry.versions.at(0).packages.contains(AndroidArmKey));
+
+    const std::optional<PluginCatalogOffer> offer =
+        entry.newestCompatible(hostWithVersion(QStringLiteral("5.1")), AndroidArmKey);
+    QVERIFY(offer.has_value());
+    QVERIFY(offer->package.url.endsWith(QStringLiteral("android-arm.qgcplugin")));
+    QVERIFY(!entry.newestCompatible(hostWithVersion(QStringLiteral("5.1")), LinuxArmKey).has_value());
 }
 
 void PluginCatalogTest::_newestCompatibleSkipsIncompatibleNewer_test()
