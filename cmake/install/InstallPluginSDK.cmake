@@ -101,6 +101,16 @@ else()
     endif()
     set(QGC_PLUGIN_API_PLATFORM_KEY "${_qgc_sdk_os}-${_qgc_sdk_arch}")
 endif()
+# An Android SDK also records the lowest API level and the NDK major a plugin must match. A
+# plugin built for a higher API can call a libc symbol an older device lacks, and one built with
+# another NDK can resolve libc++_shared.so differently from the copy in QGC's APK. Either fails
+# only on the device, so QGCPluginAPIConfig.cmake fails the plugin's configure instead.
+set(QGC_PLUGIN_API_ANDROID_MIN_SDK "")
+set(QGC_PLUGIN_API_ANDROID_NDK_MAJOR "")
+if(ANDROID)
+    set(QGC_PLUGIN_API_ANDROID_MIN_SDK "${QGC_QT_ANDROID_MIN_SDK_VERSION}")
+    string(REGEX MATCH "^[0-9]+" QGC_PLUGIN_API_ANDROID_NDK_MAJOR "${CMAKE_ANDROID_NDK_VERSION}")
+endif()
 # Where the headers land, as a PATH_VAR so the config file's set_and_check() resolves the
 # real location rather than a hardcoded "include/" — the build-marker generator reads this
 # to build its DEPENDS set, so a non-default CMAKE_INSTALL_INCLUDEDIR would otherwise fail

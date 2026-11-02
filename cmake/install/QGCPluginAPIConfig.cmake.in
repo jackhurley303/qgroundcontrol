@@ -44,6 +44,39 @@ set(QGCPluginAPI_STABLE_BUILD "@QGC_STABLE_BUILD@")
 set(QGCPluginAPI_QT_VERSION "@QGC_PLUGIN_API_QT_VERSION@")
 set(QGCPluginAPI_PLATFORM_KEY "@QGC_PLUGIN_API_PLATFORM_KEY@")
 
+# An Android SDK also records the lowest API level and the NDK major it needs, and refuses a
+# configure that differs. ANDROID_PLATFORM_LEVEL is the number the NDK toolchain resolves from
+# ANDROID_PLATFORM, whether that is "android-30" or a bare "30". CMAKE_ANDROID_NDK_VERSION is
+# "<major>.<minor>".
+set(QGCPluginAPI_ANDROID_MIN_SDK "@QGC_PLUGIN_API_ANDROID_MIN_SDK@")
+set(QGCPluginAPI_ANDROID_NDK_MAJOR "@QGC_PLUGIN_API_ANDROID_NDK_MAJOR@")
+if(QGCPluginAPI_PLATFORM_KEY MATCHES "^android-")
+    if(ANDROID_PLATFORM_LEVEL AND QGCPluginAPI_ANDROID_MIN_SDK
+       AND ANDROID_PLATFORM_LEVEL GREATER QGCPluginAPI_ANDROID_MIN_SDK)
+        message(FATAL_ERROR
+            "QGCPluginAPI: this plugin targets Android API ${ANDROID_PLATFORM_LEVEL}, above the minimum "
+            "API ${QGCPluginAPI_ANDROID_MIN_SDK} that QGroundControl supports. A device on a lower API "
+            "can lack a libc symbol the plugin calls. Configure with -DANDROID_PLATFORM=android-"
+            "${QGCPluginAPI_ANDROID_MIN_SDK}.")
+    endif()
+    string(REGEX MATCH "^[0-9]+" _qgc_plugin_ndk_major "${CMAKE_ANDROID_NDK_VERSION}")
+    if(QGCPluginAPI_ANDROID_NDK_MAJOR AND NOT _qgc_plugin_ndk_major)
+        # A configure without the Android NDK toolchain reports no NDK version. It fails here rather
+        # than later, because such a build cannot produce a plugin that loads in QGroundControl.
+        message(FATAL_ERROR
+            "QGCPluginAPI: CMake did not detect an Android NDK version. Configure with Qt's Android "
+            "toolchain file (lib/cmake/Qt6/qt.toolchain.cmake in the Android kit) and set ANDROID_NDK_ROOT "
+            "to NDK ${QGCPluginAPI_ANDROID_NDK_MAJOR}, the NDK this SDK was built with.")
+    endif()
+    if(QGCPluginAPI_ANDROID_NDK_MAJOR AND NOT _qgc_plugin_ndk_major STREQUAL QGCPluginAPI_ANDROID_NDK_MAJOR)
+        message(FATAL_ERROR
+            "QGCPluginAPI: this plugin builds with NDK ${CMAKE_ANDROID_NDK_VERSION}, but this SDK was built "
+            "with NDK ${QGCPluginAPI_ANDROID_NDK_MAJOR}. The plugin's libc++_shared.so must come from the same "
+            "NDK major as QGroundControl's, or it can fail to load. Set ANDROID_NDK_ROOT to an NDK "
+            "${QGCPluginAPI_ANDROID_NDK_MAJOR} folder.")
+    endif()
+endif()
+
 # The build-marker generator, shipped as the function rather than as its inputs
 # (plugin-enable-disable-correctness U1b) — a plugin's standalone arm calls
 #

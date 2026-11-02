@@ -103,7 +103,9 @@ function(qgc_add_plugin PLUGIN_NAME)
         set_target_properties(${PLUGIN_NAME} PROPERTIES SUFFIX ".so")
     endif()
 
-    if(PLUGIN_NO_DEPLOY)
+    # An Android build produces an Android binary. Copying it into a Linux QGC's plugins
+    # folder on the build machine would put a library there that QGC cannot load.
+    if(PLUGIN_NO_DEPLOY OR ANDROID)
         message(STATUS "  Configured plugin: ${PLUGIN_NAME} (tier ${PLUGIN_TIER}, no auto-deploy)")
         return()
     endif()

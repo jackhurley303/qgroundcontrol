@@ -89,13 +89,17 @@ if(PROJECT_IS_TOP_LEVEL)
             "$ENV{APPDATA}/${QGCPluginAPI_ORG_NAME}/${_example_plugin_app_name}/plugins")
     endif()
 
-    add_custom_command(TARGET ExamplePlugin POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${EXAMPLE_PLUGIN_DEPLOY_DIR}"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_FILE:ExamplePlugin>
-            "${EXAMPLE_PLUGIN_DEPLOY_DIR}/"
-        COMMENT "Deploying ExamplePlugin to ${EXAMPLE_PLUGIN_DEPLOY_DIR}"
-    )
+    # An Android build deploys nothing: its aarch64 library is not loadable by a Linux QGC, and
+    # the build machine's plugins folder is where the copy would land.
+    if(NOT ANDROID)
+        add_custom_command(TARGET ExamplePlugin POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${EXAMPLE_PLUGIN_DEPLOY_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:ExamplePlugin>
+                "${EXAMPLE_PLUGIN_DEPLOY_DIR}/"
+            COMMENT "Deploying ExamplePlugin to ${EXAMPLE_PLUGIN_DEPLOY_DIR}"
+        )
+    endif()
 else()
     # In-tree arm (dev loop): QGC's plugin helper function configures the plugin,
     # including its own POST_BUILD auto-deploy.

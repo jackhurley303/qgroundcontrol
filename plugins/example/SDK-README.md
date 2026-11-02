@@ -9,6 +9,7 @@ include/QGCPluginAPI/...          # public headers (QGCPlugin, QGCPluginInterfac
                                    # QGCHostServices, and the host service interfaces)
 lib/libQGCPluginAPI.*.dylib       # the versioned SDK shared library (macOS)
 lib/libQGCPluginAPI.so.*          # the same, on Linux
+lib/libQGCPluginAPI_arm64-v8a.so  # the same, on Android
 bin/QGCPluginAPI.dll, lib/        # the same on Windows: the DLL and its import library
 lib/cmake/QGCPluginAPI/...        # find_package(QGCPluginAPI) config
 qml/QGroundControl/PluginUI/...   # the published QML vocabulary (see below)
@@ -111,7 +112,9 @@ Concretely, for this package:
   currently Ubuntu 24.04 (glibc 2.39). A plugin built against a newer glibc than the host's
   fails to load.
 - **Package keys:** `macos-universal`, `windows-x64`, `linux-x64` and `linux-arm64` have an
-  SDK package. `android-arm64` is a package key, but its SDK package is not built yet.
+  SDK package. `android-arm64` is a package key too. Its SDK comes from
+  `cmake --install <build> --component QGCPluginSDK --prefix <sdk-dir>` on an Android build of
+  QGroundControl.
   `windows-arm64` and `android-x64` are loader keys only.
 - **Compiler ABI (macOS):** build with the same Xcode/Clang toolchain family QGC itself
   ships with (libc++). Mixed Debug/Release configs are accepted looseness — not
@@ -240,9 +243,61 @@ for your users.
   way `libQGCPluginAPI.2.dylib` does on macOS. Rely on the manifest's
   `apiVersion` gate (which rejects before any of your code runs) rather than assuming the
   DLL filename tells you anything.
-- **Android** loads a native plugin from the `android-arm64` key. Build it with the NDK:
-  `pack_plugin.py` refuses a glibc binary under that key, and an Android binary under a
-  `linux-*` key. A Linux arm64 and an Android arm64 library share a machine type, so the
-  loader does not tell them apart. A package not built by `pack_plugin.py` skips that
-  check, and a glibc library under `android-arm64` then fails only at `dlopen`.
-  A plugin must be NDK-built for arm64; `android-x64` and 32-bit ARM have no package key.
+- **Android** loads a native plugin from the `android-arm64` key. See *Building for
+  Android* below.
+
+## Building for Android
+
+An Android build of QGroundControl produces the Android SDK with
+`cmake --install <build> --component QGCPluginSDK --prefix <sdk-dir>`. The folder
+`<sdk-dir>` is the SDK root that the rest of this section runs from. The SDK's
+`QGCPluginAPI_PLATFORM_KEY` is `android-arm64`. Build a plugin against it by cross-building from a Linux host. Linux is the
+host that was tested. You need:
+
+- **Qt's Android kit** for `arm64-v8a`, at the same Qt version as the SDK
+  (`QGCPluginAPI_QT_VERSION`). The kit ships `lib/cmake/Qt6/qt.toolchain.cmake`.
+- **The host Qt** for the same version (`gcc_64` on Linux). Pass its prefix as
+  `QT_HOST_PATH`. The build runs the host's `moc`, `rcc` and other tools.
+- **The NDK that built QGroundControl.** The SDK records its major version
+  (`QGCPluginAPI_ANDROID_NDK_MAJOR`, currently 27). Your plugin needs
+  `libc++_shared.so`, and QGroundControl's APK carries the copy built with that NDK. A
+  plugin built with another NDK major can fail to load after you install it. `find_package(QGCPluginAPI)` fails the
+  configure on a different major. Set `ANDROID_NDK_ROOT` to the NDK folder.
+- **A target API of 28 or lower.** The SDK records QGroundControl's own minimum API
+  (`QGCPluginAPI_ANDROID_MIN_SDK`, currently 28). A plugin built for a higher API can call a
+  libc symbol an older device lacks. It then fails only on that device.
+  `find_package(QGCPluginAPI)` fails the configure when `ANDROID_PLATFORM` names a higher API.
+  The kit's default is 28.
+
+Run these commands from the unpacked SDK root:
+
+```bash
+export ANDROID_NDK_ROOT=<ndk>
+cmake -G Ninja -B build -S example -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_TOOLCHAIN_FILE=<Qt>/<version>/android_arm64_v8a/lib/cmake/Qt6/qt.toolchain.cmake \
+  -DQT_HOST_PATH=<Qt>/<version>/gcc_64 \
+  -DQT_ANDROID_ABIS=arm64-v8a \
+  -DQGCPluginAPI_DIR="$(pwd)/lib/cmake/QGCPluginAPI"
+cmake --build build
+```
+
+Pass `-DQGCPluginAPI_DIR=` as shown. Under the Android toolchain, `CMAKE_PREFIX_PATH` is
+ignored when `find_package` looks for the SDK. The build needs no resource-compression
+option, because Qt's own rules turn zstd off for the Android kit. Qt's link flags give the
+library 16 KB page alignment. Add nothing for devices with 16 KB pages.
+
+The build writes `qgcplugin.json` into `build`. The packer zips the whole folder it is given.
+So copy the file into an empty folder and pack that folder. Run this from the SDK root too:
+
+```bash
+mkdir stage && cp build/qgcplugin.json stage/
+python3 tools/pack_plugin.py stage --binary build/libExamplePlugin.so --platform android-arm64
+```
+
+The package lands in the current folder as `org.qgroundcontrol.example-1.0.0.qgcplugin`.
+The packer refuses a library that the NDK did not build. An Android build does not copy the
+library into a plugins folder. Install the package on the device through Application
+Settings → Plugins → Install plugin…
+
+**Tested on Android 16 only** (API 36), on one tablet. The loader, the install flow and the
+plugin build are not tested on other Android versions.
