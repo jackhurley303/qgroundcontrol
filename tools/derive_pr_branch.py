@@ -656,7 +656,10 @@ PLUGIN_SDK = PRSpec(
             (
                 ("    PluginCatalogInstaller {\n        id: catalogInstaller\n    }\n\n", ""),
                 ("        visible:            root.sectionFilter !== 1\n", ""),
-                ('            enabled:            PluginCatalogManager.installingId === ""\n', ""),
+                (
+                    '            enabled:            PluginCatalogManager.installingId === "" && !packagePicker.picking\n',
+                    "            enabled:            !packagePicker.picking\n",
+                ),
                 ('                    enabled:    PluginCatalogManager.installingId === ""\n', ""),
                 (
                     "                PluginCatalogUpdateButton {\n"
