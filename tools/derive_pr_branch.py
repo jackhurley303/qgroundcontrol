@@ -824,7 +824,7 @@ MAP_VISUAL_LOADER = PRSpec(
 # Stock QGC gains a vehicle library (name, image, airframe, sensors, flight controller, notes),
 # one `.vehicle` JSON file per vehicle under a new `Vehicles` save folder — routing rule 1, a
 # stock-QGC capability with no plugin loaded. Builds up over several units
-# (~/.claude/local/qgroundcontrol/plans/vehicles.md); V1 only adds the save folder itself,
+# (~/.claude/offtree/qgroundcontrol/plans/archive/vehicles.md); V1 only adds the save folder itself,
 # mirroring the existing `missionDirectory` entries.
 #
 # Four of its files are also in PLUGIN_SDK, which is a sibling, not stacked with this spec:
@@ -905,8 +905,8 @@ VEHICLE_PROFILES = PRSpec(
 
 # A catalog of installable plugins: the Plugins page reads one JSON index and installs or updates
 # from it — routing rule 2, generic plugin infrastructure with no plugin named. Builds up over
-# several units (~/.claude/local/qgroundcontrol/plans/plugin-catalog.md): U1 the parser, U3
-# PluginCatalogManager and the catalogUrl setting.
+# several units (~/.claude/offtree/qgroundcontrol/plans/archive/plugin-catalog.md): U1 the parser,
+# U3 PluginCatalogManager and the catalogUrl setting.
 #
 # Stacked on PLUGIN_SDK because later units edit files that spec owns (PluginSettings.qml,
 # PluginInstaller, QGCPluginManager, PluginSettings, src/PluginSystem/CMakeLists.txt); stacking
